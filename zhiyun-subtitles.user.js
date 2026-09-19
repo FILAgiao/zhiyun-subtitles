@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         智云课堂同步字幕
 // @namespace    zhiyunzimu.local
-// @version      0.10.0
+// @version      0.10.1
 // @description  将右侧语音识别及平台译文同步显示在视频底部，支持字幕导出。
 // @match        https://interactivemeta.cmc.zju.edu.cn/*
 // @grant        GM_xmlhttpRequest
@@ -256,7 +256,7 @@
     <nav id="slide-toolbar" aria-label="PPT 翻页"><button id="slide-prev">← 上页</button><span id="slide-page"></span><button id="slide-next">下页 →</button><button id="slide-follow" aria-pressed="true">✓ 跟随老师</button><button id="slide-close">收起</button></nav><button id="slide-resize" aria-label="调整 PPT 窗口大小" title="拖拽缩放；方向键微调">◢</button>
   </section>
   <section id="panel" aria-label="智云字幕设置">
-    <header id="panel-head"><span class="mascot">🌱</span><div><h3>伴读字幕</h3><span class="subtitle">让每一句，都跟得上 · v0.10.0</span></div><button id="collapse" aria-label="收起字幕设置">−</button></header>
+    <header id="panel-head"><span class="mascot">🌱</span><div><h3>伴读字幕</h3><span class="subtitle">让每一句，都跟得上 · v0.10.1</span></div><button id="collapse" aria-label="收起字幕设置">−</button></header>
     <div id="panel-body">
     <div class="section"><div class="section-title">一起看懂 <span id="translation-ready" class="badge"></span><input id="enabled" aria-label="显示字幕" type="checkbox" checked></div>
     <label>字幕<select id="mode"><option value="original">仅原文</option><option value="both">中英对照 · 豆包翻译</option></select></label>
@@ -264,11 +264,11 @@
     <div class="section"><div class="section-title">跟上老师 <span id="speech-badge" class="badge"></span></div>
     <button class="primary" id="auto-align">听 12 秒自动校准</button>
     <div id="align-feedback" hidden role="status"><progress id="align-progress" max="12" value="0"></progress><span id="align-label"></span></div>
-    <p id="align-status">匹配不准时最多听 3 段，每段 12 秒；匹配成功即停止。语音识别按使用量计费。</p>
+    <p id="align-status">先听 12 秒，成功立即结束。只有匹配失败才再听 12 秒，最多尝试 3 次。语音识别按使用量计费。</p>
     <details><summary>手动微调 <span id="offset-hint">同步偏移：0 秒</span></summary>
     <label>偏移 / 秒<input id="offset" type="number" min="-3600" max="3600" step="0.5" value="0"></label>
     <div class="actions"><button id="earlier">提前 0.5 秒</button><button id="later">延后 0.5 秒</button><button id="reset-offset">归零</button></div></details></div>
-    <div class="section"><div class="actions"><button id="show-slides">▤ 并排看 PPT</button><button id="focus-fullscreen">⛶ 专注全屏</button></div><p id="slides-status">翻页不会打断视频。PPT 与视频各占一半；左侧可拖动、缩放，不遮挡老师。</p></div>
+    <div class="section"><div class="actions"><button id="show-slides">▤ 并排看 PPT</button><button id="focus-fullscreen">⛶ 专注全屏</button></div><p id="slides-status">翻页不会打断视频。初次打开左右各半；之后可自由拖动、缩放，记住你的布局。</p></div>
     <details class="section"><summary>偏好与连接 <span id="key-summary" class="badge"></span></summary>
     <label>翻译连接 <span id="translation-badge" class="badge"></span></label><button id="configure-key">设置翻译 Key</button>
     <label>语音连接 <span id="speech-key-badge" class="badge"></span></label><button id="speech-key">设置语音识别凭证</button><p>绿色勾表示已保存凭证，不代表接口权限已验证。</p>
@@ -368,7 +368,7 @@
       const started=video.currentTime;
       $('align-feedback').hidden=false;
       $('align-progress').value=0;
-      $('align-label').textContent=`第 ${attempt} / 3 次 · 正在听 0 / 12 秒`;
+      $('align-label').textContent=`第 ${attempt} 次（成功即停）· 正在听 0 / 12 秒`;
       if (!video.captureStream || typeof MediaRecorder === 'undefined') throw new Error('此浏览器无法直接采集视频音轨。');
       stream = video.captureStream();
       const tracks = stream.getAudioTracks();
@@ -381,7 +381,7 @@
         recorder.onstop = resolve; recorder.onerror = () => reject(new Error('录音失败'));
         recorder.start();
         const began=performance.now();
-        progressTimer=setInterval(()=>{const elapsed=Math.min(12,(performance.now()-began)/1000);$('align-progress').value=elapsed;$('align-label').textContent=`第 ${attempt} / 3 次 · 正在听 ${Math.floor(elapsed)} / 12 秒`;},100);
+        progressTimer=setInterval(()=>{const elapsed=Math.min(12,(performance.now()-began)/1000);$('align-progress').value=elapsed;$('align-label').textContent=`第 ${attempt} 次（成功即停）· 正在听 ${Math.floor(elapsed)} / 12 秒`;},100);
         timer = setTimeout(() => recorder.stop(), 12000);
         $('align-status').textContent = '正在听视频中的 12 秒语音…';
       });
@@ -389,7 +389,7 @@
       if (cancelled || courseIdentity(location.hash) !== course) return;
       stream?.getTracks().forEach(track=>track.stop()); stream=null;
       $('align-progress').removeAttribute('value');
-      $('align-label').textContent=`第 ${attempt} / 3 次 · 正在识别与匹配…`;
+      $('align-label').textContent=`第 ${attempt} 次（成功即停）· 正在识别与匹配…`;
       const blob = new Blob(chunks, {type:recorder.mimeType});
       if (blob.size > 2*1024*1024) throw new Error('录音过大，请重试');
       // MediaRecorder usually emits WebM, while the API documents WAV/MP3/OGG.
@@ -513,19 +513,19 @@
     return {left,top,width:Math.max(0,Math.min(innerWidth,r.left)-left),height:Math.max(0,Math.min(innerHeight,r.bottom)-top-64)};
   }
   function restoreSlideGeometry() {
-    const b=slideBounds(),saved=GM_getValue('ppt-split-window',null);
-    applySlideGeometry(saved ? {left:b.left+saved.x*b.width,top:b.top+saved.y*b.height,width:saved.w*b.width,height:saved.h*b.height} : b);
+    const b=slideBounds(),saved=GM_getValue('ppt-free-window-v2',null);
+    applySlideGeometry(saved ? {left:saved.x*innerWidth,top:saved.y*innerHeight,width:saved.w*innerWidth,height:saved.h*innerHeight} : b);
   }
   function applySlideGeometry(rect) {
-    const b=slideBounds();
+    const b={left:0,top:0,width:innerWidth,height:innerHeight};
     const width=Math.min(b.width,Math.max(280,rect.width)),height=Math.min(b.height,Math.max(180,rect.height));
     Object.assign($('slides').style,{left:Math.max(b.left,Math.min(b.left+b.width-width,rect.left))+'px',top:Math.max(b.top,Math.min(b.top+b.height-height,rect.top))+'px',width:width+'px',height:height+'px'});
   }
   function saveSlideGeometry() {
     if(!splitVideo) return;
     applySlideGeometry($('slides').getBoundingClientRect());
-    const {left,top,width,height}=$('slides').getBoundingClientRect(),b=slideBounds();
-    if(b.width && b.height) GM_setValue('ppt-split-window',{x:(left-b.left)/b.width,y:(top-b.top)/b.height,w:width/b.width,h:height/b.height});
+    const {left,top,width,height}=$('slides').getBoundingClientRect();
+    if(innerWidth && innerHeight) GM_setValue('ppt-free-window-v2',{x:left/innerWidth,y:top/innerHeight,w:width/innerWidth,h:height/innerHeight});
   }
   $('slide-viewport').addEventListener('pointerdown',()=>{slideDragging=true;});
   for(const event of ['pointerup','pointercancel','lostpointercapture']) $('slide-viewport').addEventListener(event,()=>{slideDragging=false;});
