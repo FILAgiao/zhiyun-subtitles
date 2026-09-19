@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         智云课堂同步字幕
 // @namespace    zhiyunzimu.local
-// @version      0.10.1
+// @version      0.10.2
 // @description  将右侧语音识别及平台译文同步显示在视频底部，支持字幕导出。
 // @match        https://interactivemeta.cmc.zju.edu.cn/*
 // @grant        GM_xmlhttpRequest
@@ -243,9 +243,16 @@
     #slide-toolbar{position:absolute;bottom:8px;left:8px;right:24px;display:flex;gap:4px;align-items:center;justify-content:center;padding:5px;flex-wrap:wrap;background:#141a18e8;border-radius:10px;font-size:12px;color:#eee;opacity:0;transition:opacity .15s;pointer-events:none}
     #slides:hover #slide-toolbar,#slides:focus-within #slide-toolbar{opacity:1;pointer-events:auto}
     #slide-toolbar button{padding:5px 7px;background:transparent;color:#eee;border-color:#ffffff25;border-radius:7px} #slide-toolbar button:hover{background:#ffffff20} #slide-page{font-variant-numeric:tabular-nums}
-    #slide-viewport{width:100%;height:100%;overflow:hidden;touch-action:none;cursor:move}
-    #slide-image{display:block;width:100%;height:100%;object-fit:contain;user-select:none;-webkit-user-drag:none}
+    #slide-viewport{position:relative;width:100%;height:100%;overflow:hidden;touch-action:none;cursor:move}
+    #slide-image{position:absolute;left:50%;transform:translateX(-50%);display:block;width:auto;max-width:none;height:100%;user-select:none;-webkit-user-drag:none}
     #slide-resize{position:absolute;right:0;bottom:0;width:24px;height:24px;padding:0;border:0;border-radius:6px 0 0 0;background:#141a18cc;color:#ddd;cursor:nwse-resize;touch-action:none;font-size:16px}
+    .slide-edge{position:absolute;z-index:2;background:transparent;border:0;padding:0;border-radius:0;touch-action:none}
+    .slide-edge:hover{background:#8ebaa455;box-shadow:none}
+    .slide-edge[data-edge=left]{left:0;top:12px;bottom:26px;width:8px;cursor:ew-resize}
+    .slide-edge[data-edge=right]{right:0;top:12px;bottom:26px;width:8px;cursor:ew-resize}
+    .slide-edge[data-edge=top]{top:0;left:12px;right:12px;height:8px;cursor:ns-resize}
+    .slide-edge[data-edge=bottom]{bottom:0;left:12px;right:26px;height:8px;cursor:ns-resize}
+    #slide-resize{z-index:3}
     @media(hover:none){#slide-toolbar{opacity:1;pointer-events:auto}}
     @media(prefers-reduced-motion:reduce){*{transition:none!important}}
   </style>
@@ -254,9 +261,10 @@
   <section id="slides" hidden aria-label="课程幻灯片">
     <div id="slide-viewport" tabindex="0" aria-label="PPT 悬浮窗，拖动图片移动窗口"><img id="slide-image" draggable="false" alt="课程 PPT"></div>
     <nav id="slide-toolbar" aria-label="PPT 翻页"><button id="slide-prev">← 上页</button><span id="slide-page"></span><button id="slide-next">下页 →</button><button id="slide-follow" aria-pressed="true">✓ 跟随老师</button><button id="slide-close">收起</button></nav><button id="slide-resize" aria-label="调整 PPT 窗口大小" title="拖拽缩放；方向键微调">◢</button>
+    <button class="slide-edge" data-edge="left" aria-label="调整 PPT 左边缘"></button><button class="slide-edge" data-edge="right" aria-label="调整 PPT 右边缘"></button><button class="slide-edge" data-edge="top" aria-label="调整 PPT 上边缘"></button><button class="slide-edge" data-edge="bottom" aria-label="调整 PPT 下边缘"></button>
   </section>
   <section id="panel" aria-label="智云字幕设置">
-    <header id="panel-head"><span class="mascot">🌱</span><div><h3>伴读字幕</h3><span class="subtitle">让每一句，都跟得上 · v0.10.1</span></div><button id="collapse" aria-label="收起字幕设置">−</button></header>
+    <header id="panel-head"><span class="mascot">🌱</span><div><h3>伴读字幕</h3><span class="subtitle">让每一句，都跟得上 · v0.10.2</span></div><button id="collapse" aria-label="收起字幕设置">−</button></header>
     <div id="panel-body">
     <div class="section"><div class="section-title">一起看懂 <span id="translation-ready" class="badge"></span><input id="enabled" aria-label="显示字幕" type="checkbox" checked></div>
     <label>字幕<select id="mode"><option value="original">仅原文</option><option value="both">中英对照 · 豆包翻译</option></select></label>
@@ -268,7 +276,7 @@
     <details><summary>手动微调 <span id="offset-hint">同步偏移：0 秒</span></summary>
     <label>偏移 / 秒<input id="offset" type="number" min="-3600" max="3600" step="0.5" value="0"></label>
     <div class="actions"><button id="earlier">提前 0.5 秒</button><button id="later">延后 0.5 秒</button><button id="reset-offset">归零</button></div></details></div>
-    <div class="section"><div class="actions"><button id="show-slides">▤ 并排看 PPT</button><button id="focus-fullscreen">⛶ 专注全屏</button></div><p id="slides-status">翻页不会打断视频。初次打开左右各半；之后可自由拖动、缩放，记住你的布局。</p></div>
+    <div class="section"><div class="actions"><button id="show-slides">▤ 并排看 PPT</button><button id="reset-ppt">复位 PPT</button><button id="focus-fullscreen">⛶ 专注全屏</button></div><p id="slides-status">翻页不会打断视频。拖动可超出屏幕。左右拉边缘裁掉黑边，上下拉边缘按比例放大；复位可找回窗口。</p></div>
     <details class="section"><summary>偏好与连接 <span id="key-summary" class="badge"></span></summary>
     <label>翻译连接 <span id="translation-badge" class="badge"></span></label><button id="configure-key">设置翻译 Key</button>
     <label>语音连接 <span id="speech-key-badge" class="badge"></span></label><button id="speech-key">设置语音识别凭证</button><p>绿色勾表示已保存凭证，不代表接口权限已验证。</p>
@@ -510,7 +518,9 @@
   function slideBounds() {
     const r=splitVideo.getBoundingClientRect();
     const left=Math.max(0,r.left-r.width),top=Math.max(0,r.top);
-    return {left,top,width:Math.max(0,Math.min(innerWidth,r.left)-left),height:Math.max(0,Math.min(innerHeight,r.bottom)-top-64)};
+    const width=Math.max(0,Math.min(innerWidth,r.left)-left);
+    const ratio=$('slide-image').naturalWidth / $('slide-image').naturalHeight;
+    return {left,top,width,height:Math.max(0,Math.min(Math.min(innerHeight,r.bottom)-top-64,ratio>0?width/ratio:Infinity))};
   }
   function restoreSlideGeometry() {
     const b=slideBounds(),saved=GM_getValue('ppt-free-window-v2',null);
@@ -518,8 +528,8 @@
   }
   function applySlideGeometry(rect) {
     const b={left:0,top:0,width:innerWidth,height:innerHeight};
-    const width=Math.min(b.width,Math.max(280,rect.width)),height=Math.min(b.height,Math.max(180,rect.height));
-    Object.assign($('slides').style,{left:Math.max(b.left,Math.min(b.left+b.width-width,rect.left))+'px',top:Math.max(b.top,Math.min(b.top+b.height-height,rect.top))+'px',width:width+'px',height:height+'px'});
+    const width=Math.min(b.width*4,Math.max(160,rect.width)),height=Math.min(b.height*4,Math.max(100,rect.height));
+    Object.assign($('slides').style,{left:Math.max(72-width,Math.min(b.width-72,rect.left))+'px',top:Math.max(72-height,Math.min(b.height-72,rect.top))+'px',width:width+'px',height:height+'px'});
   }
   function saveSlideGeometry() {
     if(!splitVideo) return;
@@ -530,17 +540,25 @@
   $('slide-viewport').addEventListener('pointerdown',()=>{slideDragging=true;});
   for(const event of ['pointerup','pointercancel','lostpointercapture']) $('slide-viewport').addEventListener(event,()=>{slideDragging=false;});
   let resizing=null;
-  $('slide-resize').addEventListener('pointerdown',e=>{
-    if(e.button!==0) return;
-    const r=$('slides').getBoundingClientRect();
-    resizing={left:r.left,top:r.top,width:r.width,height:r.height,x:e.clientX,y:e.clientY};
-    e.currentTarget.setPointerCapture(e.pointerId);e.preventDefault();e.stopPropagation();
-  });
-  $('slide-resize').addEventListener('pointermove',e=>{
-    if(!resizing) return;
-    applySlideGeometry({...resizing,width:resizing.width+e.clientX-resizing.x,height:resizing.height+e.clientY-resizing.y});
-  });
-  for(const event of ['pointerup','pointercancel','lostpointercapture']) $('slide-resize').addEventListener(event,()=>{if(resizing) saveSlideGeometry();resizing=null;});
+  for(const handle of [$('slide-resize'),...shadow.querySelectorAll('.slide-edge')]) {
+    handle.addEventListener('pointerdown',e=>{
+      if(e.button!==0) return;
+      const r=$('slides').getBoundingClientRect();
+      resizing={left:r.left,top:r.top,width:r.width,height:r.height,x:e.clientX,y:e.clientY,edge:handle.dataset.edge || 'corner'};
+      handle.setPointerCapture(e.pointerId);e.preventDefault();e.stopPropagation();
+    });
+    handle.addEventListener('pointermove',e=>{
+      if(!resizing) return;
+      const r=resizing,dx=e.clientX-r.x,dy=e.clientY-r.y,next={...r};
+      if(r.edge==='left') {next.width=Math.max(160,r.width-dx);next.left=r.left+r.width-next.width;}
+      if(r.edge==='right' || r.edge==='corner') next.width=r.width+dx;
+      if(r.edge==='top') {next.height=Math.max(100,r.height-dy);next.top=r.top+r.height-next.height;}
+      if(r.edge==='bottom' || r.edge==='corner') next.height=r.height+dy;
+      applySlideGeometry(next);
+    });
+    for(const event of ['pointerup','pointercancel','lostpointercapture']) handle.addEventListener(event,()=>{if(resizing) saveSlideGeometry();resizing=null;});
+  }
+  $('reset-ppt').onclick=()=>{GM_deleteValue('ppt-free-window-v2');if(splitVideo) restoreSlideGeometry();else showSlides();};
   $('slide-resize').addEventListener('keydown',e=>{
     const steps={ArrowRight:[20,0],ArrowLeft:[-20,0],ArrowUp:[0,-20],ArrowDown:[0,20]};
     if(!steps[e.key]) return;

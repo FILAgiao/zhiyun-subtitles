@@ -98,6 +98,24 @@ const {chromium}=require(process.env.PLAYWRIGHT_MODULE || 'playwright');
  await ui.locator('#mode').selectOption('original');
  const count=await page.evaluate(()=>requests.filter(u=>u.includes('responses')).length);
  await page.waitForTimeout(200);assert.equal(await page.evaluate(()=>requests.filter(u=>u.includes('responses')).length),count);
+ // Drag beyond the left screen boundary and recover with the settings-panel reset.
+ await ui.locator('#reset-ppt').click();await page.waitForTimeout(150);
+ let frame=await ui.locator('#slides').boundingBox();
+ await page.mouse.move(frame.x+200,frame.y+80);await page.mouse.down();await page.mouse.move(20,frame.y+80,{steps:5});await page.mouse.up();
+ assert.ok((await ui.locator('#slides').boundingBox()).x< -100);
+ await page.waitForTimeout(150);assert.ok((await ui.locator('#slides').boundingBox()).x< -100);
+ await ui.locator('#reset-ppt').click();await page.waitForTimeout(150);
+ frame=await ui.locator('#slides').boundingBox();assert.ok(frame.x>=0);
+ const imageBefore=await ui.locator('#slide-image').boundingBox();
+ let edge=await ui.locator('[data-edge="right"]').boundingBox();
+ await page.mouse.move(edge.x+4,edge.y+30);await page.mouse.down();await page.mouse.move(edge.x-76,edge.y+30,{steps:5});await page.mouse.up();
+ assert.ok((await ui.locator('#slides').boundingBox()).width<frame.width-60);
+ assert.ok(Math.abs((await ui.locator('#slide-image').boundingBox()).width-imageBefore.width)<1);
+ edge=await ui.locator('[data-edge="bottom"]').boundingBox();
+ await page.mouse.move(edge.x+30,edge.y+4);await page.mouse.down();await page.mouse.move(edge.x+30,edge.y+64,{steps:5});await page.mouse.up();
+ const enlarged=await ui.locator('#slide-image').boundingBox();assert.ok(enlarged.height>imageBefore.height+40);
+ assert.ok(Math.abs(enlarged.width/enlarged.height-imageBefore.width/imageBefore.height)<.01);
+ await ui.locator('#reset-ppt').click();
  // A Chinese-only current cue must neither call translation nor render a duplicate line.
  await page.evaluate(()=>{document.querySelector('.trans-lan').innerHTML='<div>我们现在继续讲下一页的内容</div>';location.hash='#/replay?course_id=language-test';});
  await page.waitForTimeout(750);
