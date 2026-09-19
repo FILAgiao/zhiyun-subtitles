@@ -1,0 +1,13 @@
+.asr-bridge-token
+__pycache__/
+.env
+.env.*
+*.rar
+*.zip
+node_modules/
+README-history.local.md
+asr_bridge.py
+requirements-asr.txt
+smoke_bridge.py
+start-asr.cmd
+test_asr_bridge.py

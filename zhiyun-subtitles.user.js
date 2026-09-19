@@ -1,0 +1,739 @@
+// ==UserScript==
+// @name         智云课堂同步字幕
+// @namespace    zhiyunzimu.local
+// @version      0.9.0
+// @description  将右侧语音识别及平台译文同步显示在视频底部，支持字幕导出。
+// @match        https://interactivemeta.cmc.zju.edu.cn/*
+// @grant        GM_xmlhttpRequest
+// @grant        GM_getValue
+// @grant        GM_setValue
+// @grant        GM_deleteValue
+// @grant        GM_registerMenuCommand
+// @connect      ark.cn-beijing.volces.com
+// @connect      openspeech.bytedance.com
+// @run-at       document-idle
+// ==/UserScript==
+
+(function () {
+  'use strict';
+  const ARK_URL = 'https://ark.cn-beijing.volces.com/api/v3/responses';
+  function wavBytes(samples, rate = 16000) {
+    const buffer = new ArrayBuffer(44 + samples.length * 2), view = new DataView(buffer);
+    const ascii = (offset, text) => [...text].forEach((c,i)=>view.setUint8(offset+i,c.charCodeAt(0)));
+    ascii(0,'RIFF'); view.setUint32(4,36+samples.length*2,true); ascii(8,'WAVE'); ascii(12,'fmt ');
+    view.setUint32(16,16,true); view.setUint16(20,1,true); view.setUint16(22,1,true);
+    view.setUint32(24,rate,true); view.setUint32(28,rate*2,true); view.setUint16(32,2,true); view.setUint16(34,16,true);
+    ascii(36,'data'); view.setUint32(40,samples.length*2,true);
+    samples.forEach((sample,i)=>{ const n=Math.max(-1,Math.min(1,sample)); view.setInt16(44+i*2,Math.round(n*(n<0?32768:32767)),true); });
+    return new Uint8Array(buffer);
+  }
+  function matchSpeech(utterances, cues, start) {
+    const units = text => String(text).toLowerCase().match(/[a-z0-9]+|[\u3400-\u9fff]/g) || [];
+    const grams = list => { const counts=new Map(); for(let i=1;i<list.length;i++){const k=list[i-1]+'\0'+list[i];counts.set(k,(counts.get(k)||0)+1);} return counts; };
+    const score = (a,b) => { const aa=grams(a),bb=grams(b); let intersection=0; for(const [k,n] of aa) intersection+=Math.min(n,bb.get(k)||0); return 2*intersection/Math.max(1,a.length+b.length-2); };
+    const candidates=cues.flatMap((cue,i)=>[1,2,3].map(size=>({start:cue.start,words:units(cues.slice(i,i+size).map(c=>c.original).join(' '))})));
+    const votes=[];
+    for(const utterance of utterances) {
+      const words=units(utterance.text);
+      if(words.length<6 || new Set(words).size<4 || !Number.isFinite(utterance.start_time)) continue;
+      const matches=new Map();
+      for(const candidate of candidates) matches.set(candidate.start,Math.max(matches.get(candidate.start)||0,score(words,candidate.words)));
+      const ranked=[...matches].sort((a,b)=>b[1]-a[1]);
+      if(!ranked.length || ranked[0][1]<0.72 || (ranked[1] && ranked[0][1]-ranked[1][1]<0.12)) continue;
+      votes.push(start+utterance.start_time/1000-ranked[0][0]);
+    }
+    votes.sort((a,b)=>a-b);
+    if(!votes.length || votes.at(-1)-votes[0]>2) return {matched:false,message:'没有找到可靠且一致的匹配，保留原偏移；请在完整句子开始前再试。'};
+    return {matched:true,offset:Math.round(votes[Math.floor(votes.length/2)]*100)/100};
+  }
+  function speechResult(response) {
+    const match=String(response.responseHeaders || '').match(/^x-api-status-code:\s*(\d+)/im);
+    if(response.status!==200 || match?.[1]!=='20000000') {
+      throw new Error(`语音识别失败（HTTP ${response.status}，状态 ${match?.[1] || '未知'}），请检查 API Key 和 volc.seedasr.auc 权限。`);
+    }
+    const body=JSON.parse(response.responseText);
+    if(!Array.isArray(body.result?.utterances)) throw new Error('语音接口没有返回带时间的语句，未修改偏移。');
+    return body.result.utterances;
+  }
+  async function recognizeStandard(send, wait, audioBase64, apiKey, requestId, cancelled = () => false) {
+    const deadline=Date.now()+120000;
+    const headers = {'x-api-key':apiKey,'X-Api-Resource-Id':'volc.seedasr.auc','X-Api-Request-Id':requestId,'X-Api-Sequence':'-1','Content-Type':'application/json'};
+    const check = () => { if(cancelled()) throw new Error('校准已取消'); };
+    const status = response => {
+      const code=String(response.responseHeaders || '').match(/^x-api-status-code:\s*(\d+)/im)?.[1];
+      if(response.status!==200 || !['20000000','20000001','20000002'].includes(code)) {
+        // Only show the service status, never its response body (which may echo credentials or audio).
+        throw new Error(`标准版识别失败（HTTP ${response.status}，状态 ${code || '未知'}）。请检查 API Key、volc.seedasr.auc 权限及音频输入是否支持。`);
+      }
+      return code;
+    };
+    check();
+    const submitted=await send('submit',headers,{user:{uid:'zhiyun-subtitles'},audio:{data:audioBase64,format:'wav',rate:16000,bits:16,channel:1},request:{model_name:'bigmodel',show_utterances:true,enable_itn:true,enable_punc:true}});
+    check(); status(submitted);
+    // Submit exactly once. Every query uses the same UUID; never create a second paid job on an error.
+    for(let i=0;i<60;i++) {
+      check(); await wait(2000); check();
+      if(Date.now()>=deadline) break;
+      const response=await send('query',headers,{});
+      check();
+      if(status(response)==='20000000') return speechResult(response);
+    }
+    throw new Error('识别等待超时，未修改偏移；云端任务可能仍在执行。');
+  }
+  function translationBody(text, source = 'en', target = 'zh') {
+    return { model: 'doubao-seed-translation-250915', input: [{ role: 'user', content: [{
+      type: 'input_text', text, translation_options: { source_language: source, target_language: target }
+    }] }] };
+  }
+  function translationResult(response) {
+    if (response.error || (response.status && response.status !== 'completed')) {
+      throw new Error('翻译未完成，请重试');
+    }
+    const text = (response.output ?? []).filter(item => item.type === 'message')
+      .flatMap(item => item.content ?? []).filter(item => item.type === 'output_text')
+      .map(item => item.text ?? '').join('\n').trim();
+    if (!text) throw new Error('接口未返回译文，请检查模型和接口权限');
+    return text;
+  }
+  // One request at a time. An epoch prevents stopped/old-course results from leaking into new work.
+  function createTranslator(request, notify = () => {}) {
+    const cache = new Map();
+    let enabled = false, epoch = 0, pending = null, queue = [], source = 'en', target = 'zh';
+    const key = text => JSON.stringify([source, target, text]);
+    const get = text => cache.get(key(text)) || '';
+    function stop() {
+      enabled = false; epoch++; queue = [];
+      const old = pending; pending = null; old?.abort();
+    }
+    async function pump() {
+      if (!enabled || pending) return;
+      const text = queue.shift();
+      if (!text) return;
+      if (get(text)) { pump(); return; }
+      const token = epoch, cacheKey = key(text);
+      let handle;
+      try {
+        handle = request(text, source, target);
+        pending = handle;
+        notify('正在翻译…');
+        const result = await handle.promise;
+        if (epoch !== token || !enabled) return;
+        cache.set(cacheKey, result);
+        notify('翻译已开启，当前及后续 3 条字幕按需翻译');
+      } catch (error) {
+        if (epoch !== token) return;
+        stop();
+        notify(error.message || '翻译失败，请重新开启');
+      } finally {
+        if (pending === handle) pending = null;
+        if (enabled && epoch === token) pump();
+      }
+    }
+    return {
+      get,
+      get enabled() { return enabled; },
+      start(from, to) { stop(); source = from; target = to; enabled = true; },
+      stop,
+      reset() { stop(); cache.clear(); },
+      schedule(texts) { if (!enabled) return; queue = [...new Set(texts)].filter(text => text && !get(text)); pump(); }
+    };
+  }
+  function parseTime(text) {
+    const match = String(text).trim().match(/^(\d+):([0-5]\d):([0-5]\d)$/);
+    return match ? Number(match[1]) * 3600 + Number(match[2]) * 60 + Number(match[3]) : NaN;
+  }
+  function timeline(rows, maxDuration = 15) {
+    const merged = new Map();
+    for (const row of rows) {
+      if (!Number.isFinite(row.start) || !row.original) continue;
+      const old = merged.get(row.start);
+      if (old) {
+        old.original += '\n' + row.original;
+        if (row.translation) old.translation = (old.translation ? old.translation + '\n' : '') + row.translation;
+      } else merged.set(row.start, { ...row });
+    }
+    const cues = [...merged.values()].sort((a, b) => a.start - b.start);
+    return cues.map((cue, i) => ({ ...cue, end: Math.min(cues[i + 1]?.start ?? Infinity, cue.start + maxDuration) }));
+  }
+  function activeCue(cues, time) {
+    let lo = 0, hi = cues.length;
+    while (lo < hi) {
+      const mid = (lo + hi) >>> 1;
+      if (cues[mid].start <= time) lo = mid + 1;
+      else hi = mid;
+    }
+    const cue = cues[lo - 1];
+    return cue && time < cue.end ? cue : null;
+  }
+  function stamp(seconds) {
+    const ms = Math.round(Math.max(0, seconds) * 1000);
+    return [Math.floor(ms / 3600000), Math.floor(ms / 60000) % 60, Math.floor(ms / 1000) % 60]
+      .map(n => String(n).padStart(2, '0')).join(':') + ',' + String(ms % 1000).padStart(3, '0');
+  }
+  function srt(cues, offset = 0) {
+    return cues.filter(c => c.end + offset > 0).map((c, i) =>
+      `${i + 1}\n${stamp(c.start + offset)} --> ${stamp(c.end + offset)}\n${[c.original, c.translation].filter(Boolean).join('\n')}\n`
+    ).join('\n');
+  }
+  function courseIdentity(hash) {
+    const params=new URLSearchParams(String(hash).split('?')[1] || '');
+    return JSON.stringify(['course_id','sub_id','tenant_code'].map(key=>params.get(key)));
+  }
+  function slideTime(text) {
+    const match=String(text).trim().match(/^(?:(\d+):)?([0-5]?\d):([0-5]\d)$/);
+    return match ? Number(match[1] || 0)*3600+Number(match[2])*60+Number(match[3]) : NaN;
+  }
+  function slideAt(slides, time) {
+    let index=-1, latest=-Infinity;
+    slides.forEach((slide,i)=>{if(Number.isFinite(slide.time) && slide.time<=time && slide.time>=latest){latest=slide.time;index=i;}});
+    return index;
+  }
+  function subtitleTime(videoTime, offset) { return videoTime - offset; }
+  function captionLayout(rect, viewportWidth, below, bottom = 60) {
+    const left = Math.max(0, rect.left) + 4;
+    const band = below ? Math.min(160, rect.height * 0.4) : 0;
+    return { band, left, width: Math.max(0, Math.min(viewportWidth, rect.right) - left - 4),
+      top: below ? rect.bottom - band + 8 : rect.bottom - bottom,
+      maxHeight: below ? Math.max(24, band - 48) : rect.height * 0.55 };
+  }
+  if (typeof module !== 'undefined' && module.exports) {
+    module.exports = { parseTime, timeline, activeCue, stamp, srt, translationBody, translationResult, createTranslator, subtitleTime, captionLayout, wavBytes, matchSpeech, speechResult, recognizeStandard, courseIdentity, slideTime, slideAt };
+    return;
+  }
+  if (document.getElementById('zy-subtitle-host')) return;
+  const host = document.createElement('div');
+  host.id = 'zy-subtitle-host';
+  host.style.cssText = 'position:fixed;inset:0;pointer-events:none;z-index:2147483646;';
+  const shadow = host.attachShadow({ mode: 'open' });
+  shadow.innerHTML = `<style>
+    :host{font-family:"Segoe UI","Microsoft YaHei",sans-serif;color:#304441;color-scheme:light}
+    *{box-sizing:border-box} [hidden]{display:none!important}
+    button,input,select{font:inherit} button,summary,select{cursor:pointer}
+    button{border:1px solid #dce6df;background:#fffefa;color:#38564a;border-radius:12px;padding:9px 12px;transition:background .15s,box-shadow .15s}
+    button:hover{background:#eaf3e9;box-shadow:0 2px 6px #284d3510} button:disabled{opacity:.4;cursor:default}
+    button:focus-visible,input:focus-visible,select:focus-visible,summary:focus-visible{outline:3px solid #9abfa8;outline-offset:2px}
+    input,select{border:1px solid #dce6df;border-radius:9px;background:#fffefa;padding:6px;color:#304441;max-width:170px} input[type=number]{width:76px} input[type=checkbox]{accent-color:#4f8468}
+    #caption{z-index:1;position:fixed;text-align:center;padding:6px 8px;line-height:1.4;text-shadow:0 2px 3px #000;white-space:pre-wrap;overflow-wrap:anywhere;background:#14241ee8;color:white;border-radius:16px;overflow:hidden;pointer-events:none;}
+    #translation{color:#f9df9b} #translation:empty{display:none}
+    #panel{z-index:30;pointer-events:auto;position:fixed;right:20px;top:60px;width:330px;max-width:calc(100vw - 24px);max-height:calc(100dvh - 84px);display:flex;flex-direction:column;background:#fafbf6;border:1px solid #fff;border-radius:24px;box-shadow:0 16px 56px #18392b38;font:13px/1.5 "Segoe UI","Microsoft YaHei",sans-serif;overflow:hidden}
+    #panel-head{display:flex;align-items:center;gap:10px;padding:18px 18px 12px;cursor:move;touch-action:none;flex-shrink:0;background:linear-gradient(135deg,#edf4e7,#fff8e8)}
+    .mascot{display:grid;place-items:center;width:40px;height:40px;border-radius:15px;background:#dcebd9;font-size:23px;flex-shrink:0}
+    h3{margin:0;font-size:17px;letter-spacing:1px} .subtitle{font-size:11px;color:#819083} #collapse{margin-left:auto;padding:4px 10px}
+    #panel-body{padding:4px 18px 18px;overflow:auto;overscroll-behavior:contain;min-height:0;scrollbar-width:thin}
+    .section{padding:12px 0;border-bottom:1px solid #e6ebe2}.section:last-child{border:0}
+    .section-title{display:flex;align-items:center;justify-content:space-between;font-weight:650;margin-bottom:9px}
+    label{display:flex;align-items:center;justify-content:space-between;gap:8px;margin:9px 0}
+    .actions{display:flex;gap:6px;flex-wrap:wrap}.actions button{flex:1;white-space:nowrap} .primary{background:#4e8067;color:white;border-color:#4e8067;width:100%}
+    p{font-size:11px;color:#7b887e;margin:8px 0 0;overflow-wrap:anywhere} summary{font-weight:600;padding:4px 0;list-style:none} summary::after{content:'＋';float:right} details[open]>summary::after{content:'−'}
+    .badge{font-size:10px;border-radius:20px;padding:3px 7px;background:#eef0e9;color:#889084;white-space:nowrap}.badge[data-ready=true]{background:#e1efdf;color:#347048}
+    #compact{z-index:40;pointer-events:auto;position:fixed;right:20px;top:60px;border-radius:18px;background:#fafbf6;box-shadow:0 5px 20px #18392b30}
+    #align-progress{width:100%;height:7px;accent-color:#619574;display:block;margin-top:12px} #align-label{display:block;font-size:11px;color:#5a7e63;margin-top:5px}
+    #slides{z-index:5;pointer-events:auto;position:fixed;background:#090b0b;border:1px solid #ffffff20;border-radius:10px;overflow:hidden;box-shadow:0 8px 28px #0006;min-width:0;min-height:0}
+    #slide-toolbar{position:absolute;bottom:8px;left:8px;right:24px;display:flex;gap:4px;align-items:center;justify-content:center;padding:5px;flex-wrap:wrap;background:#141a18e8;border-radius:10px;font-size:12px;color:#eee;opacity:0;transition:opacity .15s;pointer-events:none}
+    #slides:hover #slide-toolbar,#slides:focus-within #slide-toolbar{opacity:1;pointer-events:auto}
+    #slide-toolbar button{padding:5px 7px;background:transparent;color:#eee;border-color:#ffffff25;border-radius:7px} #slide-toolbar button:hover{background:#ffffff20} #slide-page{font-variant-numeric:tabular-nums}
+    #slide-viewport{width:100%;height:100%;overflow:hidden;touch-action:none;cursor:move}
+    #slide-image{display:block;width:100%;height:100%;object-fit:contain;user-select:none;-webkit-user-drag:none}
+    #slide-resize{position:absolute;right:0;bottom:0;width:24px;height:24px;padding:0;border:0;border-radius:6px 0 0 0;background:#141a18cc;color:#ddd;cursor:nwse-resize;touch-action:none;font-size:16px}
+    @media(hover:none){#slide-toolbar{opacity:1;pointer-events:auto}}
+    @media(prefers-reduced-motion:reduce){*{transition:none!important}}
+  </style>
+  <div id="caption" hidden><div id="original"></div><div id="translation"></div></div>
+  <button id="compact" hidden aria-label="展开字幕设置">🌱 字幕</button>
+  <section id="slides" hidden aria-label="课程幻灯片">
+    <div id="slide-viewport" tabindex="0" aria-label="PPT 悬浮窗，拖动图片移动窗口"><img id="slide-image" draggable="false" alt="课程 PPT"></div>
+    <nav id="slide-toolbar" aria-label="PPT 翻页"><button id="slide-prev">← 上页</button><span id="slide-page"></span><button id="slide-next">下页 →</button><button id="slide-follow" aria-pressed="true">✓ 跟随老师</button><button id="slide-close">收起</button></nav><button id="slide-resize" aria-label="调整 PPT 窗口大小" title="拖拽缩放；方向键微调">◢</button>
+  </section>
+  <section id="panel" aria-label="智云字幕设置">
+    <header id="panel-head"><span class="mascot">🌱</span><div><h3>伴读字幕</h3><span class="subtitle">让每一句，都跟得上 · v0.9.0</span></div><button id="collapse" aria-label="收起字幕设置">−</button></header>
+    <div id="panel-body">
+    <div class="section"><div class="section-title">一起看懂 <span id="translation-ready" class="badge"></span><input id="enabled" aria-label="显示字幕" type="checkbox" checked></div>
+    <label>字幕<select id="mode"><option value="original">仅原文</option><option value="both">中英对照 · 豆包翻译</option></select></label>
+    <p id="translation-status">选择中英对照，即开启豆包翻译。</p></div>
+    <div class="section"><div class="section-title">跟上老师 <span id="speech-badge" class="badge"></span></div>
+    <button class="primary" id="auto-align">听 12 秒自动校准</button>
+    <div id="align-feedback" hidden role="status"><progress id="align-progress" max="12" value="0"></progress><span id="align-label"></span></div>
+    <p id="align-status">匹配不准时最多听 3 段，每段 12 秒；匹配成功即停止。语音识别按使用量计费。</p>
+    <details><summary>手动微调 <span id="offset-hint">同步偏移：0 秒</span></summary>
+    <label>偏移 / 秒<input id="offset" type="number" min="-3600" max="3600" step="0.5" value="0"></label>
+    <div class="actions"><button id="earlier">提前 0.5 秒</button><button id="later">延后 0.5 秒</button><button id="reset-offset">归零</button></div></details></div>
+    <div class="section"><div class="actions"><button id="show-slides">▤ 悬浮看 PPT</button><button id="focus-fullscreen">⛶ 专注全屏</button></div><p id="slides-status">翻页不会打断视频。拖动 PPT 移动窗口，拖右下角缩放。悬停显示翻页与跟随控制。</p></div>
+    <details class="section"><summary>偏好与连接 <span id="key-summary" class="badge"></span></summary>
+    <label>翻译连接 <span id="translation-badge" class="badge"></span></label><button id="configure-key">设置翻译 Key</button>
+    <label>语音连接 <span id="speech-key-badge" class="badge"></span></label><button id="speech-key">设置语音识别凭证</button><p>绿色勾表示已保存凭证，不代表接口权限已验证。</p>
+    <label>翻译方向<select id="direction"><option value="en-zh">英语 → 中文</option><option value="zh-en">中文 → 英语</option></select></label>
+    <label>字幕位置<select id="placement"><option value="below">视频正下方</option><option value="overlay">画面内底部</option></select></label>
+    <label>字号<input id="size" type="number" min="14" max="48" value="26"></label>
+    <label>距底部 / 像素<input id="bottom" type="number" min="0" max="300" value="60"></label>
+    <label>最长显示 / 秒<input id="duration" type="number" min="1" max="120" value="15"></label>
+    <button id="export">导出字幕 SRT</button><p id="status">等待右侧语音识别字幕…</p>
+    <p>翻译仅发送当前及后续 3 条字幕。校准只采集视频音轨，不使用麦克风。导出前请清空字幕搜索并加载完整列表。</p>
+    </details></div></section>`;
+  document.body.append(host);
+  const $ = id => shadow.getElementById(id);
+  function updateKeyBadges() {
+    const translation=!!GM_getValue('ark-api-key','');
+    const speech=!!GM_getValue('speech-credentials',null)?.apiKey;
+    for(const [id,ready] of [['translation-badge',translation],['translation-ready',translation],['speech-badge',speech],['speech-key-badge',speech]]) {
+      $(id).dataset.ready=String(ready); $(id).textContent=ready?'✓ 已配置':'待配置';
+    }
+    $('key-summary').textContent=`${Number(translation)+Number(speech)} / 2 已配置`;
+    $('configure-key').textContent=translation?'更换翻译 Key':'设置翻译 Key';
+    $('speech-key').textContent=speech?'更换语音 Key':'设置语音识别凭证';
+  }
+  updateKeyBadges();
+  const preferences=GM_getValue('display-preferences',{});
+  for(const id of ['mode','direction','placement','size','bottom','duration','enabled']) {
+    if(preferences[id]!==undefined) { if(id==='enabled') $(id).checked=!!preferences[id]; else $(id).value=preferences[id]; }
+    $(id).addEventListener('change',savePreferences);
+  }
+  function savePreferences() {
+    GM_setValue('display-preferences',Object.fromEntries(['mode','direction','placement','size','bottom','duration','enabled'].map(id=>[id,id==='enabled'?$(id).checked:$(id).value])));
+  }
+  // Isolate our controls from player shortcuts and click handlers without blocking default scrolling.
+  for(const event of ['click','pointerdown','pointerup','keydown','keyup','wheel']) host.addEventListener(event,e=>e.stopPropagation());
+  function draggable(handle, element, pan=false, onEnd=()=>{}) {
+    let drag;
+    handle.addEventListener('pointerdown',e=>{
+      if(e.button!==0 || e.target.closest('button,input,select') || (pan && !handle.classList.contains('zoomed'))) return;
+      const rect=element.getBoundingClientRect();
+      drag={x:e.clientX,y:e.clientY,left:pan?element.scrollLeft:rect.left,top:pan?element.scrollTop:rect.top};
+      handle.setPointerCapture(e.pointerId); e.preventDefault();
+    });
+    handle.addEventListener('pointermove',e=>{
+      if(!drag) return;
+      if(pan) { element.scrollLeft=drag.left+drag.x-e.clientX; element.scrollTop=drag.top+drag.y-e.clientY; }
+      else { element.style.right='auto'; element.style.left=Math.max(8,Math.min(innerWidth-element.offsetWidth-8,drag.left+e.clientX-drag.x))+'px'; element.style.top=Math.max(8,Math.min(innerHeight-element.offsetHeight-8,drag.top+e.clientY-drag.y))+'px'; }
+    });
+    for(const event of ['pointerup','pointercancel','lostpointercapture']) handle.addEventListener(event,()=>{if(drag) onEnd();drag=null;});
+  }
+  draggable($('panel-head'),$('panel'));
+  draggable($('slide-viewport'),$('slides'),false,saveSlideGeometry);
+  function clampPanel() {
+    const rect=$('panel').getBoundingClientRect();
+    if($('panel').hidden) return;
+    $('panel').style.top=Math.max(8,Math.min(innerHeight-rect.height-8,rect.top))+'px';
+    if($('panel').style.left) $('panel').style.left=Math.max(8,Math.min(innerWidth-rect.width-8,rect.left))+'px';
+  }
+  window.addEventListener('resize',clampPanel);
+  document.addEventListener('fullscreenchange',clampPanel);
+  function collapsePanel(collapsed) {
+    $('panel').hidden = collapsed; $('compact').hidden = !collapsed;
+    GM_setValue('panel-collapsed', collapsed);
+  }
+  $('collapse').onclick = () => collapsePanel(true);
+  $('compact').onclick = () => collapsePanel(false);
+  collapsePanel(GM_getValue('panel-collapsed', false));
+  let mainVideo = null, cancelAlignment = null;
+  $('speech-key').onclick = () => {
+    const apiKey = prompt('填写标准版豆包语音 x-api-key（资源 volc.seedasr.auc，不是翻译 API Key）。');
+    if(!apiKey?.trim()) return;
+    cancelAlignment?.();
+    GM_setValue('speech-credentials',{apiKey:apiKey.trim()}); updateKeyBadges();
+    $('align-status').textContent='语音凭证已保存，可以点击自动校准。';
+  };
+  GM_registerMenuCommand('清除语音识别凭证',()=>{cancelAlignment?.();GM_deleteValue('speech-credentials'); updateKeyBadges();$('align-status').textContent='语音识别凭证已清除';});
+  $('auto-align').onclick = async () => {
+    if (cancelAlignment) { cancelAlignment(); return; }
+    const video = mainVideo, credentials = GM_getValue('speech-credentials', null);
+    if (!credentials?.apiKey) { $('align-status').textContent = '请点击设置语音识别凭证，填写标准版 x-api-key；旧版 App ID 凭证不适用。'; return; }
+    if (!video || video.paused || video.playbackRate !== 1 || !cues.length) {
+      $('align-status').textContent = '请先加载右侧字幕，并让主视频以 1 倍速播放。'; return;
+    }
+    const course = courseIdentity(location.hash);
+    let stream, recorder, timer, request, wake, progressTimer, cancelled = false;
+    const listeners = ['pause','seeking','ratechange','waiting','emptied'];
+    const cancel = () => {
+      cancelled = true; clearInterval(progressTimer); $('align-label').textContent='已取消'; clearTimeout(timer); wake?.(); request?.abort();
+      if (recorder?.state === 'recording') recorder.stop();
+      $('align-status').textContent = '校准已取消，未修改偏移。';
+    };
+    cancelAlignment = cancel;
+    $('auto-align').textContent = '取消自动校准';
+    listeners.forEach(event => video.addEventListener(event, cancel));
+    try {
+      for(let attempt=1;attempt<=3;attempt++) {
+      const started=video.currentTime;
+      $('align-feedback').hidden=false;
+      $('align-progress').value=0;
+      $('align-label').textContent=`第 ${attempt} / 3 次 · 正在听 0 / 12 秒`;
+      if (!video.captureStream || typeof MediaRecorder === 'undefined') throw new Error('此浏览器无法直接采集视频音轨。');
+      stream = video.captureStream();
+      const tracks = stream.getAudioTracks();
+      if (!tracks.length) throw new Error('视频音轨不可读取，可能受跨域限制；未改用麦克风。');
+      const audio = new MediaStream(tracks);
+      const chunks = [];
+      recorder = new MediaRecorder(audio);
+      recorder.ondataavailable = event => { if (event.data.size) chunks.push(event.data); };
+      await new Promise((resolve, reject) => {
+        recorder.onstop = resolve; recorder.onerror = () => reject(new Error('录音失败'));
+        recorder.start();
+        const began=performance.now();
+        progressTimer=setInterval(()=>{const elapsed=Math.min(12,(performance.now()-began)/1000);$('align-progress').value=elapsed;$('align-label').textContent=`第 ${attempt} / 3 次 · 正在听 ${Math.floor(elapsed)} / 12 秒`;},100);
+        timer = setTimeout(() => recorder.stop(), 12000);
+        $('align-status').textContent = '正在听视频中的 12 秒语音…';
+      });
+      clearInterval(progressTimer);
+      if (cancelled || courseIdentity(location.hash) !== course) return;
+      stream?.getTracks().forEach(track=>track.stop()); stream=null;
+      $('align-progress').removeAttribute('value');
+      $('align-label').textContent=`第 ${attempt} / 3 次 · 正在识别与匹配…`;
+      const blob = new Blob(chunks, {type:recorder.mimeType});
+      if (blob.size > 2*1024*1024) throw new Error('录音过大，请重试');
+      // MediaRecorder usually emits WebM, while the API documents WAV/MP3/OGG.
+      // Decode and resample inside the browser; no FFmpeg or local helper required.
+      const context = new AudioContext();
+      let decoded;
+      try { decoded=await context.decodeAudioData(await blob.arrayBuffer()); } finally { await context.close(); }
+      if(cancelled) return;
+      const offline = new OfflineAudioContext(1,Math.ceil(decoded.duration*16000),16000);
+      const source=offline.createBufferSource(); source.buffer=decoded; source.connect(offline.destination); source.start();
+      const rendered=await offline.startRendering();
+      const samples=rendered.getChannelData(0);
+      if(!samples.some(n=>Math.abs(n)>0.001)) throw new Error('未采集到有效声音，可能是视频音轨跨域限制。');
+      const bytes=wavBytes(samples);
+      let binary=''; for(let i=0;i<bytes.length;i+=8192) binary+=String.fromCharCode(...bytes.subarray(i,i+8192));
+      const audioBase64=btoa(binary);
+      if (cancelled) return;
+      $('align-status').textContent = '正在识别并匹配字幕…';
+      const send = (action,headers,body) => new Promise((resolve,reject) => {
+        request = GM_xmlhttpRequest({method:'POST',url:'https://openspeech.bytedance.com/api/v3/auc/bigmodel/'+action,timeout:15000,anonymous:true,
+          headers, data:JSON.stringify(body), onload:resolve,
+          onerror:()=>reject(new Error('语音请求失败，请检查网络及油猴域名权限')),
+          ontimeout:()=>reject(new Error('校准超时，请重试')),onabort:()=>reject(new Error('校准已取消'))});
+      });
+      const wait = ms => new Promise(resolve=>{wake=resolve;timer=setTimeout(()=>{wake=null;resolve();},ms);});
+      const utterances = await recognizeStandard(send,wait,audioBase64,credentials.apiKey,crypto.randomUUID(),()=>cancelled || courseIdentity(location.hash)!==course);
+      clearInterval(progressTimer);
+      if (cancelled || courseIdentity(location.hash) !== course) return;
+      const response=matchSpeech(utterances,cues,started);
+      if (!response.matched) {
+        $('align-status').textContent=attempt<3 ? `第 ${attempt} 次未找到可靠匹配，继续听下一段…` : '已尝试 3 段，仍未找到可靠匹配。保留原偏移，可手动微调。';
+        if(attempt<3) continue;
+        $('align-progress').value=12; $('align-label').textContent='3 次尝试完成 · 未修改偏移';
+        return;
+      }
+      if (!Number.isFinite(response.offset) || Math.abs(response.offset)>3600) throw new Error('校准偏移超出范围，未修改');
+      $('offset').value=response.offset; updateOffset();
+      $('align-status').textContent=`已自动校准：${response.offset>0?'延后':'提前'} ${Math.abs(response.offset)} 秒。可继续手动微调。`;
+      $('align-progress').value=12; $('align-label').textContent=`第 ${attempt} 次匹配成功 ✓`;
+      return;
+      }
+    } catch(error) { if(!cancelled) { $('align-status').textContent=error.message || '自动校准失败'; $('align-label').textContent='识别中止 · 未修改偏移'; } }
+    finally {
+      clearTimeout(timer); clearInterval(progressTimer); $('align-progress').value=12; stream?.getTracks().forEach(track=>track.stop());
+      listeners.forEach(event=>video.removeEventListener(event,cancel));
+      cancelAlignment=null; $('auto-align').textContent='听 12 秒自动校准';
+    }
+  };
+  let slideUrls=[], slideEntries=[], slideIndex=0, splitVideo=null, slideFollowing=true, slideCourse=null;
+  function saveSlideState() {
+    GM_setValue('ppt-state:'+slideCourse,{index:slideIndex,url:slideEntries[slideIndex]?.url,time:slideEntries[slideIndex]?.time,follow:slideFollowing});
+  }
+  function updateFollowButton() {
+    $('slide-follow').textContent=slideFollowing?'✓ 跟随老师':'跟随老师';
+    $('slide-follow').setAttribute('aria-pressed',String(slideFollowing));
+  }
+  function syncSlide() {
+    if(!slideFollowing || !splitVideo || $('slides').hidden) return;
+    const index=slideAt(slideEntries,subtitleTime(splitVideo.currentTime,value('offset',0,-3600,3600)));
+    if(index>=0 && index!==slideIndex) {slideIndex=index;renderSlide();}
+  }
+  function closeSlides() {
+    $('slides').hidden=true;
+    splitVideo=null;
+  }
+  function renderSlide() {
+    $('slide-image').src=slideUrls[slideIndex]; $('slide-page').textContent=`${slideIndex+1} / ${slideUrls.length}`;
+    $('slide-prev').disabled=slideIndex===0; $('slide-next').disabled=slideIndex>=slideUrls.length-1;
+    $('slide-viewport').scrollTo(0,0); saveSlideState(); updateFollowButton();
+  }
+  function showSlides() {
+    const images=[...document.querySelectorAll('#pane-ppt img')];
+    slideEntries=images.map(img=>({url:img.currentSrc || img.src,time:slideTime(img.closest('.tab-ppt')?.querySelector('.time')?.textContent || '')})).filter(slide=>/^https?:/.test(slide.url));
+    slideUrls=slideEntries.map(slide=>slide.url);
+    const course=courseIdentity(location.hash);
+    const saved=GM_getValue('ppt-state:'+course,null);
+    if(slideCourse!==course) {slideIndex=0;slideFollowing=true;slideCourse=course;}
+    if(saved) {
+      const restored=slideEntries.findIndex(slide=>slide.url===saved.url && (slide.time===saved.time || (!Number.isFinite(slide.time) && saved.time==null)));
+      slideIndex=restored>=0?restored:Math.max(0,Number(saved.index)||0); slideFollowing=saved.follow!==false;
+    }
+    if(!slideUrls.length) { $('slides-status').textContent='尚未找到 PPT 图片。请先打开右侧 PPT 标签加载列表，再点此按钮；不要切换顶部老师视频。'; return false; }
+    if(!mainVideo) { $('slides-status').textContent='请先打开老师视频，再查看 PPT。'; return false; }
+    if(!splitVideo) {
+      splitVideo=mainVideo;
+      const rect=splitVideo.getBoundingClientRect();
+      const saved=GM_getValue('ppt-window',null);
+      applySlideGeometry(saved || {left:Math.max(8,rect.left+16),top:Math.max(8,rect.top+16),width:Math.min(560,innerWidth*.48),height:Math.min(400,innerHeight*.6)});
+    }
+    slideIndex=Math.min(slideIndex,slideUrls.length-1); renderSlide(); $('slides').hidden=false; syncSlide();
+    $('slides-status').textContent=slideEntries.some(s=>Number.isFinite(s.time))?'PPT 按视频时间自动翻页，沿用字幕偏移。手动翻页可暂停跟随。':'本页未读取到 PPT 时间，保留手动翻页和页码记忆。'; return true;
+  }
+  $('show-slides').onclick=showSlides;
+  $('slide-close').onclick=closeSlides;
+  $('slide-prev').onclick=()=>{slideFollowing=false;slideIndex=Math.max(0,slideIndex-1);renderSlide();};
+  $('slide-next').onclick=()=>{slideFollowing=false;slideIndex=Math.min(slideUrls.length-1,slideIndex+1);renderSlide();};
+  $('slide-follow').onclick=()=>{slideFollowing=!slideFollowing;updateFollowButton();saveSlideState();syncSlide();};
+  $('slide-viewport').addEventListener('keydown',e=>{
+    if(e.key==='PageDown' || e.key==='ArrowRight') { e.preventDefault(); $('slide-next').click(); }
+    if(e.key==='PageUp' || e.key==='ArrowLeft') { e.preventDefault(); $('slide-prev').click(); }
+  });
+  $('focus-fullscreen').onclick=async()=>{
+    try {
+      if(document.fullscreenElement) await document.exitFullscreen();
+      else if(mainVideo) await mainVideo.parentElement.requestFullscreen();
+      else throw new Error('请先打开视频');
+    } catch(error) { $('slides-status').textContent='无法进入全屏：'+error.message; }
+  };
+  function layoutSlides() {
+    if(!splitVideo || $('slides').hidden) return;
+    if(!splitVideo.isConnected) { closeSlides(); return; }
+    const r=$('slides').getBoundingClientRect();
+    if(r.right>innerWidth || r.bottom>innerHeight || r.left<0 || r.top<0) applySlideGeometry(r);
+  }
+  function applySlideGeometry(rect) {
+    const width=Math.min(innerWidth-16,Math.max(280,rect.width));
+    const height=Math.min(innerHeight-16,Math.max(180,rect.height));
+    Object.assign($('slides').style,{left:Math.max(8,Math.min(innerWidth-width-8,rect.left))+'px',top:Math.max(8,Math.min(innerHeight-height-8,rect.top))+'px',width:width+'px',height:height+'px'});
+  }
+  function saveSlideGeometry() {
+    const {left,top,width,height}=$('slides').getBoundingClientRect();
+    GM_setValue('ppt-window',{left,top,width,height});
+  }
+  let resizing=null;
+  $('slide-resize').addEventListener('pointerdown',e=>{
+    if(e.button!==0) return;
+    const r=$('slides').getBoundingClientRect();
+    resizing={left:r.left,top:r.top,width:r.width,height:r.height,x:e.clientX,y:e.clientY};
+    e.currentTarget.setPointerCapture(e.pointerId);e.preventDefault();e.stopPropagation();
+  });
+  $('slide-resize').addEventListener('pointermove',e=>{
+    if(!resizing) return;
+    applySlideGeometry({...resizing,width:resizing.width+e.clientX-resizing.x,height:resizing.height+e.clientY-resizing.y});
+  });
+  for(const event of ['pointerup','pointercancel','lostpointercapture']) $('slide-resize').addEventListener(event,()=>{if(resizing) saveSlideGeometry();resizing=null;});
+  $('slide-resize').addEventListener('keydown',e=>{
+    const steps={ArrowRight:[20,0],ArrowLeft:[-20,0],ArrowUp:[0,-20],ArrowDown:[0,20]};
+    if(!steps[e.key]) return;
+    e.preventDefault();const r=$('slides').getBoundingClientRect(),[x,y]=steps[e.key];
+    applySlideGeometry({left:r.left,top:r.top,width:r.width+x,height:r.height+y});saveSlideGeometry();
+  });
+
+  function imagesIndex(image) {return [...document.querySelectorAll('#pane-ppt img')].filter(img=>/^https?:/.test(img.currentSrc || img.src)).indexOf(image);}
+  // Intercept only actual slide-image clicks when images are available; leave unrelated controls alone.
+  document.addEventListener('click', event=>{
+    const card=event.target.closest?.('#pane-ppt .tab-ppt');
+    const image=card?.querySelector('img');
+    const pptButton=event.target.closest?.('.eve-student.ppt, #tab-ppt');
+    if(!image && !pptButton) return;
+    if(showSlides()) { event.preventDefault(); event.stopImmediatePropagation(); if(image) {slideFollowing=false;slideIndex=Math.max(0,imagesIndex(image));} renderSlide(); }
+  },true);
+  let apiKey = GM_getValue('ark-api-key', '');
+  function arkRequest(text, source, target) {
+    let handle;
+    let rejectRequest;
+    const promise = new Promise((resolve, reject) => {
+      rejectRequest = reject;
+      handle = GM_xmlhttpRequest({
+        method: 'POST', url: ARK_URL, anonymous: true, timeout: 30000,
+        headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+        data: JSON.stringify(translationBody(text, source, target)),
+        onload(response) {
+          if (response.status < 200 || response.status >= 300) {
+            const reason = ({401:'API Key 无效',403:'没有模型访问权限',429:'请求限流或额度不足'})[response.status];
+            reject(new Error(reason || `翻译接口错误（HTTP ${response.status}）`)); return;
+          }
+          try { resolve(translationResult(JSON.parse(response.responseText))); }
+          catch (error) { reject(error instanceof SyntaxError ? new Error('接口返回格式错误') : error); }
+        },
+        onerror: () => reject(new Error('网络请求失败，请检查网络和油猴的域名授权')),
+        ontimeout: () => reject(new Error('翻译请求超时，请重新开启')),
+        onabort: () => reject(new Error('已停止翻译'))
+      });
+    });
+    return { promise, abort() { handle?.abort(); rejectRequest(new Error('已停止翻译')); } };
+  }
+  const translator = createTranslator(arkRequest, message => {
+    $('translation-status').textContent = message;
+    if(!translator.enabled) { $('mode').value='original'; savePreferences(); }
+  });
+  function stopTranslation(message = '已停止翻译，已完成的译文仍可对照查看') {
+    translator.stop();
+    $('mode').value='original'; savePreferences();
+    $('translation-status').textContent = message;
+  }
+  function configureKey() {
+    const entered = prompt('输入豆包 API Key（保存在油猴脚本存储中，不写入课程页面）');
+    if (entered === null) return;
+    const next = entered.trim();
+    if (!next || /\s/.test(next)) { alert('请输入有效的 API Key，不要包含 Bearer 或空格。'); return; }
+    stopTranslation('API Key 已保存，选择中英对照即可翻译');
+    apiKey = next;
+    GM_setValue('ark-api-key', apiKey); updateKeyBadges();
+  }
+  GM_registerMenuCommand('设置豆包 API Key', configureKey);
+  $('configure-key').addEventListener('click', configureKey);
+  GM_registerMenuCommand('清除豆包 API Key', () => {
+    stopTranslation('API Key 已清除'); apiKey = ''; GM_deleteValue('ark-api-key'); updateKeyBadges();
+  });
+  // One control owns both display mode and paid translation intent.
+  $('mode').value='original'; // Restoring appearance must not silently restart paid requests after reload.
+  $('mode').addEventListener('change', () => {
+    if($('mode').value==='original') {stopTranslation('仅显示原文，已停止翻译请求');return;}
+    if(!apiKey) {stopTranslation('请先在「偏好与连接」设置翻译 Key，再选择中英对照。');return;}
+    $('enabled').checked=true;
+    translator.start(...$('direction').value.split('-'));
+    savePreferences();
+    $('translation-status').textContent='中英对照已开启 · 豆包按需翻译，可能产生费用';
+  });
+  $('enabled').addEventListener('change', () => {
+    if (!$('enabled').checked) stopTranslation('字幕已关闭，已停止翻译请求');
+  });
+  $('direction').addEventListener('change', () => {
+    const active=translator.enabled; translator.reset();
+    if(active) {translator.start(...$('direction').value.split('-')); $('translation-status').textContent='已切换翻译方向';}
+    else stopTranslation('翻译方向已更改');
+  });
+  function translatedCue(cue) {
+    return { ...cue, translation: translator.get(cue.original) || cue.translation || '' };
+  }
+  let cues = [], route = courseIdentity(location.hash), pane = null, dirty = true, lastRead = 0;
+  const collected = new Map();
+  const observer = new MutationObserver(() => { dirty = true; });
+  const value = (id, fallback, min, max) => {
+    const raw = $(id).value;
+    const n = raw === '' ? NaN : Number(raw);
+    return Number.isFinite(n) ? Math.min(max, Math.max(min, n)) : fallback;
+  };
+  function offsetKey() { return 'subtitle-offset:' + courseIdentity(location.hash); }
+  function updateOffset(save = true) {
+    const offset = value('offset', 0, -3600, 3600);
+    $('offset-hint').textContent = offset === 0 ? '同步偏移：0 秒' :
+      `字幕${offset > 0 ? '延后' : '提前'} ${Math.abs(offset)} 秒`;
+    if (save) GM_setValue(offsetKey(), offset);
+  }
+  function loadOffset() { $('offset').value = GM_getValue(offsetKey(), GM_getValue('subtitle-offset:' + location.hash, 0)); updateOffset(false); }
+  loadOffset();
+  $('offset').addEventListener('input', () => updateOffset());
+  for (const [id, delta] of [['earlier', -0.5], ['later', 0.5], ['reset-offset', 0]]) {
+    $(id).addEventListener('click', () => {
+      $('offset').value = id === 'reset-offset' ? 0 : Math.min(3600, Math.max(-3600, value('offset', 0, -3600, 3600) + delta));
+      updateOffset(); tick();
+    });
+  }
+  let paddedVideo = null, originalPadding = null;
+  function releaseVideo() {
+    if (paddedVideo && originalPadding) {
+      for (const [property, saved] of Object.entries(originalPadding)) {
+        if (saved.value) paddedVideo.style.setProperty(property, saved.value, saved.priority);
+        else paddedVideo.style.removeProperty(property);
+      }
+    }
+    paddedVideo = null; originalPadding = null;
+  }
+  function reserveBand(video, band) {
+    if (paddedVideo !== video) {
+      releaseVideo(); paddedVideo = video;
+      originalPadding = Object.fromEntries(['padding-bottom', 'box-sizing', 'object-fit'].map(property =>
+        [property, { value: video.style.getPropertyValue(property), priority: video.style.getPropertyPriority(property) }]));
+    }
+    video.style.setProperty('box-sizing', 'border-box', 'important');
+    video.style.setProperty('object-fit', 'contain', 'important');
+    video.style.setProperty('padding-bottom', band + 'px', 'important');
+  }
+  function refresh() {
+    // Merge by timestamp + source so searching or incremental loading cannot erase earlier cues.
+    for (const row of pane?.querySelectorAll('.trans-item') ?? []) {
+      const start = parseTime(row.querySelector('.item-title')?.textContent ?? '');
+      const lines = row.querySelector('.trans-lan')?.children;
+      const original = lines?.[0]?.textContent.trim() ?? '';
+      const translation = lines?.[1]?.textContent.trim() ?? '';
+      if (Number.isFinite(start) && original) {
+        const key = `${start}\u0000${original}`;
+        const previous = collected.get(key);
+        collected.set(key, { start, original, translation: translation || previous?.translation || '' });
+      }
+    }
+    cues = timeline([...collected.values()], value('duration', 15, 1, 120));
+    const translated = cues.filter(c => c.translation).length;
+    $('status').textContent = `已读取 ${cues.length} 条，其中 ${translated} 条有译文。仅包含已加载内容。`;
+    dirty = false;
+  }
+  $('duration').addEventListener('input', () => { dirty = true; });
+  $('export').addEventListener('click', () => {
+    refresh();
+    if (!cues.length) { $('status').textContent = '还没有读取到字幕，请先打开右侧语音识别。'; return; }
+    const exported = cues.map(cue => $('mode').value === 'original' ? { ...cue, translation: '' } : translatedCue(cue));
+    const blob = new Blob(['\ufeff' + srt(exported, value('offset', 0, -3600, 3600))], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `${document.title.replace(/[<>:"/\\|?*]/g, '_')}-已读取字幕.srt`;
+    link.click();
+    setTimeout(() => URL.revokeObjectURL(url), 10000);
+  });
+  function tick() {
+    if (route !== courseIdentity(location.hash)) {
+      cancelAlignment?.(); closeSlides(); slideUrls=[];
+      translator.reset(); stopTranslation('课程已切换，请按需重新开启翻译');
+      route = courseIdentity(location.hash); collected.clear(); cues = []; dirty = true;
+      releaseVideo(); loadOffset();
+      $('status').textContent = '课程已切换，等待读取字幕…';
+    }
+    const currentPane = document.querySelector('#pane-voice');
+    if (pane !== currentPane) {
+      observer.disconnect(); pane = currentPane; dirty = true;
+      if (pane) observer.observe(pane, { childList: true, subtree: true, characterData: true });
+    }
+    if (dirty && performance.now() - lastRead > 500) { refresh(); lastRead = performance.now(); }
+    const fs = document.fullscreenElement;
+    const parent = fs && fs.tagName !== 'VIDEO' ? fs : document.body;
+    if (host.parentElement !== parent) parent.append(host);
+    const candidates = [...document.querySelectorAll('video')].map(video => {
+      const rect = video.getBoundingClientRect();
+      const style = getComputedStyle(video);
+      const width = Math.max(0, Math.min(rect.right, innerWidth) - Math.max(rect.left, 0));
+      const height = Math.max(0, Math.min(rect.bottom, innerHeight) - Math.max(rect.top, 0));
+      return { video, rect, area: style.visibility === 'hidden' || style.display === 'none' ? 0 : width * height };
+    }).filter(v => v.area > 0).sort((a, b) => b.area - a.area);
+    const selected = candidates.find(v=>v.video===splitVideo) || candidates[0];
+    layoutSlides(); syncSlide();
+    $('focus-fullscreen').textContent=fs?'⛶ 退出全屏':'⛶ 专注全屏';
+    mainVideo=selected?.video ?? null;
+    const cue = selected ? activeCue(cues, subtitleTime(selected.video.currentTime, value('offset', 0, -3600, 3600))) : null;
+    if (selected && translator.enabled && $('enabled').checked && $('mode').value === 'both') {
+      const time = subtitleTime(selected.video.currentTime, value('offset', 0, -3600, 3600));
+      const index = cue ? cues.indexOf(cue) : cues.findIndex(c => c.start >= time);
+      translator.schedule(index < 0 ? [] : cues.slice(index, index + 4).map(c => c.original));
+    }
+    const showOriginal = $('mode').value !== 'translation';
+    const showTranslation = $('mode').value !== 'original';
+    const original = showOriginal ? cue?.original ?? '' : '';
+    const translation = showTranslation && cue ? translatedCue(cue).translation : '';
+    $('caption').hidden = !$('enabled').checked || !selected || !(original || translation) || fs?.tagName === 'VIDEO';
+    if ($('original').textContent !== original) $('original').textContent = original;
+    if ($('translation').textContent !== translation) $('translation').textContent = translation;
+    const below = $('placement').value === 'below' && $('enabled').checked && fs?.tagName !== 'VIDEO';
+    if (!selected || !below) releaseVideo();
+    if (selected) {
+      const r = selected.rect;
+      const layout = captionLayout(r, innerWidth, below, value('bottom', 60, 0, 300));
+      if (below) reserveBand(selected.video, layout.band);
+      Object.assign($('caption').style, {
+        left: layout.left + 'px', width: layout.width + 'px',
+        top: (below ? r.bottom-64 : Math.min(layout.top,r.bottom-64)) + 'px', transform: 'translateY(-100%)', maxHeight: Math.max(24,r.height-80) + 'px',
+        fontSize: value('size', 26, 14, 48) + 'px'
+      });
+      // Fit long bilingual lines without a scrollbar; keep all pointer input available to the player.
+      const caption=$('caption');
+      if(!caption.hidden) {
+        let font=value('size',26,14,48);
+        const target=Math.max(48,below?layout.band-64:Math.min(180,r.height-80));
+        while(font>14 && caption.scrollHeight>target) {font--;caption.style.fontSize=font+'px';}
+      }
+    }
+  }
+  setInterval(tick, 100);
+  tick();
+})();
