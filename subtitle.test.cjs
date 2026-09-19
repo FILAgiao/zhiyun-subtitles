@@ -194,3 +194,29 @@ test('PPT timestamp matching handles offsets, seeks, missing times and repeated 
  assert.equal(slideAt(slides,40),2);assert.equal(slideAt(slides,2),0);
  assert.equal(slideAt(slides,-1),-1);assert.equal(slideAt([{time:NaN}],10),-1);
 });
+
+
+test('target language detection skips Chinese, English and neutral text but retains mixed sentences',()=>{
+ const {isTargetLanguage}=require('./zhiyun-subtitles.user.js');
+ assert.equal(isTargetLanguage('我们现在开始讨论这个问题。','zh'),true);
+ assert.equal(isTargetLanguage('对','zh'),true);
+ assert.equal(isTargetLanguage('我们用 Python 来分析这些数据','zh'),true);
+ assert.equal(isTargetLanguage('This is the next example.','zh'),false);
+ assert.equal(isTargetLanguage('这里我们说 the market is very efficient today','zh'),false);
+ assert.equal(isTargetLanguage('This is the next example.','en'),true);
+ assert.equal(isTargetLanguage('我们现在开始讨论','en'),false);
+ assert.equal(isTargetLanguage('2026 / 09 / 19 …','zh'),true);
+ assert.equal(isTargetLanguage('これはテストです','zh'),false);
+});
+test('mixed-language queues send only subtitles needing translation without disabling translation',async()=>{
+ const {calls,request}=mockRequests();const t=createTranslator(request);
+ t.start('en','zh');t.schedule(['我们继续讲下一页','The first example','我们用 API 来处理这些数据','The second example']);
+ assert.equal(calls.length,1);assert.equal(calls[0].text,'The first example');
+ calls[0].resolve('第一个例子');await flush();
+ assert.equal(calls.length,2);assert.equal(calls[1].text,'The second example');
+ calls[1].resolve('第二个例子');await flush();
+ t.schedule(['现在都是中文','好的']);assert.equal(calls.length,2);assert.equal(t.enabled,true);
+ t.start('zh','en');t.schedule(['This is already English','现在换成中文']);
+ assert.equal(calls.length,3);assert.equal(calls[2].text,'现在换成中文');
+ t.stop();
+});

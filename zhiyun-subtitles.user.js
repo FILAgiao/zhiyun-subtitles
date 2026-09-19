@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         智云课堂同步字幕
 // @namespace    zhiyunzimu.local
-// @version      0.9.0
+// @version      0.10.0
 // @description  将右侧语音识别及平台译文同步显示在视频底部，支持字幕导出。
 // @match        https://interactivemeta.cmc.zju.edu.cn/*
 // @grant        GM_xmlhttpRequest
@@ -96,6 +96,17 @@
     return text;
   }
   // One request at a time. An epoch prevents stopped/old-course results from leaking into new work.
+  function isTargetLanguage(text, target) {
+    const letters=String(text).match(/\p{L}/gu) || [];
+    if(!letters.length) return true;
+    const han=letters.filter(c=>/\p{Script=Han}/u.test(c)).length;
+    const latin=String(text).match(/[A-Za-z]+(?:['’-][A-Za-z]+)*/g) || [];
+    const latinChars=latin.join('').replace(/[^A-Za-z]/g,'').length;
+    if(letters.length-han-latinChars>0) return false;
+    if(target==='zh') return han>0 && (latin.length===0 || (han>=4 && latin.length<=2 && han>=latinChars));
+    if(target==='en') return han===0 && (latin.length>=2 || latinChars>=3);
+    return false;
+  }
   function createTranslator(request, notify = () => {}) {
     const cache = new Map();
     let enabled = false, epoch = 0, pending = null, queue = [], source = 'en', target = 'zh';
@@ -135,7 +146,7 @@
       start(from, to) { stop(); source = from; target = to; enabled = true; },
       stop,
       reset() { stop(); cache.clear(); },
-      schedule(texts) { if (!enabled) return; queue = [...new Set(texts)].filter(text => text && !get(text)); pump(); }
+      schedule(texts) { if (!enabled) return; queue = [...new Set(texts)].filter(text => text && !isTargetLanguage(text,target) && !get(text)); pump(); }
     };
   }
   function parseTime(text) {
@@ -197,7 +208,7 @@
       maxHeight: below ? Math.max(24, band - 48) : rect.height * 0.55 };
   }
   if (typeof module !== 'undefined' && module.exports) {
-    module.exports = { parseTime, timeline, activeCue, stamp, srt, translationBody, translationResult, createTranslator, subtitleTime, captionLayout, wavBytes, matchSpeech, speechResult, recognizeStandard, courseIdentity, slideTime, slideAt };
+    module.exports = { parseTime, timeline, activeCue, stamp, srt, translationBody, translationResult, createTranslator, subtitleTime, captionLayout, wavBytes, matchSpeech, speechResult, recognizeStandard, courseIdentity, slideTime, slideAt, isTargetLanguage };
     return;
   }
   if (document.getElementById('zy-subtitle-host')) return;
@@ -245,7 +256,7 @@
     <nav id="slide-toolbar" aria-label="PPT 翻页"><button id="slide-prev">← 上页</button><span id="slide-page"></span><button id="slide-next">下页 →</button><button id="slide-follow" aria-pressed="true">✓ 跟随老师</button><button id="slide-close">收起</button></nav><button id="slide-resize" aria-label="调整 PPT 窗口大小" title="拖拽缩放；方向键微调">◢</button>
   </section>
   <section id="panel" aria-label="智云字幕设置">
-    <header id="panel-head"><span class="mascot">🌱</span><div><h3>伴读字幕</h3><span class="subtitle">让每一句，都跟得上 · v0.9.0</span></div><button id="collapse" aria-label="收起字幕设置">−</button></header>
+    <header id="panel-head"><span class="mascot">🌱</span><div><h3>伴读字幕</h3><span class="subtitle">让每一句，都跟得上 · v0.10.0</span></div><button id="collapse" aria-label="收起字幕设置">−</button></header>
     <div id="panel-body">
     <div class="section"><div class="section-title">一起看懂 <span id="translation-ready" class="badge"></span><input id="enabled" aria-label="显示字幕" type="checkbox" checked></div>
     <label>字幕<select id="mode"><option value="original">仅原文</option><option value="both">中英对照 · 豆包翻译</option></select></label>
@@ -257,7 +268,7 @@
     <details><summary>手动微调 <span id="offset-hint">同步偏移：0 秒</span></summary>
     <label>偏移 / 秒<input id="offset" type="number" min="-3600" max="3600" step="0.5" value="0"></label>
     <div class="actions"><button id="earlier">提前 0.5 秒</button><button id="later">延后 0.5 秒</button><button id="reset-offset">归零</button></div></details></div>
-    <div class="section"><div class="actions"><button id="show-slides">▤ 悬浮看 PPT</button><button id="focus-fullscreen">⛶ 专注全屏</button></div><p id="slides-status">翻页不会打断视频。拖动 PPT 移动窗口，拖右下角缩放。悬停显示翻页与跟随控制。</p></div>
+    <div class="section"><div class="actions"><button id="show-slides">▤ 并排看 PPT</button><button id="focus-fullscreen">⛶ 专注全屏</button></div><p id="slides-status">翻页不会打断视频。PPT 与视频各占一半；左侧可拖动、缩放，不遮挡老师。</p></div>
     <details class="section"><summary>偏好与连接 <span id="key-summary" class="badge"></span></summary>
     <label>翻译连接 <span id="translation-badge" class="badge"></span></label><button id="configure-key">设置翻译 Key</button>
     <label>语音连接 <span id="speech-key-badge" class="badge"></span></label><button id="speech-key">设置语音识别凭证</button><p>绿色勾表示已保存凭证，不代表接口权限已验证。</p>
@@ -303,6 +314,7 @@
     handle.addEventListener('pointermove',e=>{
       if(!drag) return;
       if(pan) { element.scrollLeft=drag.left+drag.x-e.clientX; element.scrollTop=drag.top+drag.y-e.clientY; }
+      else if(element===$('slides')) {applySlideGeometry({left:drag.left+e.clientX-drag.x,top:drag.top+e.clientY-drag.y,width:element.offsetWidth,height:element.offsetHeight});}
       else { element.style.right='auto'; element.style.left=Math.max(8,Math.min(innerWidth-element.offsetWidth-8,drag.left+e.clientX-drag.x))+'px'; element.style.top=Math.max(8,Math.min(innerHeight-element.offsetHeight-8,drag.top+e.clientY-drag.y))+'px'; }
     });
     for(const event of ['pointerup','pointercancel','lostpointercapture']) handle.addEventListener(event,()=>{if(drag) onEnd();drag=null;});
@@ -426,7 +438,7 @@
       cancelAlignment=null; $('auto-align').textContent='听 12 秒自动校准';
     }
   };
-  let slideUrls=[], slideEntries=[], slideIndex=0, splitVideo=null, slideFollowing=true, slideCourse=null;
+  let slideUrls=[], slideEntries=[], slideIndex=0, splitVideo=null, splitStyles=null, slideDragging=false, slideFollowing=true, slideCourse=null;
   function saveSlideState() {
     GM_setValue('ppt-state:'+slideCourse,{index:slideIndex,url:slideEntries[slideIndex]?.url,time:slideEntries[slideIndex]?.time,follow:slideFollowing});
   }
@@ -441,7 +453,10 @@
   }
   function closeSlides() {
     $('slides').hidden=true;
-    splitVideo=null;
+    if(splitVideo && splitStyles) for(const [key,saved] of Object.entries(splitStyles)) {
+      if(saved.value) splitVideo.style.setProperty(key,saved.value,saved.priority); else splitVideo.style.removeProperty(key);
+    }
+    splitStyles=null; splitVideo=null;
   }
   function renderSlide() {
     $('slide-image').src=slideUrls[slideIndex]; $('slide-page').textContent=`${slideIndex+1} / ${slideUrls.length}`;
@@ -463,9 +478,10 @@
     if(!mainVideo) { $('slides-status').textContent='请先打开老师视频，再查看 PPT。'; return false; }
     if(!splitVideo) {
       splitVideo=mainVideo;
-      const rect=splitVideo.getBoundingClientRect();
-      const saved=GM_getValue('ppt-window',null);
-      applySlideGeometry(saved || {left:Math.max(8,rect.left+16),top:Math.max(8,rect.top+16),width:Math.min(560,innerWidth*.48),height:Math.min(400,innerHeight*.6)});
+      splitStyles=Object.fromEntries(['width','margin-left'].map(key=>[key,{value:splitVideo.style.getPropertyValue(key),priority:splitVideo.style.getPropertyPriority(key)}]));
+      splitVideo.style.setProperty('width','50%','important');
+      splitVideo.style.setProperty('margin-left','50%','important');
+      restoreSlideGeometry();
     }
     slideIndex=Math.min(slideIndex,slideUrls.length-1); renderSlide(); $('slides').hidden=false; syncSlide();
     $('slides-status').textContent=slideEntries.some(s=>Number.isFinite(s.time))?'PPT 按视频时间自动翻页，沿用字幕偏移。手动翻页可暂停跟随。':'本页未读取到 PPT 时间，保留手动翻页和页码记忆。'; return true;
@@ -489,18 +505,30 @@
   function layoutSlides() {
     if(!splitVideo || $('slides').hidden) return;
     if(!splitVideo.isConnected) { closeSlides(); return; }
-    const r=$('slides').getBoundingClientRect();
-    if(r.right>innerWidth || r.bottom>innerHeight || r.left<0 || r.top<0) applySlideGeometry(r);
+    if(!slideDragging && !resizing) restoreSlideGeometry();
+  }
+  function slideBounds() {
+    const r=splitVideo.getBoundingClientRect();
+    const left=Math.max(0,r.left-r.width),top=Math.max(0,r.top);
+    return {left,top,width:Math.max(0,Math.min(innerWidth,r.left)-left),height:Math.max(0,Math.min(innerHeight,r.bottom)-top-64)};
+  }
+  function restoreSlideGeometry() {
+    const b=slideBounds(),saved=GM_getValue('ppt-split-window',null);
+    applySlideGeometry(saved ? {left:b.left+saved.x*b.width,top:b.top+saved.y*b.height,width:saved.w*b.width,height:saved.h*b.height} : b);
   }
   function applySlideGeometry(rect) {
-    const width=Math.min(innerWidth-16,Math.max(280,rect.width));
-    const height=Math.min(innerHeight-16,Math.max(180,rect.height));
-    Object.assign($('slides').style,{left:Math.max(8,Math.min(innerWidth-width-8,rect.left))+'px',top:Math.max(8,Math.min(innerHeight-height-8,rect.top))+'px',width:width+'px',height:height+'px'});
+    const b=slideBounds();
+    const width=Math.min(b.width,Math.max(280,rect.width)),height=Math.min(b.height,Math.max(180,rect.height));
+    Object.assign($('slides').style,{left:Math.max(b.left,Math.min(b.left+b.width-width,rect.left))+'px',top:Math.max(b.top,Math.min(b.top+b.height-height,rect.top))+'px',width:width+'px',height:height+'px'});
   }
   function saveSlideGeometry() {
-    const {left,top,width,height}=$('slides').getBoundingClientRect();
-    GM_setValue('ppt-window',{left,top,width,height});
+    if(!splitVideo) return;
+    applySlideGeometry($('slides').getBoundingClientRect());
+    const {left,top,width,height}=$('slides').getBoundingClientRect(),b=slideBounds();
+    if(b.width && b.height) GM_setValue('ppt-split-window',{x:(left-b.left)/b.width,y:(top-b.top)/b.height,w:width/b.width,h:height/b.height});
   }
+  $('slide-viewport').addEventListener('pointerdown',()=>{slideDragging=true;});
+  for(const event of ['pointerup','pointercancel','lostpointercapture']) $('slide-viewport').addEventListener(event,()=>{slideDragging=false;});
   let resizing=null;
   $('slide-resize').addEventListener('pointerdown',e=>{
     if(e.button!==0) return;
@@ -596,6 +624,7 @@
     else stopTranslation('翻译方向已更改');
   });
   function translatedCue(cue) {
+    if(isTargetLanguage(cue.original,$('direction').value.split('-')[1])) return {...cue,translation:''};
     return { ...cue, translation: translator.get(cue.original) || cue.translation || '' };
   }
   let cues = [], route = courseIdentity(location.hash), pane = null, dirty = true, lastRead = 0;
