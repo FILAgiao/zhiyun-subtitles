@@ -220,3 +220,25 @@ test('mixed-language queues send only subtitles needing translation without disa
  assert.equal(calls.length,3);assert.equal(calls[2].text,'现在换成中文');
  t.stop();
 });
+
+
+test('video downloader uses privileged transport, validates bytes and rejects unsafe domains',async()=>{
+ const {downloadVideo}=require('./zhiyun-subtitles.user.js');
+ const blob=new Blob([new Uint8Array([0,0,0,16,102,116,121,112,105,115,111,109])]);
+ let options;
+ const result=await downloadVideo(o=>{options=o;queueMicrotask(()=>o.onload({status:200,response:blob}));return{abort(){}};},'https://video.cmc.zju.edu.cn/test.mp4',{limit:100});
+ assert.equal(result,blob);assert.equal(options.responseType,'blob');assert.equal(options.headers,undefined);
+ await assert.rejects(downloadVideo(()=>{throw new Error('must not request');},'https://untrusted.example/test.mp4',{limit:100}),/尚未授权/);
+ for(const [status,response,pattern] of [[403,blob,/访问被拒绝/],[200,new Blob(['<html>login</html>']),/不是 MP4/],[200,new Blob([]),/有效视频/]]) {
+  await assert.rejects(downloadVideo(o=>{queueMicrotask(()=>o.onload({status,response}));return{abort(){}};},'https://video.cmc.zju.edu.cn/test.mp4',{limit:100}),pattern);
+ }
+});
+test('video downloader aborts on cancellation and size overflow without saving late responses',async()=>{
+ const {downloadVideo}=require('./zhiyun-subtitles.user.js');let opts,aborted=0;
+ const request=o=>{opts=o;return{abort(){aborted++;o.onabort();}};};
+ const controller=new AbortController();const pending=downloadVideo(request,'https://video.cmc.zju.edu.cn/a.mp4',{limit:100,signal:controller.signal});
+ controller.abort();await assert.rejects(pending,/取消/);assert.equal(aborted,1);
+ const tooLarge=downloadVideo(request,'https://video.cmc.zju.edu.cn/a.mp4',{limit:100});
+ opts.onprogress({loaded:1,total:101,lengthComputable:true});await assert.rejects(tooLarge,/上限/);assert.equal(aborted,2);
+ opts.onload({status:200,response:new Blob(['late'])});
+});

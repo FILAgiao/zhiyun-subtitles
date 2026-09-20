@@ -13,7 +13,7 @@ const {chromium}=require(process.env.PLAYWRIGHT_MODULE || 'playwright');
   window.saved={'ark-api-key':'fake','speech-credentials':{apiKey:'fake'}};
   window.GM_getValue=(k,d)=>saved[k]??d; window.GM_setValue=(k,v)=>saved[k]=v;window.GM_deleteValue=k=>delete saved[k];window.GM_registerMenuCommand=()=>{};
   window.requests=[];window.jobs=0;
-  window.GM_xmlhttpRequest=o=>{requests.push(o.url);let aborted=false;setTimeout(()=>{if(aborted)return; if(o.url.includes('responses'))o.onload({status:200,responseText:JSON.stringify({output:[{type:'message',content:[{type:'output_text',text:'金融市场使用多种不同的交易策略'}]}]})});else {if(o.url.endsWith('submit'))jobs++;o.onload({status:200,responseHeaders:'X-Api-Status-Code: 20000000',responseText:JSON.stringify({result:{utterances:[{text:jobs<3?'this text has no match at all here':'the financial market uses several different trading strategies',start_time:0}]}})});}},10);return{abort(){aborted=true;o.onabort?.();}};};
+  window.GM_xmlhttpRequest=o=>{if(o.method==='GET'){window.videoRequests=(window.videoRequests||0)+1;setTimeout(()=>o.onload({status:200,response:new Blob([new Uint8Array([0,0,0,16,102,116,121,112,105,115,111,109,0,0,0,0])],{type:'video/mp4'})}),10);return{abort(){o.onabort?.();}};}requests.push(o.url);let aborted=false;setTimeout(()=>{if(aborted)return; if(o.url.includes('responses'))o.onload({status:200,responseText:JSON.stringify({output:[{type:'message',content:[{type:'output_text',text:'金融市场使用多种不同的交易策略'}]}]})});else {if(o.url.endsWith('submit'))jobs++;o.onload({status:200,responseHeaders:'X-Api-Status-Code: 20000000',responseText:JSON.stringify({result:{utterances:[{text:jobs<3?'this text has no match at all here':'the financial market uses several different trading strategies',start_time:0}]}})});}},10);return{abort(){aborted=true;o.onabort?.();}};};
   const video=document.querySelector('video');Object.defineProperties(video,{paused:{get:()=>false},currentTime:{get:()=>window.videoTime??12},playbackRate:{get:()=>window.testRate??1,set:v=>{window.testRate=v;setTimeout(()=>video.dispatchEvent(new Event('ratechange')),0);}}});
   video.captureStream=()=>({getAudioTracks:()=>[],getTracks:()=>[]});
  });
@@ -140,10 +140,10 @@ const {chromium}=require(process.env.PLAYWRIGHT_MODULE || 'playwright');
  // Cache only synthetic media bytes: verify storage and source switching, not codec decoding.
  await ui.locator('summary').filter({hasText:'布局与视频缓存'}).click();
  await ui.locator('#cache-download').click();assert.match(await ui.locator('#cache-status').textContent(),/不是可直接缓存/);
- await page.evaluate(()=>{const v=document.querySelector('video');v.load=()=>{};v.pause=()=>{};v.addEventListener('error',e=>e.stopImmediatePropagation(),true);v.setAttribute('src','https://classroom.test/test.mp4');window.fetch=async()=>new Response(new Uint8Array([1,2,3]),{headers:{'content-type':'video/mp4','content-length':'3'}});});
- await ui.locator('#cache-download').click();await page.waitForTimeout(150);assert.match(await ui.locator('#cache-status').textContent(),/缓存完成/);
+ await page.evaluate(()=>{const v=document.querySelector('video');v.load=()=>{};v.pause=()=>{};v.addEventListener('error',e=>e.stopImmediatePropagation(),true);v.setAttribute('src','https://video.cmc.zju.edu.cn/test.mp4');window.fetch=async()=>{throw new Error('CORS blocked');};});
+ await ui.locator('#cache-download').click();await page.waitForTimeout(150);assert.match(await ui.locator('#cache-status').textContent(),/缓存完成/);assert.equal(await page.evaluate(()=>window.videoRequests),1);
  await ui.locator('#cache-play').click();await page.waitForTimeout(150);assert.match(await page.locator('video').getAttribute('src'),/^blob:/);
- await ui.locator('#cache-online').click();assert.equal(await page.locator('video').getAttribute('src'),'https://classroom.test/test.mp4');
+ await ui.locator('#cache-online').click();assert.equal(await page.locator('video').getAttribute('src'),'https://video.cmc.zju.edu.cn/test.mp4');
  await ui.locator('#cache-clear').click();await page.waitForTimeout(100);await ui.locator('#cache-play').click();await page.waitForTimeout(100);assert.match(await ui.locator('#cache-status').textContent(),/没有缓存/);
  await ui.locator('summary').filter({hasText:'布局与视频缓存'}).click();
  // A Chinese-only current cue must neither call translation nor render a duplicate line.

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         智云课堂同步字幕
 // @namespace    zhiyunzimu.local
-// @version      0.11.0
+// @version      0.11.1
 // @description  将右侧语音识别及平台译文同步显示在视频底部，支持字幕导出。
 // @match        https://interactivemeta.cmc.zju.edu.cn/*
 // @grant        GM_xmlhttpRequest
@@ -11,12 +11,52 @@
 // @grant        GM_registerMenuCommand
 // @connect      ark.cn-beijing.volces.com
 // @connect      openspeech.bytedance.com
+// @connect      video.cmc.zju.edu.cn
+// @connect      interactivemeta.cmc.zju.edu.cn
 // @run-at       document-idle
 // ==/UserScript==
 
 (function () {
   'use strict';
   const ARK_URL = 'https://ark.cn-beijing.volces.com/api/v3/responses';
+  function downloadVideo(request,url,{signal,limit,onProgress=()=>{}}) {
+    return new Promise((resolve,reject)=>{
+      const parsed=new URL(url);
+      if(!['video.cmc.zju.edu.cn','interactivemeta.cmc.zju.edu.cn'].includes(parsed.hostname) || !['https:','http:'].includes(parsed.protocol)) {
+        reject(new Error('尚未授权此视频域名：'+parsed.hostname+'。请提供缓存诊断，以便添加精确域名权限。'));return;
+      }
+      let handle,settled=false;
+      const finish=(error,blob)=>{if(settled)return;settled=true;signal?.removeEventListener('abort',abort);error?reject(error):resolve(blob);};
+      const abort=()=>{finish(new Error('缓存已取消'));handle?.abort();};
+      if(signal?.aborted){abort();return;}
+      signal?.addEventListener('abort',abort,{once:true});
+      try {
+        handle=request({method:'GET',url,responseType:'blob',timeout:1800000,
+          onprogress:event=>{
+            if(event.loaded>limit || event.total>limit){finish(new Error('视频超过缓存上限 512 MB'));handle?.abort();return;}
+            onProgress(event.loaded || 0,event.lengthComputable?event.total:0);
+          },
+          onload:async response=>{
+            if(settled)return;
+            if(response.status!==200){finish(new Error(response.status===401 || response.status===403?'视频访问被拒绝（HTTP '+response.status+'），请重新登录课程后重试':'下载失败：HTTP '+response.status));return;}
+            const blob=response.response;
+            if(!blob || typeof blob.slice!=='function' || !blob.size){finish(new Error('服务器未返回有效视频文件'));return;}
+            if(blob.size>limit){finish(new Error('视频超过缓存上限 512 MB'));return;}
+            try {
+              const bytes=new Uint8Array(await blob.slice(0,64).arrayBuffer());
+              const mp4=String.fromCharCode(...bytes.slice(4,8))==='ftyp';
+              const webm=bytes[0]===0x1a && bytes[1]===0x45 && bytes[2]===0xdf && bytes[3]===0xa3;
+              if(!mp4 && !webm) throw new Error('返回内容不是 MP4/WebM，可能是登录页或分片清单；未写入缓存');
+              finish(null,blob);
+            }catch(error){finish(error);}
+          },
+          onerror:()=>finish(new Error('油猴下载失败：请允许连接 '+parsed.hostname+'，并检查网络或登录状态')),
+          ontimeout:()=>finish(new Error('视频下载超时，可重试')),
+          onabort:()=>finish(new Error('缓存已取消'))
+        });
+      }catch(error){finish(new Error('无法启动油猴跨域下载：'+error.message));}
+    });
+  }
   function wavBytes(samples, rate = 16000) {
     const buffer = new ArrayBuffer(44 + samples.length * 2), view = new DataView(buffer);
     const ascii = (offset, text) => [...text].forEach((c,i)=>view.setUint8(offset+i,c.charCodeAt(0)));
@@ -208,7 +248,7 @@
       maxHeight: below ? Math.max(24, band - 48) : rect.height * 0.55 };
   }
   if (typeof module !== 'undefined' && module.exports) {
-    module.exports = { parseTime, timeline, activeCue, stamp, srt, translationBody, translationResult, createTranslator, subtitleTime, captionLayout, wavBytes, matchSpeech, speechResult, recognizeStandard, courseIdentity, slideTime, slideAt, isTargetLanguage };
+    module.exports = { parseTime, timeline, activeCue, stamp, srt, translationBody, translationResult, createTranslator, subtitleTime, captionLayout, wavBytes, matchSpeech, speechResult, recognizeStandard, courseIdentity, slideTime, slideAt, isTargetLanguage, downloadVideo };
     return;
   }
   if (document.getElementById('zy-subtitle-host')) return;
@@ -264,7 +304,7 @@
     <button class="slide-edge" data-edge="left" aria-label="调整 PPT 左边缘"></button><button class="slide-edge" data-edge="right" aria-label="调整 PPT 右边缘"></button><button class="slide-edge" data-edge="top" aria-label="调整 PPT 上边缘"></button><button class="slide-edge" data-edge="bottom" aria-label="调整 PPT 下边缘"></button>
   </section>
   <section id="panel" aria-label="智云字幕设置">
-    <header id="panel-head"><span class="mascot">🌱</span><div><h3>伴读字幕</h3><span class="subtitle">让每一句，都跟得上 · v0.11.0</span></div><button id="collapse" aria-label="收起字幕设置">−</button></header>
+    <header id="panel-head"><span class="mascot">🌱</span><div><h3>伴读字幕</h3><span class="subtitle">让每一句，都跟得上 · v0.11.1</span></div><button id="collapse" aria-label="收起字幕设置">−</button></header>
     <div id="panel-body">
     <div class="section"><div class="section-title">一起看懂 <span id="translation-ready" class="badge"></span><input id="enabled" aria-label="显示字幕" type="checkbox" checked></div>
     <label>字幕<select id="mode"><option value="original">仅原文</option><option value="both">中英对照 · 豆包翻译</option></select></label>
@@ -283,8 +323,8 @@
     <div id="layout-editor" hidden><p>视频位置与大小（像素）</p><label>左 / 上<input id="video-x" type="number" value="720"><input id="video-y" type="number" value="400"></label><label>宽 / 高<input id="video-w" type="number" value="400"><input id="video-h" type="number" value="240"></label><button id="apply-layout">应用视频位置</button>
     <label>自定义字幕位置<input id="caption-custom" type="checkbox"></label><label>字幕左 / 下沿<input id="caption-x" type="number" value="20"><input id="caption-y" type="number" value="700"></label><label>字幕宽度<input id="caption-w" type="number" value="900"></label></div>
     <button id="cache-download">缓存当前视频</button><button id="cache-play">播放已缓存视频</button><button id="cache-online">恢复在线视频</button><button id="cache-clear">清除此课缓存</button>
-    <label>导入已下载视频<input id="cache-file" type="file" accept="video/mp4,video/webm"></label>
-    <p id="cache-status">支持可直接读取的 MP4 / WebM，单个最大 512 MB，缓存保存在此浏览器。分片流、blob 播放地址或跨域限制不能直接缓存，可导入平台已下载的视频。</p>
+    <button id="cache-diagnose">查看缓存诊断</button><pre id="cache-diagnostic" hidden style="white-space:pre-wrap;font-size:11px"></pre><label>导入本地视频<input id="cache-file" type="file" accept="video/mp4,video/webm"></label>
+    <p id="cache-status">使用油猴下载智云课堂 MP4/WebM；首次请允许连接视频域名。单个最大 512 MB，缓存保存在此浏览器。</p>
     </details>
     <details class="section"><summary>偏好与连接 <span id="key-summary" class="badge"></span></summary>
     <label>翻译连接 <span id="translation-badge" class="badge"></span></label><button id="configure-key">设置翻译 Key</button>
@@ -651,26 +691,28 @@
     if(cacheAbort){cacheAbort.abort();return;}
     const key=courseIdentity(location.hash),src=mainVideo?.currentSrc || mainVideo?.src || '';
     if(!/^https?:/i.test(src) || !/\.(mp4|webm)(?:[?#]|$)/i.test(src)) {
-      $('cache-status').textContent='当前不是可直接缓存的 MP4/WebM 地址（可能是分片流）。可先用平台下载视频，再从下方导入。';return;
+      $('cache-status').textContent='当前不是可直接缓存的 MP4/WebM 地址（可能是分片流或 blob 地址）。请查看缓存诊断，需进一步适配此来源。';return;
     }
     const controller=new AbortController();cacheAbort=controller;$('cache-download').textContent='取消缓存';
     try {
-      const response=await fetch(src,{credentials:'include',signal:controller.signal});
-      if(!response.ok) throw new Error('下载失败：HTTP '+response.status);
-      const total=Number(response.headers.get('content-length'));
-      if(total>CACHE_LIMIT) throw new Error('文件超过 512 MB，请用平台下载后在本地播放器观看');
-      const type=response.headers.get('content-type') || '';
-      if(/text|json/i.test(type)) throw new Error('服务器返回的不是视频文件');
-      const reader=response.body.getReader(),chunks=[];let size=0;
-      while(true) {const {done,value}=await reader.read();if(done) break;size+=value.byteLength;
-        if(size>CACHE_LIMIT){controller.abort();throw new Error('文件超过 512 MB，已停止缓存');}
-        chunks.push(value);$('cache-status').textContent=`正在缓存 ${(size/1048576).toFixed(1)} MB${total?' / '+(total/1048576).toFixed(1)+' MB':''}`;
-      }
+      $('cache-status').textContent='正在连接视频服务器；如果油猴询问，请允许连接视频域名…';
+      const blob=await downloadVideo(GM_xmlhttpRequest,src,{signal:controller.signal,limit:CACHE_LIMIT,onProgress:(size,total)=>{
+        $('cache-status').textContent=`正在缓存 ${(size/1048576).toFixed(1)} MB${total?' / '+(total/1048576).toFixed(1)+' MB':''}`;
+      }});
       if(controller.signal.aborted || key!==courseIdentity(location.hash)) return;
-      await saveVideo(new Blob(chunks,{type:type || (/\.webm/i.test(src)?'video/webm':'video/mp4')}),key);
+      const estimate=await navigator.storage?.estimate?.();
+      if(estimate?.quota && blob.size>estimate.quota-(estimate.usage || 0)) throw new Error('浏览器可用空间不足，请清理站点缓存后重试');
+      $('cache-status').textContent='下载完成，正在保存到浏览器…';
+      await saveVideo(blob,key);
       if(key===courseIdentity(location.hash)) $('cache-status').textContent='缓存完成，可点击「播放已缓存视频」。刷新后仍保留。';
-    } catch(error) {if(key===courseIdentity(location.hash)) $('cache-status').textContent=controller.signal.aborted?'缓存已取消':error.message+'；可能受跨域限制，可导入平台下载的视频。';}
+    } catch(error) {if(key===courseIdentity(location.hash)) $('cache-status').textContent=controller.signal.aborted?'缓存已取消':error.message;}
     finally{cacheAbort=null;$('cache-download').textContent='缓存当前视频';}
+  };
+  $('cache-diagnose').onclick=()=>{
+    const source=mainVideo?.currentSrc || mainVideo?.src || '';let origin='无视频源',kind='未知';
+    try{const url=new URL(source);origin=url.origin;kind=url.protocol==='blob:'?'blob / 分片播放':url.pathname.match(/\.(mp4|webm|m3u8|mpd)$/i)?.[1] || '无扩展名';}catch{}
+    $('cache-diagnostic').hidden=false;
+    $('cache-diagnostic').textContent=`版本：0.11.1\n来源域名：${origin}\n格式：${kind}\n状态：${$('cache-status').textContent}\n（不包含视频完整地址、登录参数或 API Key）`;
   };
   $('cache-file').onchange=async()=>{
     const file=$('cache-file').files[0],key=courseIdentity(location.hash);if(!file) return;
