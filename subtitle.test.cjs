@@ -251,3 +251,29 @@ test('user confirmed VOD host is authorized without broadening to other subdomai
  assert.equal(called,true);
  await assert.rejects(downloadVideo(()=>{throw new Error('must not call');},'https://unknown.cmc.zju.edu.cn/lesson.mp4',{limit:100}),/尚未授权/);
 });
+
+
+test('range cache handles a 640 MB video one 8 MB block at a time without whole-file buffering',async()=>{
+ const {downloadInChunks}=require('./zhiyun-subtitles.user.js');const chunk=8*1024*1024,total=640*1024*1024;
+ const header=new Blob([new Uint8Array([0,0,0,16,102,116,121,112])]);let calls=0,writes=0,bytes=0,checked=0;
+ const request=o=>{const range=o.headers.Range.match(/bytes=(\d+)-(\d+)/);const start=Number(range[1]),end=Math.min(Number(range[2]),total-1);calls++;
+  assert.equal(start,bytes);if(start)assert.equal(o.headers['If-Range'],'"v1"');
+  queueMicrotask(()=>o.onload({status:206,responseHeaders:`Content-Range: bytes ${start}-${end}/${total}\r\nETag: "v1"`,response:{size:end-start+1,slice:()=>header}}));return{abort(){}};};
+ const size=await downloadInChunks(request,'https://vod.cmc.zju.edu.cn/big.mp4',{write:async blob=>{assert.ok(blob.size<=chunk);bytes+=blob.size;writes++;},checkSpace:async n=>{assert.equal(n,total);checked++;}});
+ assert.equal(size,total);assert.equal(calls,80);assert.equal(writes,80);assert.equal(checked,1);
+});
+test('range cache rejects mismatched ranges, changed totals and insufficient quota before writing',async()=>{
+ const {downloadInChunks}=require('./zhiyun-subtitles.user.js');const header=new Blob([new Uint8Array([0,0,0,16,102,116,121,112])]);
+ for(const [range,quota,pattern] of [['bytes 1-8/16',false,/范围/],['bytes 0-7/16',true,/空间不足/]]) {
+  let writes=0;
+  await assert.rejects(downloadInChunks(o=>{queueMicrotask(()=>o.onload({status:206,responseHeaders:'Content-Range: '+range,response:header}));return{abort(){}};},'https://vod.cmc.zju.edu.cn/a.mp4',{chunkSize:8,write:async()=>{writes++;},checkSpace:async()=>{if(quota)throw new Error('空间不足');}}),pattern);
+  assert.equal(writes,0);
+ }
+ let calls=0;
+ await assert.rejects(downloadInChunks(o=>{const start=calls++*8;queueMicrotask(()=>o.onload({status:206,responseHeaders:`Content-Range: bytes ${start}-${start+7}/${calls===1?16:24}`,response:header}));return{abort(){}};},'https://vod.cmc.zju.edu.cn/a.mp4',{chunkSize:8,write:async()=>{}}),/总大小/);
+});
+test('range cache cancellation between chunks stops before another request',async()=>{
+ const {downloadInChunks}=require('./zhiyun-subtitles.user.js');const controller=new AbortController();let calls=0;
+ await assert.rejects(downloadInChunks(o=>{calls++;queueMicrotask(()=>o.onload({status:206,responseHeaders:'Content-Range: bytes 0-7/16',response:new Blob([new Uint8Array([0,0,0,16,102,116,121,112])])}));return{abort(){}};},'https://vod.cmc.zju.edu.cn/a.mp4',{chunkSize:8,signal:controller.signal,write:async()=>controller.abort()}),/取消/);
+ assert.equal(calls,1);
+});

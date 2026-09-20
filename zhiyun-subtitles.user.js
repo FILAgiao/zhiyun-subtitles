@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         智云课堂同步字幕
 // @namespace    zhiyunzimu.local
-// @version      0.11.2
+// @version      0.12.0
 // @description  将右侧语音识别及平台译文同步显示在视频底部，支持字幕导出。
 // @match        https://interactivemeta.cmc.zju.edu.cn/*
 // @grant        GM_xmlhttpRequest
@@ -20,7 +20,7 @@
 (function () {
   'use strict';
   const ARK_URL = 'https://ark.cn-beijing.volces.com/api/v3/responses';
-  function downloadVideo(request,url,{signal,limit,onProgress=()=>{}}) {
+  function downloadVideo(request,url,{signal,limit,range=null,validator=null,onProgress=()=>{}}) {
     return new Promise((resolve,reject)=>{
       const parsed=new URL(url);
       if(!['video.cmc.zju.edu.cn','vod.cmc.zju.edu.cn','interactivemeta.cmc.zju.edu.cn'].includes(parsed.hostname) || !['https:','http:'].includes(parsed.protocol)) {
@@ -32,23 +32,38 @@
       if(signal?.aborted){abort();return;}
       signal?.addEventListener('abort',abort,{once:true});
       try {
-        handle=request({method:'GET',url,responseType:'blob',timeout:1800000,
+        handle=request({method:'GET',url,responseType:'blob',timeout:1800000,...(range?{headers:{Range:`bytes=${range.start}-${range.end}`,...(validator?{'If-Range':validator}:{})}}:{}),
           onprogress:event=>{
-            if(event.loaded>limit || event.total>limit){finish(new Error('视频超过缓存上限 512 MB'));handle?.abort();return;}
+            if(event.loaded>limit || event.total>limit){finish(new Error('服务器返回的数据超过单块上限；可能不支持分块下载'));handle?.abort();return;}
             onProgress(event.loaded || 0,event.lengthComputable?event.total:0);
           },
           onload:async response=>{
             if(settled)return;
-            if(response.status!==200){finish(new Error(response.status===401 || response.status===403?'视频访问被拒绝（HTTP '+response.status+'），请重新登录课程后重试':'下载失败：HTTP '+response.status));return;}
+            if(response.status!==200 && !(range && response.status===206)){finish(new Error(response.status===401 || response.status===403?'视频访问被拒绝（HTTP '+response.status+'），请重新登录课程后重试':'下载失败：HTTP '+response.status));return;}
             const blob=response.response;
             if(!blob || typeof blob.slice!=='function' || !blob.size){finish(new Error('服务器未返回有效视频文件'));return;}
-            if(blob.size>limit){finish(new Error('视频超过缓存上限 512 MB'));return;}
+            if(blob.size>limit){finish(new Error('服务器返回的数据超过单块上限；可能不支持分块下载'));return;}
             try {
+              if(!range || range.start===0) {
               const bytes=new Uint8Array(await blob.slice(0,64).arrayBuffer());
               const mp4=String.fromCharCode(...bytes.slice(4,8))==='ftyp';
               const webm=bytes[0]===0x1a && bytes[1]===0x45 && bytes[2]===0xdf && bytes[3]===0xa3;
               if(!mp4 && !webm) throw new Error('返回内容不是 MP4/WebM，可能是登录页或分片清单；未写入缓存');
-              finish(null,blob);
+              }
+              if(range) {
+                const header=name=>String(response.responseHeaders || '').match(new RegExp('^'+name+':\\s*(.+)$','im'))?.[1]?.trim();
+                if(response.status===200) {
+                  if(range.start!==0) throw new Error('视频内容已改变或服务器忽略 Range，请重新缓存');
+                  finish(null,{blob,total:blob.size,end:blob.size-1,validator:header('etag') || header('last-modified')});return;
+                }
+                const match=header('content-range')?.match(/^bytes (\d+)-(\d+)\/(\d+)$/);
+                if(!match) throw new Error('分块响应缺少有效 Content-Range');
+                const [start,end,total]=match.slice(1).map(Number);
+                if(![start,end,total].every(Number.isSafeInteger) || start!==range.start || end>range.end || end<start || end>=total || blob.size!==end-start+1) throw new Error('分块范围或长度不一致，已停止缓存');
+                const current=header('etag') || header('last-modified');
+                if(validator && current && validator!==current) throw new Error('缓存期间视频版本改变，请重新缓存');
+                finish(null,{blob,total,end,validator:current});
+              } else finish(null,blob);
             }catch(error){finish(error);}
           },
           onerror:()=>finish(new Error('油猴下载失败：请允许连接 '+parsed.hostname+'，并检查网络或登录状态')),
@@ -57,6 +72,18 @@
         });
       }catch(error){finish(new Error('无法启动油猴跨域下载：'+error.message));}
     });
+  }
+  async function downloadInChunks(request,url,{signal,write,checkSpace=async()=>{},onProgress=()=>{},chunkSize=8*1024*1024}) {
+    let offset=0,total=null,validator=null;
+    do {
+      if(signal?.aborted) throw new Error('缓存已取消');
+      const part=await downloadVideo(request,url,{signal,limit:chunkSize,range:{start:offset,end:offset+chunkSize-1},validator,onProgress:(loaded)=>onProgress(offset+loaded,total)});
+      if(total===null) {total=part.total;validator=part.validator;await checkSpace(total);}
+      else if(total!==part.total) throw new Error('视频总大小发生变化，请重新缓存');
+      if(signal?.aborted) throw new Error('缓存已取消');
+      await write(part.blob);offset=part.end+1;onProgress(offset,total);
+    }while(offset<total);
+    return total;
   }
   function wavBytes(samples, rate = 16000) {
     const buffer = new ArrayBuffer(44 + samples.length * 2), view = new DataView(buffer);
@@ -249,7 +276,7 @@
       maxHeight: below ? Math.max(24, band - 48) : rect.height * 0.55 };
   }
   if (typeof module !== 'undefined' && module.exports) {
-    module.exports = { parseTime, timeline, activeCue, stamp, srt, translationBody, translationResult, createTranslator, subtitleTime, captionLayout, wavBytes, matchSpeech, speechResult, recognizeStandard, courseIdentity, slideTime, slideAt, isTargetLanguage, downloadVideo };
+    module.exports = { parseTime, timeline, activeCue, stamp, srt, translationBody, translationResult, createTranslator, subtitleTime, captionLayout, wavBytes, matchSpeech, speechResult, recognizeStandard, courseIdentity, slideTime, slideAt, isTargetLanguage, downloadVideo, downloadInChunks };
     return;
   }
   if (document.getElementById('zy-subtitle-host')) return;
@@ -310,7 +337,7 @@
     <button class="slide-edge" data-edge="left" aria-label="调整 PPT 左边缘"></button><button class="slide-edge" data-edge="right" aria-label="调整 PPT 右边缘"></button><button class="slide-edge" data-edge="top" aria-label="调整 PPT 上边缘"></button><button class="slide-edge" data-edge="bottom" aria-label="调整 PPT 下边缘"></button>
   </section>
   <section id="panel" aria-label="智云字幕设置">
-    <header id="panel-head"><span class="mascot">🌱</span><div><h3>伴读字幕</h3><span class="subtitle">让每一句，都跟得上 · v0.11.2</span></div><button id="collapse" aria-label="收起字幕设置">−</button></header>
+    <header id="panel-head"><span class="mascot">🌱</span><div><h3>伴读字幕</h3><span class="subtitle">让每一句，都跟得上 · v0.12.0</span></div><button id="collapse" aria-label="收起字幕设置">−</button></header>
     <div id="panel-body">
     <div class="section"><div class="section-title">一起看懂 <span id="translation-ready" class="badge"></span><input id="enabled" aria-label="显示字幕" type="checkbox" checked></div>
     <label>字幕<select id="mode"><option value="original">仅原文</option><option value="both">中英对照 · 豆包翻译</option></select></label>
@@ -330,7 +357,7 @@
     <label>自定义字幕位置<input id="caption-custom" type="checkbox"></label><label>字幕左 / 下沿<input id="caption-x" type="number" value="20"><input id="caption-y" type="number" value="700"></label><label>字幕宽度<input id="caption-w" type="number" value="900"></label></div>
     <button id="cache-download">缓存当前视频</button><button id="cache-play">播放已缓存视频</button><button id="cache-online">恢复在线视频</button><button id="cache-clear">清除此课缓存</button>
     <button id="cache-diagnose">查看缓存诊断</button><pre id="cache-diagnostic" hidden style="white-space:pre-wrap;font-size:11px"></pre><label>导入本地视频<input id="cache-file" type="file" accept="video/mp4,video/webm"></label>
-    <p id="cache-status">使用油猴下载智云课堂 MP4/WebM；首次请允许连接视频域名。单个最大 512 MB，缓存保存在此浏览器。</p>
+    <p id="cache-status">使用油猴下载智云课堂 MP4/WebM；首次请允许连接视频域名。每块 8 MB 写入浏览器磁盘，不再限制 512 MB；可缓存大小取决于可用空间及服务器 Range 支持。</p>
     </details>
     <details class="section"><summary>偏好与连接 <span id="key-summary" class="badge"></span></summary>
     <label>翻译连接 <span id="translation-badge" class="badge"></span></label><button id="configure-key">设置翻译 Key</button>
@@ -717,7 +744,7 @@
     if(showSlides()) { event.preventDefault(); event.stopImmediatePropagation(); if(image) {slideFollowing=false;slideIndex=Math.max(0,imagesIndex(image));} renderSlide(); }
   },true);
   let cacheAbort=null, localPlayback=null;
-  const CACHE_LIMIT=512*1024*1024;
+
   function cacheStore(mode,action) {
     return new Promise((resolve,reject)=>{
       const open=indexedDB.open('zhiyun-video-cache',1);
@@ -730,9 +757,60 @@
       };
     });
   }
-  async function saveVideo(blob,key) {
-    if(!blob.size || blob.size>CACHE_LIMIT) throw new Error('单个视频需小于 512 MB；大文件请使用本地播放器');
-    await cacheStore('readwrite',store=>store.put(blob,key));
+  async function checkCacheSpace(bytes) {
+    const estimate=await navigator.storage?.estimate?.();
+    if(estimate?.quota && bytes>Math.max(0,estimate.quota-(estimate.usage || 0)-32*1024*1024)) throw new Error('浏览器可用空间不足，需要 '+(bytes/1073741824).toFixed(2)+' GB；请清理缓存后重试');
+  }
+  async function cacheDirectory() {
+    if(!navigator.storage?.getDirectory) throw new Error('此浏览器不支持磁盘分块缓存，请使用新版 Chrome / Edge');
+    return (await navigator.storage.getDirectory()).getDirectoryHandle('zhiyun-videos',{create:true});
+  }
+  async function removeCacheFile(record) {
+    if(record?.kind==='opfs') {try{await (await cacheDirectory()).removeEntry(record.name);}catch(error){if(error.name!=='NotFoundError')throw error;}}
+  }
+  async function storeLargeVideo(key,producer,signal) {
+    if(navigator.locks) return navigator.locks.request('zhiyun-cache:'+key,{ifAvailable:true},lock=>{
+      if(!lock) throw new Error('另一个标签页正在缓存此课程，请等待完成');
+      return storeLargeVideoLocked(key,producer,signal);
+    });
+    return storeLargeVideoLocked(key,producer,signal);
+  }
+  async function storeLargeVideoLocked(key,producer,signal) {
+    const dir=await cacheDirectory();
+    // A pending entry lets the next attempt reclaim an interrupted tab's partial file.
+    await removeCacheFile(await cacheStore('readonly',s=>s.get(key+':pending')));
+    const record={kind:'opfs',name:crypto.randomUUID()+'.video'};
+    await cacheStore('readwrite',s=>s.put(record,key+':pending'));
+    let writer,committed=false;
+    try {
+      const file=await dir.getFileHandle(record.name,{create:true});writer=await file.createWritable();
+      record.size=await producer(async blob=>{
+        if(!record.type) {const bytes=new Uint8Array(await blob.slice(0,8).arrayBuffer());record.type=bytes[0]===0x1a?'video/webm':'video/mp4';}
+        await writer.write(blob);
+      });
+      if(signal?.aborted) throw new Error('缓存已取消');
+      await writer.close();writer=null;
+      if(signal?.aborted) throw new Error('缓存已取消');
+      const old=await cacheStore('readonly',s=>s.get(key));
+      await cacheStore('readwrite',s=>s.put(record,key));committed=true;
+      try{await removeCacheFile(old);}catch{} // A cleanup failure must not discard a completed new cache.
+    }finally{
+      if(writer) await writer.abort().catch(()=>{});
+      if(!committed) await removeCacheFile(record);
+      await cacheStore('readwrite',s=>s.delete(key+':pending'));
+    }
+  }
+  async function saveVideo(blob,key,signal) {
+    if(!blob.size) throw new Error('视频文件为空');
+    await checkCacheSpace(blob.size);
+    await storeLargeVideo(key,async write=>{for(let offset=0;offset<blob.size;offset+=8*1024*1024){if(signal?.aborted)throw new Error("缓存已取消");await write(blob.slice(offset,offset+8*1024*1024));}return blob.size;},signal);
+  }
+  async function cachedVideo(key) {
+    const record=await cacheStore('readonly',s=>s.get(key));
+    if(record?.kind!=='opfs') return record; // Read caches created by older versions as well.
+    const file=await (await (await cacheDirectory()).getFileHandle(record.name)).getFile();
+    if(file.size!==record.size) throw new Error('缓存文件不完整，请重新缓存');
+    return file.slice(0,file.size,record.type || 'video/mp4');
   }
   function restoreOnline() {
     if(!localPlayback) return;
@@ -751,14 +829,9 @@
     const controller=new AbortController();cacheAbort=controller;$('cache-download').textContent='取消缓存';
     try {
       $('cache-status').textContent='正在连接视频服务器；如果油猴询问，请允许连接视频域名…';
-      const blob=await downloadVideo(GM_xmlhttpRequest,src,{signal:controller.signal,limit:CACHE_LIMIT,onProgress:(size,total)=>{
-        $('cache-status').textContent=`正在缓存 ${(size/1048576).toFixed(1)} MB${total?' / '+(total/1048576).toFixed(1)+' MB':''}`;
-      }});
-      if(controller.signal.aborted || key!==courseIdentity(location.hash)) return;
-      const estimate=await navigator.storage?.estimate?.();
-      if(estimate?.quota && blob.size>estimate.quota-(estimate.usage || 0)) throw new Error('浏览器可用空间不足，请清理站点缓存后重试');
-      $('cache-status').textContent='下载完成，正在保存到浏览器…';
-      await saveVideo(blob,key);
+      await storeLargeVideo(key,write=>downloadInChunks(GM_xmlhttpRequest,src,{signal:controller.signal,write,checkSpace:checkCacheSpace,onProgress:(size,total)=>{
+        $('cache-status').textContent=`正在分块缓存 ${(size/1048576).toFixed(1)} MB${total?' / '+(total/1048576).toFixed(1)+' MB':''}`;
+      }}),controller.signal);
       if(key===courseIdentity(location.hash)) $('cache-status').textContent='缓存完成，可点击「播放已缓存视频」。刷新后仍保留。';
     } catch(error) {if(key===courseIdentity(location.hash)) $('cache-status').textContent=controller.signal.aborted?'缓存已取消':error.message;}
     finally{cacheAbort=null;$('cache-download').textContent='缓存当前视频';}
@@ -767,19 +840,21 @@
     const source=mainVideo?.currentSrc || mainVideo?.src || '';let origin='无视频源',kind='未知';
     try{const url=new URL(source);origin=url.origin;kind=url.protocol==='blob:'?'blob / 分片播放':url.pathname.match(/\.(mp4|webm|m3u8|mpd)$/i)?.[1] || '无扩展名';}catch{}
     $('cache-diagnostic').hidden=false;
-    $('cache-diagnostic').textContent=`版本：0.11.2\n来源域名：${origin}\n格式：${kind}\n状态：${$('cache-status').textContent}\n（不包含视频完整地址、登录参数或 API Key）`;
+    $('cache-diagnostic').textContent=`版本：0.12.0\n来源域名：${origin}\n格式：${kind}\n状态：${$('cache-status').textContent}\n（不包含视频完整地址、登录参数或 API Key）`;
   };
   $('cache-file').onchange=async()=>{
     const file=$('cache-file').files[0],key=courseIdentity(location.hash);if(!file) return;
-    try {if(!/\.(mp4|webm)$/i.test(file.name)) throw new Error('请选择 MP4 或 WebM 视频');await saveVideo(file,key);if(key===courseIdentity(location.hash)) $('cache-status').textContent='导入完成，可播放已缓存视频。';}
+    if(cacheAbort){$('cache-status').textContent='请等待当前缓存完成或取消后再导入';$('cache-file').value='';return;}
+    const controller=new AbortController();cacheAbort=controller;$('cache-download').textContent='取消缓存';
+    try {if(!/\.(mp4|webm)$/i.test(file.name)) throw new Error('请选择 MP4 或 WebM 视频');await saveVideo(file,key,controller.signal);if(key===courseIdentity(location.hash)) $('cache-status').textContent='导入完成，可播放已缓存视频。';}
     catch(error){$('cache-status').textContent=error.message;}
-    finally{$('cache-file').value='';}
+    finally{$('cache-file').value='';cacheAbort=null;$('cache-download').textContent='缓存当前视频';}
   };
   $('cache-play').onclick=async()=>{
     const key=courseIdentity(location.hash),video=mainVideo;
     try {
       if(!video) throw new Error('请先打开课程视频');
-      const blob=await cacheStore('readonly',store=>store.get(key));
+      const blob=await cachedVideo(key);
       if(key!==courseIdentity(location.hash)) return;
       if(!blob) throw new Error('本课程还没有缓存');
       const time=video.currentTime,rate=video.playbackRate;
@@ -791,7 +866,7 @@
     }catch(error){$('cache-status').textContent=error.message;}
   };
   $('cache-online').onclick=()=>{cancelAlignment?.();restoreOnline();};
-  $('cache-clear').onclick=async()=>{try{cacheAbort?.abort();restoreOnline();await cacheStore('readwrite',store=>store.delete(courseIdentity(location.hash)));$('cache-status').textContent='本课程缓存已清除';}catch(error){$('cache-status').textContent=error.message;}};
+  $('cache-clear').onclick=async()=>{try{if(cacheAbort){cacheAbort.abort();$('cache-status').textContent='正在取消下载，结束后再次点击清除';return;}restoreOnline();const key=courseIdentity(location.hash);await removeCacheFile(await cacheStore('readonly',s=>s.get(key)));await removeCacheFile(await cacheStore('readonly',s=>s.get(key+':pending')));await cacheStore('readwrite',s=>s.delete(key+':pending'));await cacheStore('readwrite',store=>store.delete(key));$('cache-status').textContent='本课程缓存已清除';}catch(error){$('cache-status').textContent=error.message;}};
   let apiKey = GM_getValue('ark-api-key', '');
   function arkRequest(text, source, target) {
     let handle;
