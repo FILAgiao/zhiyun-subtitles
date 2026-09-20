@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         智云课堂同步字幕
 // @namespace    zhiyunzimu.local
-// @version      0.11.1
+// @version      0.11.2
 // @description  将右侧语音识别及平台译文同步显示在视频底部，支持字幕导出。
 // @match        https://interactivemeta.cmc.zju.edu.cn/*
 // @grant        GM_xmlhttpRequest
@@ -12,6 +12,7 @@
 // @connect      ark.cn-beijing.volces.com
 // @connect      openspeech.bytedance.com
 // @connect      video.cmc.zju.edu.cn
+// @connect      vod.cmc.zju.edu.cn
 // @connect      interactivemeta.cmc.zju.edu.cn
 // @run-at       document-idle
 // ==/UserScript==
@@ -22,7 +23,7 @@
   function downloadVideo(request,url,{signal,limit,onProgress=()=>{}}) {
     return new Promise((resolve,reject)=>{
       const parsed=new URL(url);
-      if(!['video.cmc.zju.edu.cn','interactivemeta.cmc.zju.edu.cn'].includes(parsed.hostname) || !['https:','http:'].includes(parsed.protocol)) {
+      if(!['video.cmc.zju.edu.cn','vod.cmc.zju.edu.cn','interactivemeta.cmc.zju.edu.cn'].includes(parsed.hostname) || !['https:','http:'].includes(parsed.protocol)) {
         reject(new Error('尚未授权此视频域名：'+parsed.hostname+'。请提供缓存诊断，以便添加精确域名权限。'));return;
       }
       let handle,settled=false;
@@ -293,10 +294,15 @@
     .slide-edge[data-edge=top]{top:0;left:12px;right:12px;height:8px;cursor:ns-resize}
     .slide-edge[data-edge=bottom]{bottom:0;left:12px;right:26px;height:8px;cursor:ns-resize}
     #slide-resize{z-index:3}
+    .layout-handle{position:fixed;z-index:15;pointer-events:auto;outline:2px dashed #9adbb8;border-radius:10px;cursor:move;touch-action:none;background:#65ac8710}
+    .layout-handle span{position:absolute;left:4px;top:4px;padding:4px 8px;border-radius:7px;background:#234a3eeb;color:#fff;font-size:12px;pointer-events:none}
+    .layout-handle button{position:absolute;right:0;bottom:0;margin:0;width:28px;height:28px;padding:0;cursor:nwse-resize;touch-action:none;background:#234a3e;color:white}
     @media(hover:none){#slide-toolbar{opacity:1;pointer-events:auto}}
     @media(prefers-reduced-motion:reduce){*{transition:none!important}}
   </style>
   <div id="caption" hidden><div id="original"></div><div id="translation"></div></div>
+  <div id="video-edit-box" class="layout-handle" hidden><span>拖动视频 · 右下角缩放</span><button aria-label="缩放视频">◢</button></div>
+  <div id="caption-edit-box" class="layout-handle" hidden><span>拖动字幕 · 右下角调宽度和字号</span><button aria-label="缩放字幕">◢</button></div>
   <button id="compact" hidden aria-label="展开字幕设置">🌱 字幕</button>
   <section id="slides" hidden aria-label="课程幻灯片">
     <div id="slide-viewport" tabindex="0" aria-label="PPT 悬浮窗，拖动图片移动窗口"><img id="slide-image" draggable="false" alt="课程 PPT"></div>
@@ -304,7 +310,7 @@
     <button class="slide-edge" data-edge="left" aria-label="调整 PPT 左边缘"></button><button class="slide-edge" data-edge="right" aria-label="调整 PPT 右边缘"></button><button class="slide-edge" data-edge="top" aria-label="调整 PPT 上边缘"></button><button class="slide-edge" data-edge="bottom" aria-label="调整 PPT 下边缘"></button>
   </section>
   <section id="panel" aria-label="智云字幕设置">
-    <header id="panel-head"><span class="mascot">🌱</span><div><h3>伴读字幕</h3><span class="subtitle">让每一句，都跟得上 · v0.11.1</span></div><button id="collapse" aria-label="收起字幕设置">−</button></header>
+    <header id="panel-head"><span class="mascot">🌱</span><div><h3>伴读字幕</h3><span class="subtitle">让每一句，都跟得上 · v0.11.2</span></div><button id="collapse" aria-label="收起字幕设置">−</button></header>
     <div id="panel-body">
     <div class="section"><div class="section-title">一起看懂 <span id="translation-ready" class="badge"></span><input id="enabled" aria-label="显示字幕" type="checkbox" checked></div>
     <label>字幕<select id="mode"><option value="original">仅原文</option><option value="both">中英对照 · 豆包翻译</option></select></label>
@@ -319,8 +325,8 @@
     <div class="section"><div class="actions"><button id="show-slides">① 左右并排</button><button id="reset-ppt">复位 PPT</button><button id="focus-fullscreen">⛶ 专注全屏</button></div><p id="slides-status">翻页不会打断视频。拖动可超出屏幕。左右拉边缘裁掉黑边，上下拉边缘按比例放大；复位可找回窗口。</p></div>
     <details class="section"><summary>布局与视频缓存</summary>
     <p>布局按钮循环：左右并排 → PPT 主讲（小课堂在右下）→ 恢复课堂。PPT 可直接拖拽缩放。</p>
-    <button id="edit-layout">调整视频 / 字幕</button>
-    <div id="layout-editor" hidden><p>视频位置与大小（像素）</p><label>左 / 上<input id="video-x" type="number" value="720"><input id="video-y" type="number" value="400"></label><label>宽 / 高<input id="video-w" type="number" value="400"><input id="video-h" type="number" value="240"></label><button id="apply-layout">应用视频位置</button>
+    <button id="edit-layout">拖动视频 / 字幕</button>
+    <div id="layout-editor" hidden><p>拖动绿色框移动，拖右下角缩放。完成后再点上方按钮，恢复正常播放操作。</p><p>视频位置与大小（像素）</p><label>左 / 上<input id="video-x" type="number" value="720"><input id="video-y" type="number" value="400"></label><label>宽 / 高<input id="video-w" type="number" value="400"><input id="video-h" type="number" value="240"></label><button id="apply-layout">应用视频位置</button>
     <label>自定义字幕位置<input id="caption-custom" type="checkbox"></label><label>字幕左 / 下沿<input id="caption-x" type="number" value="20"><input id="caption-y" type="number" value="700"></label><label>字幕宽度<input id="caption-w" type="number" value="900"></label></div>
     <button id="cache-download">缓存当前视频</button><button id="cache-play">播放已缓存视频</button><button id="cache-online">恢复在线视频</button><button id="cache-clear">清除此课缓存</button>
     <button id="cache-diagnose">查看缓存诊断</button><pre id="cache-diagnostic" hidden style="white-space:pre-wrap;font-size:11px"></pre><label>导入本地视频<input id="cache-file" type="file" accept="video/mp4,video/webm"></label>
@@ -339,6 +345,7 @@
     </details></div></section>`;
   document.body.append(host);
   const $ = id => shadow.getElementById(id);
+  let editingLayout=false;
   function updateKeyBadges() {
     const translation=!!GM_getValue('ark-api-key','');
     const speech=!!GM_getValue('speech-credentials',null)?.apiKey;
@@ -529,6 +536,7 @@
   }
   function closeSlides() {
     $('slides').hidden=true;
+    editingLayout=false;updateEditHandles();$('layout-editor').hidden=true;$('edit-layout').textContent='拖动视频 / 字幕';
     if(splitVideo && splitStyles) for(const [key,saved] of Object.entries(splitStyles)) {
       if(saved.value) splitVideo.style.setProperty(key,saved.value,saved.priority); else splitVideo.style.removeProperty(key);
     }
@@ -540,6 +548,7 @@
     $('slide-viewport').scrollTo(0,0); saveSlideState(); updateFollowButton();
   }
   function showSlides() {
+    if(layoutMode==='video' && splitVideo) closeSlides();
     const images=[...document.querySelectorAll('#pane-ppt img')];
     slideEntries=images.map(img=>({url:img.currentSrc || img.src,time:slideTime(img.closest('.tab-ppt')?.querySelector('.time')?.textContent || '')})).filter(slide=>/^https?:/.test(slide.url));
     slideUrls=slideEntries.map(slide=>slide.url);
@@ -575,9 +584,55 @@
   function setVideoBox(r) {
     for(const [k,v] of Object.entries({position:'fixed',left:r.left+'px',top:r.top+'px',right:'auto',bottom:'auto',width:r.width+'px',height:r.height+'px','margin-left':'0','z-index':'20'})) splitVideo.style.setProperty(k,v,'important');
   }
-  $('edit-layout').onclick=()=>{$('layout-editor').hidden=!$('layout-editor').hidden;};
+  function ensureEditableVideo() {
+    if(splitVideo) return true;
+    if(!mainVideo) {$('slides-status').textContent='请先打开课程视频';return false;}
+    splitVideo=mainVideo;
+    splitStyles=Object.fromEntries(['width','height','margin-left','position','left','top','right','bottom','z-index'].map(key=>[key,{value:splitVideo.style.getPropertyValue(key),priority:splitVideo.style.getPropertyPriority(key)}]));
+    return true;
+  }
+  function updateEditHandles() {
+    for(const [id,target] of [['video-edit-box',mainVideo],['caption-edit-box',$('caption')]]) {
+      const box=$(id);box.hidden=!editingLayout || !target || (id==='caption-edit-box' && target.hidden);
+      if(box.hidden) continue;
+      const r=target.getBoundingClientRect();Object.assign(box.style,{left:r.left+'px',top:r.top+'px',width:r.width+'px',height:r.height+'px'});
+    }
+  }
+  $('edit-layout').onclick=()=>{
+    if(!editingLayout && !ensureEditableVideo()) return;
+    editingLayout=!editingLayout;$('layout-editor').hidden=!editingLayout;
+    $('edit-layout').textContent=editingLayout?'完成调整':'拖动视频 / 字幕';updateEditHandles();
+  };
+  for(const kind of ['video','caption']) {
+    const box=$(kind+'-edit-box');let drag=null;
+    box.addEventListener('pointerdown',e=>{
+      if(e.button!==0)return;
+      const target=kind==='video'?mainVideo:$('caption');if(!target)return;
+      const r=target.getBoundingClientRect();
+      drag={x:e.clientX,y:e.clientY,left:r.left,top:r.top,width:r.width,height:r.height,bottom:r.bottom,size:value('size',26,14,48),resize:!!e.target.closest('button')};
+      box.setPointerCapture(e.pointerId);e.preventDefault();e.stopPropagation();
+    });
+    box.addEventListener('pointermove',e=>{
+      if(!drag)return;
+      const dx=e.clientX-drag.x,dy=e.clientY-drag.y;
+      if(kind==='video') {
+        if(!ensureEditableVideo())return;
+        const r={left:drag.left+(drag.resize?0:dx),top:drag.top+(drag.resize?0:dy),width:drag.resize?Math.max(160,Math.min(innerWidth*2,drag.width+dx)):drag.width,height:drag.resize?Math.max(100,Math.min(innerHeight*2,drag.height+dy)):drag.height};
+        r.left=Math.max(72-r.width,Math.min(innerWidth-72,r.left));r.top=Math.max(72-r.height,Math.min(innerHeight-72,r.top));
+        setVideoBox(r);for(const [id,n] of [['video-x',r.left],['video-y',r.top],['video-w',r.width],['video-h',r.height]]) $(id).value=Math.round(n);
+      } else {
+        $('caption-custom').checked=true;
+        $('caption-x').value=Math.round(drag.left+(drag.resize?0:dx));
+        $('caption-y').value=Math.round(Math.max(20,Math.min(innerHeight*2,drag.bottom+dy)));
+        $('caption-w').value=Math.round(drag.resize?Math.max(160,Math.min(innerWidth*2,drag.width+dx)):drag.width);
+        if(drag.resize) $('size').value=Math.round(Math.max(14,Math.min(48,drag.size+dy/4)));
+      }
+      tick();updateEditHandles();
+    });
+    for(const event of ['pointerup','pointercancel','lostpointercapture']) box.addEventListener(event,()=>{drag=null;});
+  }
   $('apply-layout').onclick=()=>{
-    if(!splitVideo && !showSlides()) return;
+    if(!ensureEditableVideo()) return;
     setVideoBox({left:value('video-x',0,-innerWidth,innerWidth),top:value('video-y',0,-innerHeight,innerHeight),width:value('video-w',400,160,innerWidth*2),height:value('video-h',240,100,innerHeight*2)});
   };
   $('slide-close').onclick=closeSlides;
@@ -712,7 +767,7 @@
     const source=mainVideo?.currentSrc || mainVideo?.src || '';let origin='无视频源',kind='未知';
     try{const url=new URL(source);origin=url.origin;kind=url.protocol==='blob:'?'blob / 分片播放':url.pathname.match(/\.(mp4|webm|m3u8|mpd)$/i)?.[1] || '无扩展名';}catch{}
     $('cache-diagnostic').hidden=false;
-    $('cache-diagnostic').textContent=`版本：0.11.1\n来源域名：${origin}\n格式：${kind}\n状态：${$('cache-status').textContent}\n（不包含视频完整地址、登录参数或 API Key）`;
+    $('cache-diagnostic').textContent=`版本：0.11.2\n来源域名：${origin}\n格式：${kind}\n状态：${$('cache-status').textContent}\n（不包含视频完整地址、登录参数或 API Key）`;
   };
   $('cache-file').onchange=async()=>{
     const file=$('cache-file').files[0],key=courseIdentity(location.hash);if(!file) return;
@@ -943,6 +998,6 @@
       }
     }
   }
-  setInterval(tick, 100);
+  setInterval(()=>{tick();updateEditHandles();}, 100);
   tick();
 })();

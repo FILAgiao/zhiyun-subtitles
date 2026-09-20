@@ -242,3 +242,12 @@ test('video downloader aborts on cancellation and size overflow without saving l
  opts.onprogress({loaded:1,total:101,lengthComputable:true});await assert.rejects(tooLarge,/上限/);assert.equal(aborted,2);
  opts.onload({status:200,response:new Blob(['late'])});
 });
+
+
+test('user confirmed VOD host is authorized without broadening to other subdomains',async()=>{
+ const {downloadVideo}=require('./zhiyun-subtitles.user.js');let called=false;
+ const blob=new Blob([new Uint8Array([0,0,0,16,102,116,121,112])]);
+ await downloadVideo(o=>{called=true;queueMicrotask(()=>o.onload({status:200,response:blob}));return{abort(){}};},'https://vod.cmc.zju.edu.cn/lesson.mp4',{limit:100});
+ assert.equal(called,true);
+ await assert.rejects(downloadVideo(()=>{throw new Error('must not call');},'https://unknown.cmc.zju.edu.cn/lesson.mp4',{limit:100}),/尚未授权/);
+});

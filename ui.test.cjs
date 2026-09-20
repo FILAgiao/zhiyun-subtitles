@@ -139,11 +139,26 @@ const {chromium}=require(process.env.PLAYWRIGHT_MODULE || 'playwright');
  assert.equal(await page.evaluate(()=>jobs),2);assert.equal(await page.evaluate(()=>window.testRate),2);
  // Cache only synthetic media bytes: verify storage and source switching, not codec decoding.
  await ui.locator('summary').filter({hasText:'布局与视频缓存'}).click();
+ // Edit overlays allow direct movement, and disappear so normal playback stays clickable.
+ await ui.locator('#edit-layout').click();await page.waitForTimeout(150);
+ const originalVideo=await page.locator('video').boundingBox();
+ const videoHandle=await ui.locator('#video-edit-box').boundingBox();
+ await page.mouse.move(videoHandle.x+150,videoHandle.y+60);await page.mouse.down();await page.mouse.move(videoHandle.x+210,videoHandle.y+90,{steps:5});await page.mouse.up();
+ const draggedVideo=await page.locator('video').boundingBox();assert.ok(draggedVideo.x>originalVideo.x+40);
+ const captionHandle=await ui.locator('#caption-edit-box').boundingBox();assert.ok(captionHandle);
+ await page.mouse.move(captionHandle.x+60,captionHandle.y+10);await page.mouse.down();await page.mouse.move(captionHandle.x+100,captionHandle.y-30,{steps:5});await page.mouse.up();
+ assert.ok(await ui.locator('#caption-custom').isChecked());
+ assert.ok((await ui.locator('#caption').boundingBox()).x>captionHandle.x+25);
+ const corner=await ui.locator('#video-edit-box button').boundingBox();
+ await page.mouse.move(corner.x+10,corner.y+10);await page.mouse.down();await page.mouse.move(corner.x+60,corner.y+40,{steps:5});await page.mouse.up();
+ assert.ok((await page.locator('video').boundingBox()).width>draggedVideo.width+30);
+ await ui.locator('#edit-layout').click();assert.ok(await ui.locator('#video-edit-box').isHidden());assert.ok(await ui.locator('#caption-edit-box').isHidden());
+ assert.equal(await ui.locator('#caption').evaluate(e=>getComputedStyle(e).pointerEvents),'none');
  await ui.locator('#cache-download').click();assert.match(await ui.locator('#cache-status').textContent(),/不是可直接缓存/);
- await page.evaluate(()=>{const v=document.querySelector('video');v.load=()=>{};v.pause=()=>{};v.addEventListener('error',e=>e.stopImmediatePropagation(),true);v.setAttribute('src','https://video.cmc.zju.edu.cn/test.mp4');window.fetch=async()=>{throw new Error('CORS blocked');};});
+ await page.evaluate(()=>{const v=document.querySelector('video');v.load=()=>{};v.pause=()=>{};v.addEventListener('error',e=>e.stopImmediatePropagation(),true);v.setAttribute('src','https://vod.cmc.zju.edu.cn/test.mp4');window.fetch=async()=>{throw new Error('CORS blocked');};});
  await ui.locator('#cache-download').click();await page.waitForTimeout(150);assert.match(await ui.locator('#cache-status').textContent(),/缓存完成/);assert.equal(await page.evaluate(()=>window.videoRequests),1);
  await ui.locator('#cache-play').click();await page.waitForTimeout(150);assert.match(await page.locator('video').getAttribute('src'),/^blob:/);
- await ui.locator('#cache-online').click();assert.equal(await page.locator('video').getAttribute('src'),'https://video.cmc.zju.edu.cn/test.mp4');
+ await ui.locator('#cache-online').click();assert.equal(await page.locator('video').getAttribute('src'),'https://vod.cmc.zju.edu.cn/test.mp4');
  await ui.locator('#cache-clear').click();await page.waitForTimeout(100);await ui.locator('#cache-play').click();await page.waitForTimeout(100);assert.match(await ui.locator('#cache-status').textContent(),/没有缓存/);
  await ui.locator('summary').filter({hasText:'布局与视频缓存'}).click();
  // A Chinese-only current cue must neither call translation nor render a duplicate line.
