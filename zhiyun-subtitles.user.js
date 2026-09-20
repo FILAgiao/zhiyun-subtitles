@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         智云课堂同步字幕
 // @namespace    zhiyunzimu.local
-// @version      0.10.2
+// @version      0.11.0
 // @description  将右侧语音识别及平台译文同步显示在视频底部，支持字幕导出。
 // @match        https://interactivemeta.cmc.zju.edu.cn/*
 // @grant        GM_xmlhttpRequest
@@ -264,7 +264,7 @@
     <button class="slide-edge" data-edge="left" aria-label="调整 PPT 左边缘"></button><button class="slide-edge" data-edge="right" aria-label="调整 PPT 右边缘"></button><button class="slide-edge" data-edge="top" aria-label="调整 PPT 上边缘"></button><button class="slide-edge" data-edge="bottom" aria-label="调整 PPT 下边缘"></button>
   </section>
   <section id="panel" aria-label="智云字幕设置">
-    <header id="panel-head"><span class="mascot">🌱</span><div><h3>伴读字幕</h3><span class="subtitle">让每一句，都跟得上 · v0.10.2</span></div><button id="collapse" aria-label="收起字幕设置">−</button></header>
+    <header id="panel-head"><span class="mascot">🌱</span><div><h3>伴读字幕</h3><span class="subtitle">让每一句，都跟得上 · v0.11.0</span></div><button id="collapse" aria-label="收起字幕设置">−</button></header>
     <div id="panel-body">
     <div class="section"><div class="section-title">一起看懂 <span id="translation-ready" class="badge"></span><input id="enabled" aria-label="显示字幕" type="checkbox" checked></div>
     <label>字幕<select id="mode"><option value="original">仅原文</option><option value="both">中英对照 · 豆包翻译</option></select></label>
@@ -276,7 +276,16 @@
     <details><summary>手动微调 <span id="offset-hint">同步偏移：0 秒</span></summary>
     <label>偏移 / 秒<input id="offset" type="number" min="-3600" max="3600" step="0.5" value="0"></label>
     <div class="actions"><button id="earlier">提前 0.5 秒</button><button id="later">延后 0.5 秒</button><button id="reset-offset">归零</button></div></details></div>
-    <div class="section"><div class="actions"><button id="show-slides">▤ 并排看 PPT</button><button id="reset-ppt">复位 PPT</button><button id="focus-fullscreen">⛶ 专注全屏</button></div><p id="slides-status">翻页不会打断视频。拖动可超出屏幕。左右拉边缘裁掉黑边，上下拉边缘按比例放大；复位可找回窗口。</p></div>
+    <div class="section"><div class="actions"><button id="show-slides">① 左右并排</button><button id="reset-ppt">复位 PPT</button><button id="focus-fullscreen">⛶ 专注全屏</button></div><p id="slides-status">翻页不会打断视频。拖动可超出屏幕。左右拉边缘裁掉黑边，上下拉边缘按比例放大；复位可找回窗口。</p></div>
+    <details class="section"><summary>布局与视频缓存</summary>
+    <p>布局按钮循环：左右并排 → PPT 主讲（小课堂在右下）→ 恢复课堂。PPT 可直接拖拽缩放。</p>
+    <button id="edit-layout">调整视频 / 字幕</button>
+    <div id="layout-editor" hidden><p>视频位置与大小（像素）</p><label>左 / 上<input id="video-x" type="number" value="720"><input id="video-y" type="number" value="400"></label><label>宽 / 高<input id="video-w" type="number" value="400"><input id="video-h" type="number" value="240"></label><button id="apply-layout">应用视频位置</button>
+    <label>自定义字幕位置<input id="caption-custom" type="checkbox"></label><label>字幕左 / 下沿<input id="caption-x" type="number" value="20"><input id="caption-y" type="number" value="700"></label><label>字幕宽度<input id="caption-w" type="number" value="900"></label></div>
+    <button id="cache-download">缓存当前视频</button><button id="cache-play">播放已缓存视频</button><button id="cache-online">恢复在线视频</button><button id="cache-clear">清除此课缓存</button>
+    <label>导入已下载视频<input id="cache-file" type="file" accept="video/mp4,video/webm"></label>
+    <p id="cache-status">支持可直接读取的 MP4 / WebM，单个最大 512 MB，缓存保存在此浏览器。分片流、blob 播放地址或跨域限制不能直接缓存，可导入平台已下载的视频。</p>
+    </details>
     <details class="section"><summary>偏好与连接 <span id="key-summary" class="badge"></span></summary>
     <label>翻译连接 <span id="translation-badge" class="badge"></span></label><button id="configure-key">设置翻译 Key</button>
     <label>语音连接 <span id="speech-key-badge" class="badge"></span></label><button id="speech-key">设置语音识别凭证</button><p>绿色勾表示已保存凭证，不代表接口权限已验证。</p>
@@ -357,14 +366,20 @@
     if (cancelAlignment) { cancelAlignment(); return; }
     const video = mainVideo, credentials = GM_getValue('speech-credentials', null);
     if (!credentials?.apiKey) { $('align-status').textContent = '请点击设置语音识别凭证，填写标准版 x-api-key；旧版 App ID 凭证不适用。'; return; }
-    if (!video || video.paused || video.playbackRate !== 1 || !cues.length) {
-      $('align-status').textContent = '请先加载右侧字幕，并让主视频以 1 倍速播放。'; return;
+    if (!video || video.paused || !cues.length) {
+      $('align-status').textContent = '请先加载右侧字幕并播放视频；会临时切到 1 倍速，结束后恢复。'; return;
     }
-    const course = courseIdentity(location.hash);
+    const course = courseIdentity(location.hash), previousRate=video.playbackRate;
+    video.playbackRate=1;
     let stream, recorder, timer, request, wake, progressTimer, cancelled = false;
-    const listeners = ['pause','seeking','ratechange','waiting','emptied'];
+    const listeners = ['pause','seeking','emptied'];
+    let interrupted=false,buffering=false,resumeRecording=null,bufferRestarts=0;
+    const onWaiting=()=>{buffering=true;if(recorder?.state==='recording'){interrupted=true;clearTimeout(timer);recorder.stop();}};
+    const onPlaying=()=>{buffering=false;resumeRecording?.();};
+    const onRate=()=>{if(video.playbackRate!==1) cancel();};
+    video.addEventListener('waiting',onWaiting);video.addEventListener('playing',onPlaying);video.addEventListener('ratechange',onRate);
     const cancel = () => {
-      cancelled = true; clearInterval(progressTimer); $('align-label').textContent='已取消'; clearTimeout(timer); wake?.(); request?.abort();
+      cancelled = true; resumeRecording?.(); clearInterval(progressTimer); $('align-label').textContent='已取消'; clearTimeout(timer); wake?.(); request?.abort();
       if (recorder?.state === 'recording') recorder.stop();
       $('align-status').textContent = '校准已取消，未修改偏移。';
     };
@@ -373,6 +388,13 @@
     listeners.forEach(event => video.addEventListener(event, cancel));
     try {
       for(let attempt=1;attempt<=3;attempt++) {
+      if(buffering) {
+        $('align-status').textContent='视频缓冲中，恢复播放后自动重新采音…';
+        await new Promise((resolve,reject)=>{resumeRecording=resolve;timer=setTimeout(()=>reject(new Error('等待视频恢复超时，请播放后重试')),120000);});
+        clearTimeout(timer);resumeRecording=null;
+      }
+      if(cancelled || courseIdentity(location.hash)!==course) return;
+      interrupted=false;
       const started=video.currentTime;
       $('align-feedback').hidden=false;
       $('align-progress').value=0;
@@ -396,6 +418,10 @@
       clearInterval(progressTimer);
       if (cancelled || courseIdentity(location.hash) !== course) return;
       stream?.getTracks().forEach(track=>track.stop()); stream=null;
+      if(interrupted) {
+        if(++bufferRestarts>10) throw new Error('缓冲过于频繁，请先缓存或等待网络稳定后重试');
+        attempt--;continue;
+      }
       $('align-progress').removeAttribute('value');
       $('align-label').textContent=`第 ${attempt} 次（成功即停）· 正在识别与匹配…`;
       const blob = new Blob(chunks, {type:recorder.mimeType});
@@ -443,10 +469,12 @@
     finally {
       clearTimeout(timer); clearInterval(progressTimer); $('align-progress').value=12; stream?.getTracks().forEach(track=>track.stop());
       listeners.forEach(event=>video.removeEventListener(event,cancel));
+      video.removeEventListener('waiting',onWaiting);video.removeEventListener('playing',onPlaying);video.removeEventListener('ratechange',onRate);
+      if(video.playbackRate===1) video.playbackRate=previousRate;
       cancelAlignment=null; $('auto-align').textContent='听 12 秒自动校准';
     }
   };
-  let slideUrls=[], slideEntries=[], slideIndex=0, splitVideo=null, splitStyles=null, slideDragging=false, slideFollowing=true, slideCourse=null;
+  let slideUrls=[], slideEntries=[], slideIndex=0, splitVideo=null, splitStyles=null, layoutMode='video', slideDragging=false, slideFollowing=true, slideCourse=null;
   function saveSlideState() {
     GM_setValue('ppt-state:'+slideCourse,{index:slideIndex,url:slideEntries[slideIndex]?.url,time:slideEntries[slideIndex]?.time,follow:slideFollowing});
   }
@@ -464,7 +492,7 @@
     if(splitVideo && splitStyles) for(const [key,saved] of Object.entries(splitStyles)) {
       if(saved.value) splitVideo.style.setProperty(key,saved.value,saved.priority); else splitVideo.style.removeProperty(key);
     }
-    splitStyles=null; splitVideo=null;
+    splitStyles=null; splitVideo=null;layoutMode='video';$('caption-custom').checked=false;$('show-slides').textContent='① 左右并排';
   }
   function renderSlide() {
     $('slide-image').src=slideUrls[slideIndex]; $('slide-page').textContent=`${slideIndex+1} / ${slideUrls.length}`;
@@ -485,8 +513,8 @@
     if(!slideUrls.length) { $('slides-status').textContent='尚未找到 PPT 图片。请先打开右侧 PPT 标签加载列表，再点此按钮；不要切换顶部老师视频。'; return false; }
     if(!mainVideo) { $('slides-status').textContent='请先打开老师视频，再查看 PPT。'; return false; }
     if(!splitVideo) {
-      splitVideo=mainVideo;
-      splitStyles=Object.fromEntries(['width','margin-left'].map(key=>[key,{value:splitVideo.style.getPropertyValue(key),priority:splitVideo.style.getPropertyPriority(key)}]));
+      splitVideo=mainVideo;layoutMode='split';$('show-slides').textContent='② PPT 主讲';
+      splitStyles=Object.fromEntries(['width','height','margin-left','position','left','top','right','bottom','z-index'].map(key=>[key,{value:splitVideo.style.getPropertyValue(key),priority:splitVideo.style.getPropertyPriority(key)}]));
       splitVideo.style.setProperty('width','50%','important');
       splitVideo.style.setProperty('margin-left','50%','important');
       restoreSlideGeometry();
@@ -494,7 +522,24 @@
     slideIndex=Math.min(slideIndex,slideUrls.length-1); renderSlide(); $('slides').hidden=false; syncSlide();
     $('slides-status').textContent=slideEntries.some(s=>Number.isFinite(s.time))?'PPT 按视频时间自动翻页，沿用字幕偏移。手动翻页可暂停跟随。':'本页未读取到 PPT 时间，保留手动翻页和页码记忆。'; return true;
   }
-  $('show-slides').onclick=showSlides;
+  $('show-slides').onclick=()=>{
+    if(layoutMode==='video') {showSlides();return;}
+    if(layoutMode==='split') {
+      layoutMode='focus';$('show-slides').textContent='③ 恢复课堂';
+      const r=splitVideo.parentElement.getBoundingClientRect();
+      setVideoBox({left:r.left+r.width*.72,top:r.top+r.height*.62,width:r.width*.27,height:r.height*.3});
+      GM_deleteValue('ppt-free-window-v2');restoreSlideGeometry();return;
+    }
+    closeSlides();
+  };
+  function setVideoBox(r) {
+    for(const [k,v] of Object.entries({position:'fixed',left:r.left+'px',top:r.top+'px',right:'auto',bottom:'auto',width:r.width+'px',height:r.height+'px','margin-left':'0','z-index':'20'})) splitVideo.style.setProperty(k,v,'important');
+  }
+  $('edit-layout').onclick=()=>{$('layout-editor').hidden=!$('layout-editor').hidden;};
+  $('apply-layout').onclick=()=>{
+    if(!splitVideo && !showSlides()) return;
+    setVideoBox({left:value('video-x',0,-innerWidth,innerWidth),top:value('video-y',0,-innerHeight,innerHeight),width:value('video-w',400,160,innerWidth*2),height:value('video-h',240,100,innerHeight*2)});
+  };
   $('slide-close').onclick=closeSlides;
   $('slide-prev').onclick=()=>{slideFollowing=false;slideIndex=Math.max(0,slideIndex-1);renderSlide();};
   $('slide-next').onclick=()=>{slideFollowing=false;slideIndex=Math.min(slideUrls.length-1,slideIndex+1);renderSlide();};
@@ -516,6 +561,7 @@
     if(!slideDragging && !resizing) restoreSlideGeometry();
   }
   function slideBounds() {
+    if(layoutMode==='focus') {const r=splitVideo.parentElement.getBoundingClientRect();return {left:Math.max(0,r.left),top:Math.max(0,r.top),width:r.width*.7,height:Math.max(100,r.height-150)};}
     const r=splitVideo.getBoundingClientRect();
     const left=Math.max(0,r.left-r.width),top=Math.max(0,r.top);
     const width=Math.max(0,Math.min(innerWidth,r.left)-left);
@@ -575,6 +621,80 @@
     if(!image && !pptButton) return;
     if(showSlides()) { event.preventDefault(); event.stopImmediatePropagation(); if(image) {slideFollowing=false;slideIndex=Math.max(0,imagesIndex(image));} renderSlide(); }
   },true);
+  let cacheAbort=null, localPlayback=null;
+  const CACHE_LIMIT=512*1024*1024;
+  function cacheStore(mode,action) {
+    return new Promise((resolve,reject)=>{
+      const open=indexedDB.open('zhiyun-video-cache',1);
+      open.onupgradeneeded=()=>open.result.createObjectStore('videos');
+      open.onerror=()=>reject(new Error('无法打开浏览器缓存存储'));
+      open.onsuccess=()=>{const db=open.result,tx=db.transaction('videos',mode);let result;
+        const request=action(tx.objectStore('videos'));request.onsuccess=()=>{result=request.result;};
+        tx.oncomplete=()=>{db.close();resolve(result);};
+        tx.onabort=tx.onerror=()=>{db.close();reject(new Error('缓存读写失败，可能空间不足'));};
+      };
+    });
+  }
+  async function saveVideo(blob,key) {
+    if(!blob.size || blob.size>CACHE_LIMIT) throw new Error('单个视频需小于 512 MB；大文件请使用本地播放器');
+    await cacheStore('readwrite',store=>store.put(blob,key));
+  }
+  function restoreOnline() {
+    if(!localPlayback) return;
+    const {video,src,url}=localPlayback;localPlayback=null;
+    if(video.getAttribute('src')!==url){URL.revokeObjectURL(url);return;}
+    video.pause();if(src===null) video.removeAttribute('src');else video.setAttribute('src',src);
+    video.load();URL.revokeObjectURL(url);
+    $('cache-status').textContent='已恢复在线来源，请继续播放。';
+  }
+  $('cache-download').onclick=async()=>{
+    if(cacheAbort){cacheAbort.abort();return;}
+    const key=courseIdentity(location.hash),src=mainVideo?.currentSrc || mainVideo?.src || '';
+    if(!/^https?:/i.test(src) || !/\.(mp4|webm)(?:[?#]|$)/i.test(src)) {
+      $('cache-status').textContent='当前不是可直接缓存的 MP4/WebM 地址（可能是分片流）。可先用平台下载视频，再从下方导入。';return;
+    }
+    const controller=new AbortController();cacheAbort=controller;$('cache-download').textContent='取消缓存';
+    try {
+      const response=await fetch(src,{credentials:'include',signal:controller.signal});
+      if(!response.ok) throw new Error('下载失败：HTTP '+response.status);
+      const total=Number(response.headers.get('content-length'));
+      if(total>CACHE_LIMIT) throw new Error('文件超过 512 MB，请用平台下载后在本地播放器观看');
+      const type=response.headers.get('content-type') || '';
+      if(/text|json/i.test(type)) throw new Error('服务器返回的不是视频文件');
+      const reader=response.body.getReader(),chunks=[];let size=0;
+      while(true) {const {done,value}=await reader.read();if(done) break;size+=value.byteLength;
+        if(size>CACHE_LIMIT){controller.abort();throw new Error('文件超过 512 MB，已停止缓存');}
+        chunks.push(value);$('cache-status').textContent=`正在缓存 ${(size/1048576).toFixed(1)} MB${total?' / '+(total/1048576).toFixed(1)+' MB':''}`;
+      }
+      if(controller.signal.aborted || key!==courseIdentity(location.hash)) return;
+      await saveVideo(new Blob(chunks,{type:type || (/\.webm/i.test(src)?'video/webm':'video/mp4')}),key);
+      if(key===courseIdentity(location.hash)) $('cache-status').textContent='缓存完成，可点击「播放已缓存视频」。刷新后仍保留。';
+    } catch(error) {if(key===courseIdentity(location.hash)) $('cache-status').textContent=controller.signal.aborted?'缓存已取消':error.message+'；可能受跨域限制，可导入平台下载的视频。';}
+    finally{cacheAbort=null;$('cache-download').textContent='缓存当前视频';}
+  };
+  $('cache-file').onchange=async()=>{
+    const file=$('cache-file').files[0],key=courseIdentity(location.hash);if(!file) return;
+    try {if(!/\.(mp4|webm)$/i.test(file.name)) throw new Error('请选择 MP4 或 WebM 视频');await saveVideo(file,key);if(key===courseIdentity(location.hash)) $('cache-status').textContent='导入完成，可播放已缓存视频。';}
+    catch(error){$('cache-status').textContent=error.message;}
+    finally{$('cache-file').value='';}
+  };
+  $('cache-play').onclick=async()=>{
+    const key=courseIdentity(location.hash),video=mainVideo;
+    try {
+      if(!video) throw new Error('请先打开课程视频');
+      const blob=await cacheStore('readonly',store=>store.get(key));
+      if(key!==courseIdentity(location.hash)) return;
+      if(!blob) throw new Error('本课程还没有缓存');
+      const time=video.currentTime,rate=video.playbackRate;
+      cancelAlignment?.();restoreOnline();
+      const url=URL.createObjectURL(blob);localPlayback={video,src:video.getAttribute('src'),url};
+      video.addEventListener('loadedmetadata',()=>{if(localPlayback?.url!==url)return;video.currentTime=Math.min(time,Math.max(0,video.duration-.1));video.playbackRate=rate;video.play().catch(()=>{$('cache-status').textContent='缓存已载入，请点击播放。';});},{once:true});
+      video.addEventListener('error',()=>{if(localPlayback?.url===url){restoreOnline();$('cache-status').textContent='缓存播放失败，已恢复在线来源。';}},{once:true});
+      video.src=url;video.load();$('cache-status').textContent='正在从浏览器缓存播放；此段播放不需要下载视频数据。';
+    }catch(error){$('cache-status').textContent=error.message;}
+  };
+  $('cache-online').onclick=()=>{cancelAlignment?.();restoreOnline();};
+  $('cache-clear').onclick=async()=>{try{cacheAbort?.abort();restoreOnline();await cacheStore('readwrite',store=>store.delete(courseIdentity(location.hash)));$('cache-status').textContent='本课程缓存已清除';}catch(error){$('cache-status').textContent=error.message;}};
   let apiKey = GM_getValue('ark-api-key', '');
   function arkRequest(text, source, target) {
     let handle;
@@ -722,7 +842,7 @@
   });
   function tick() {
     if (route !== courseIdentity(location.hash)) {
-      cancelAlignment?.(); closeSlides(); slideUrls=[];
+      cacheAbort?.abort();restoreOnline();cancelAlignment?.(); closeSlides(); slideUrls=[];
       translator.reset(); stopTranslation('课程已切换，请按需重新开启翻译');
       route = courseIdentity(location.hash); collected.clear(); cues = []; dirty = true;
       releaseVideo(); loadOffset();
@@ -764,12 +884,12 @@
     const below = $('placement').value === 'below' && $('enabled').checked && fs?.tagName !== 'VIDEO';
     if (!selected || !below) releaseVideo();
     if (selected) {
-      const r = selected.rect;
+      const r = layoutMode==='focus' && !$('slides').hidden ? $('slides').getBoundingClientRect() : selected.rect;
       const layout = captionLayout(r, innerWidth, below, value('bottom', 60, 0, 300));
-      if (below) reserveBand(selected.video, layout.band);
+      if (below && layoutMode!=='focus') reserveBand(selected.video, layout.band);else if(layoutMode==='focus') releaseVideo();
       Object.assign($('caption').style, {
-        left: layout.left + 'px', width: layout.width + 'px',
-        top: (below ? r.bottom-64 : Math.min(layout.top,r.bottom-64)) + 'px', transform: 'translateY(-100%)', maxHeight: Math.max(24,r.height-80) + 'px',
+        left: ($('caption-custom').checked?value('caption-x',layout.left,-innerWidth,innerWidth):layout.left) + 'px', width: ($('caption-custom').checked?value('caption-w',layout.width,160,innerWidth*2):layout.width) + 'px',
+        top: ($('caption-custom').checked?value('caption-y',r.bottom,0,innerHeight*2):layoutMode==='focus'?Math.min(innerHeight-12,r.bottom+110):below?r.bottom-64:Math.min(layout.top,r.bottom-64)) + 'px', transform: 'translateY(-100%)', maxHeight: Math.max(24,r.height-80) + 'px',
         fontSize: value('size', 26, 14, 48) + 'px'
       });
       // Fit long bilingual lines without a scrollbar; keep all pointer input available to the player.

@@ -4,6 +4,7 @@ const {chromium}=require(process.env.PLAYWRIGHT_MODULE || 'playwright');
 (async()=>{
  const browser=await chromium.launch({headless:true,executablePath:process.env.PLAYWRIGHT_EXECUTABLE_PATH || undefined});
  const page=await browser.newPage({viewport:{width:1440,height:900}});
+ await page.route('https://classroom.test/',r=>r.fulfill({body:'<html></html>',contentType:'text/html'}));await page.goto('https://classroom.test/');
  const errors=[];page.on('pageerror',e=>errors.push(e.message));
  await page.setContent(`<style>body{margin:0;background:#19251f;font:16px sans-serif}#player{position:relative;width:1000px;height:700px;background:#253b30}video{width:100%;height:100%}#pane-voice{position:absolute;left:1010px;top:0;color:white}#player:fullscreen{width:100vw;height:100vh}</style><div id="player"><video></video></div><div id="pane-voice"><div class="trans-item"><div class="item-title">00:00:10</div><div class="trans-lan"><div>the financial market uses several different trading strategies</div></div></div></div><div id="pane-ppt"><div class="tab-ppt"><img src="https://example.test/1.svg"><span class="time">00:00:00</span></div><div class="tab-ppt"><img src="https://example.test/2.svg"><span class="time">00:00:20</span></div></div>`);
  await page.route('https://example.test/**',r=>r.fulfill({contentType:'image/svg+xml',body:'<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="1400"><rect width="100%" height="100%" fill="#fff9e9"/><text x="100" y="140" font-size="60">Lecture / 01</text></svg>'}));
@@ -13,7 +14,7 @@ const {chromium}=require(process.env.PLAYWRIGHT_MODULE || 'playwright');
   window.GM_getValue=(k,d)=>saved[k]??d; window.GM_setValue=(k,v)=>saved[k]=v;window.GM_deleteValue=k=>delete saved[k];window.GM_registerMenuCommand=()=>{};
   window.requests=[];window.jobs=0;
   window.GM_xmlhttpRequest=o=>{requests.push(o.url);let aborted=false;setTimeout(()=>{if(aborted)return; if(o.url.includes('responses'))o.onload({status:200,responseText:JSON.stringify({output:[{type:'message',content:[{type:'output_text',text:'金融市场使用多种不同的交易策略'}]}]})});else {if(o.url.endsWith('submit'))jobs++;o.onload({status:200,responseHeaders:'X-Api-Status-Code: 20000000',responseText:JSON.stringify({result:{utterances:[{text:jobs<3?'this text has no match at all here':'the financial market uses several different trading strategies',start_time:0}]}})});}},10);return{abort(){aborted=true;o.onabort?.();}};};
-  const video=document.querySelector('video');Object.defineProperties(video,{paused:{get:()=>false},currentTime:{get:()=>window.videoTime??12},playbackRate:{get:()=>1}});
+  const video=document.querySelector('video');Object.defineProperties(video,{paused:{get:()=>false},currentTime:{get:()=>window.videoTime??12},playbackRate:{get:()=>window.testRate??1,set:v=>{window.testRate=v;setTimeout(()=>video.dispatchEvent(new Event('ratechange')),0);}}});
   video.captureStream=()=>({getAudioTracks:()=>[],getTracks:()=>[]});
  });
  await page.addScriptTag({content:fs.readFileSync('zhiyun-subtitles.user.js','utf8')});
@@ -116,6 +117,35 @@ const {chromium}=require(process.env.PLAYWRIGHT_MODULE || 'playwright');
  const enlarged=await ui.locator('#slide-image').boundingBox();assert.ok(enlarged.height>imageBefore.height+40);
  assert.ok(Math.abs(enlarged.width/enlarged.height-imageBefore.width/imageBefore.height)<.01);
  await ui.locator('#reset-ppt').click();
+ // Layout cycle: split -> PPT focus -> original, without losing the native video.
+ await ui.locator('#show-slides').click();await page.waitForTimeout(150);
+ assert.equal(await ui.locator('#show-slides').textContent(),'③ 恢复课堂');
+ assert.ok((await page.locator('video').boundingBox()).width<400);
+ const focusPpt=await ui.locator('#slides').boundingBox(),focusCaption=await ui.locator('#caption').boundingBox();assert.ok(focusCaption.y>=focusPpt.y+focusPpt.height);
+ await ui.locator('#show-slides').click();assert.ok(await ui.locator('#slides').isHidden());assert.equal((await page.locator('video').boundingBox()).width,1000);
+ // Recording from 2x normalizes speed, buffering discards only the partial clip and resumes automatically.
+ await page.evaluate(()=>{jobs=2;window.testRate=2;});
+ await ui.locator('#auto-align').click();await page.waitForTimeout(30);
+ assert.equal(await page.evaluate(()=>window.testRate),1);
+ await page.evaluate(()=>document.querySelector('video').dispatchEvent(new Event('waiting')));
+ await page.waitForTimeout(160);assert.equal(await page.evaluate(()=>jobs),2);
+ await page.evaluate(()=>document.querySelector('video').dispatchEvent(new Event('playing')));
+ await page.waitForTimeout(500);assert.equal(await page.evaluate(()=>jobs),3);assert.equal(await page.evaluate(()=>window.testRate),2);
+ // Cancelling while waiting prevents the next playing event from restarting recognition.
+ await page.evaluate(()=>jobs=2);await ui.locator('#auto-align').click();await page.waitForTimeout(30);
+ await page.evaluate(()=>document.querySelector('video').dispatchEvent(new Event('waiting')));await page.waitForTimeout(30);
+ await ui.locator('#auto-align').click();await page.waitForTimeout(50);
+ await page.evaluate(()=>document.querySelector('video').dispatchEvent(new Event('playing')));await page.waitForTimeout(250);
+ assert.equal(await page.evaluate(()=>jobs),2);assert.equal(await page.evaluate(()=>window.testRate),2);
+ // Cache only synthetic media bytes: verify storage and source switching, not codec decoding.
+ await ui.locator('summary').filter({hasText:'布局与视频缓存'}).click();
+ await ui.locator('#cache-download').click();assert.match(await ui.locator('#cache-status').textContent(),/不是可直接缓存/);
+ await page.evaluate(()=>{const v=document.querySelector('video');v.load=()=>{};v.pause=()=>{};v.addEventListener('error',e=>e.stopImmediatePropagation(),true);v.setAttribute('src','https://classroom.test/test.mp4');window.fetch=async()=>new Response(new Uint8Array([1,2,3]),{headers:{'content-type':'video/mp4','content-length':'3'}});});
+ await ui.locator('#cache-download').click();await page.waitForTimeout(150);assert.match(await ui.locator('#cache-status').textContent(),/缓存完成/);
+ await ui.locator('#cache-play').click();await page.waitForTimeout(150);assert.match(await page.locator('video').getAttribute('src'),/^blob:/);
+ await ui.locator('#cache-online').click();assert.equal(await page.locator('video').getAttribute('src'),'https://classroom.test/test.mp4');
+ await ui.locator('#cache-clear').click();await page.waitForTimeout(100);await ui.locator('#cache-play').click();await page.waitForTimeout(100);assert.match(await ui.locator('#cache-status').textContent(),/没有缓存/);
+ await ui.locator('summary').filter({hasText:'布局与视频缓存'}).click();
  // A Chinese-only current cue must neither call translation nor render a duplicate line.
  await page.evaluate(()=>{document.querySelector('.trans-lan').innerHTML='<div>我们现在继续讲下一页的内容</div>';location.hash='#/replay?course_id=language-test';});
  await page.waitForTimeout(750);
