@@ -186,7 +186,36 @@ const {chromium}=require(process.env.PLAYWRIGHT_MODULE || 'playwright');
  await ui.locator('#cache-play').click();await page.waitForTimeout(150);
  assert.match(await page.locator('video').getAttribute('src'),/^blob:/);
  await ui.locator('#cache-clear').click();await page.waitForTimeout(100);
+ // Batch queue persists lesson sources and continues after navigating away.
+ await ui.locator('#cache-auto').uncheck();
+ await ui.locator('#cache-batch summary').click();
+ await page.evaluate(()=>{Object.defineProperty(document.querySelector('video'),'currentSrc',{configurable:true,get(){return this.getAttribute('src')||'';}});location.hash='#/replay?course_id=batch&sub_id=1';document.title='Batch lesson';document.querySelector('video').src='https://vod.cmc.zju.edu.cn/one.mp4';});
+ await page.waitForTimeout(200);await ui.locator('#batch-add').click();await page.waitForTimeout(100);
+ await page.evaluate(()=>{location.hash='#/replay?course_id=batch&sub_id=2';document.querySelector('video').src='https://vod.cmc.zju.edu.cn/two.mp4';});
+ await page.waitForTimeout(200);await ui.locator('#batch-add').click();await page.waitForTimeout(100);
+ assert.equal(await ui.locator('#batch-list input:checked').count(),2);
+ await page.evaluate(()=>{window.batchCalls=[];window.batchActive=0;window.batchMax=0;window.failSecond=true;const original=GM_xmlhttpRequest;window.GM_xmlhttpRequest=o=>{if(o.method!=='GET')return original(o);batchCalls.push(o.url);batchActive++;batchMax=Math.max(batchMax,batchActive);let done=false;const timer=setTimeout(()=>{if(done)return;done=true;batchActive--;if(failSecond&&o.url.includes('two.mp4')){failSecond=false;o.onload({status:403});}else o.onload({status:206,responseHeaders:'Content-Range: bytes 0-15/16',response:new Blob([new Uint8Array([0,0,0,16,102,116,121,112,105,115,111,109,0,0,0,0])],{type:'video/mp4'})});},350);return{abort(){if(done)return;done=true;clearTimeout(timer);batchActive--;o.onabort?.();}};};});
+ await ui.locator('#batch-start').click();await page.waitForTimeout(100);
+ await page.evaluate(()=>{location.hash='#/replay?course_id=batch&sub_id=3';document.querySelector('video').src='https://vod.cmc.zju.edu.cn/three.mp4';});
+ await page.waitForTimeout(1000);
+ assert.match(await ui.locator('#batch-status').textContent(),/失败 1 节/);assert.equal(await page.evaluate(()=>batchMax),1);
+ assert.equal(await ui.locator('#batch-list input:checked').count(),1);
+ await ui.locator('#batch-start').click();await page.waitForTimeout(650);assert.match(await ui.locator('#batch-status').textContent(),/失败 0 节/);
+ const callsBeforeSkip=await page.evaluate(()=>batchCalls.length);
+ await ui.locator('#batch-list input').first().check();await ui.locator('#batch-start').click();await page.waitForTimeout(250);
+ assert.equal(await page.evaluate(()=>batchCalls.length),callsBeforeSkip);
+ await ui.locator('#batch-add').click();await page.waitForTimeout(100);await ui.locator('#batch-start').click();await page.waitForTimeout(100);await ui.locator('#batch-stop').click();await page.waitForTimeout(250);
+ assert.match(await ui.locator('#batch-status').textContent(),/队列已停止/);
+ assert.equal(await page.evaluate(()=>batchActive),0);
+ await ui.locator('#batch-start').click();await page.waitForTimeout(650);assert.match(await ui.locator('#batch-status').textContent(),/失败 0 节/);
  await ui.locator('summary').filter({hasText:'视频缓存'}).click();
+ // Automatic discovery must not associate an old player's URL with a new lesson.
+ await page.evaluate(()=>{Object.defineProperty(document.querySelector('video'),'readyState',{configurable:true,get:()=>1});location.hash='#/replay?course_id=batch&sub_id=4';});
+ await page.waitForTimeout(1500);
+ const readSeen=()=>new Promise((resolve,reject)=>{const open=indexedDB.open('zhiyun-video-cache',1);open.onsuccess=()=>{const db=open.result,tx=db.transaction('videos');const req=tx.objectStore('videos').getAll();req.onsuccess=()=>resolve(req.result.filter(e=>e?.visited));tx.oncomplete=()=>db.close();};open.onerror=reject;});
+ let seen=await page.evaluate(readSeen);assert.ok(!seen.some(e=>JSON.parse(e.key)[1]==='4'));
+ await page.evaluate(()=>document.querySelector('video').src='https://vod.cmc.zju.edu.cn/four.mp4');await page.waitForTimeout(1500);
+ seen=await page.evaluate(readSeen);assert.ok(seen.some(e=>JSON.parse(e.key)[1]==='4'&&e.source.endsWith('/four.mp4')));
  // A Chinese-only current cue must neither call translation nor render a duplicate line.
  await page.evaluate(()=>{document.querySelector('.trans-lan').innerHTML='<div>我们现在继续讲下一页的内容</div>';location.hash='#/replay?course_id=language-test';});
  await page.waitForTimeout(750);

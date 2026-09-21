@@ -1,6 +1,6 @@
 {
   "name": "zhiyun-subtitles",
-  "version": "0.13.0",
+  "version": "0.14.0",
   "private": true,
   "description": "智云课堂伴读字幕、豆包翻译与 PPT 悬浮窗",
   "scripts": {

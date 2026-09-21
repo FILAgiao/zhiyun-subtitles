@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         智云课堂同步字幕
 // @namespace    zhiyunzimu.local
-// @version      0.13.0
+// @version      0.14.0
 // @description  将右侧语音识别及平台译文同步显示在视频底部，支持字幕导出。
 // @match        https://interactivemeta.cmc.zju.edu.cn/*
 // @grant        GM_xmlhttpRequest
@@ -341,7 +341,7 @@
     <button class="slide-edge" data-edge="left" aria-label="调整 PPT 左边缘"></button><button class="slide-edge" data-edge="right" aria-label="调整 PPT 右边缘"></button><button class="slide-edge" data-edge="top" aria-label="调整 PPT 上边缘"></button><button class="slide-edge" data-edge="bottom" aria-label="调整 PPT 下边缘"></button>
   </section>
   <section id="panel" aria-label="智云字幕设置">
-    <header id="panel-head"><span class="mascot">🌱</span><div><h3>伴读字幕</h3><span class="subtitle">让每一句，都跟得上 · v0.13.0</span></div><button id="collapse" aria-label="收起字幕设置">−</button></header>
+    <header id="panel-head"><span class="mascot">🌱</span><div><h3>伴读字幕</h3><span class="subtitle">让每一句，都跟得上 · v0.14.0</span></div><button id="collapse" aria-label="收起字幕设置">−</button></header>
     <div id="panel-body">
     <div class="section"><div class="section-title">一起看懂 <span id="translation-ready" class="badge"></span><input id="enabled" aria-label="显示字幕" type="checkbox" checked></div>
     <label>字幕<select id="mode"><option value="original">仅原文</option><option value="both">中英对照 · 豆包翻译</option></select></label>
@@ -359,6 +359,11 @@
     <button id="cache-download">缓存当前视频</button>
     <label>自动使用缓存<input id="cache-auto" type="checkbox" checked></label>
     <p id="cache-source">当前：在线视频</p><p id="cache-status">边看边缓存；完整下载后自动接着当前进度播放本地文件。不是边下载边播放未完成的缓存。</p>
+    <details id="cache-batch"><summary>批量缓存 · 打开过的课</summary>
+    <p>打开回放并加载视频后会记录在本机；也可手动加入。勾选后顺序下载，保留此任务页。刷新后需重新点击开始，未完成的一课会重新下载。</p>
+    <div class="actions"><button id="batch-add">加入当前课</button><button id="batch-refresh">刷新列表</button></div>
+    <div id="batch-list"></div><div class="actions"><button id="batch-start">缓存所选课程</button><button id="batch-stop" disabled>停止队列</button></div>
+    <p id="batch-status" role="status">尚未开始批量缓存。</p></details>
     <details id="cache-details"><summary>缓存详情与诊断</summary>
     <p id="cache-location">位置：浏览器默认存储（随浏览器配置目录）</p>
     <button id="cache-folder">选择缓存文件夹</button><button id="cache-default-folder">使用浏览器默认位置</button>
@@ -764,6 +769,7 @@
     if(!image && !pptButton) return;
     if(showSlides()) { event.preventDefault(); event.stopImmediatePropagation(); if(image) {slideFollowing=false;slideIndex=Math.max(0,imagesIndex(image));} renderSlide(); }
   },true);
+  let batchRunning=false, batchController=null;
   let cacheAbort=null, localPlayback=null, cacheEpoch=0, autoChecked='', preferOnline=false;
 
   function cacheStore(mode,action) {
@@ -845,7 +851,7 @@
     }catch(error){$('cache-location').textContent=error.message;}
   }
   $('cache-folder').onclick=async()=>{
-    if(cacheAbort){$('cache-status').textContent='请先取消当前缓存，再更改目录';return;}
+    if(cacheAbort || batchRunning){$('cache-status').textContent='请先停止缓存任务，再更改目录';return;}
     if(!window.showDirectoryPicker){$('cache-status').textContent='当前浏览器不支持选择文件夹，请使用新版 Chrome / Edge';return;}
     try {
       const root=await window.showDirectoryPicker({id:'zhiyun-video-cache',mode:'readwrite'});
@@ -853,7 +859,7 @@
       await cacheStore('readwrite',s=>s.put({handle,label:root.name},'cache-folder'));await updateCacheLocation();
     }catch(error){if(error.name!=='AbortError')$('cache-status').textContent='选择目录失败：'+error.message;}
   };
-  $('cache-default-folder').onclick=async()=>{if(cacheAbort){$('cache-status').textContent='请先取消缓存再更改目录';return;}try{await cacheStore('readwrite',s=>s.delete('cache-folder'));await updateCacheLocation();}catch(error){$('cache-status').textContent=error.message;}};
+  $('cache-default-folder').onclick=async()=>{if(cacheAbort || batchRunning){$('cache-status').textContent='请先停止缓存任务再更改目录';return;}try{await cacheStore('readwrite',s=>s.delete('cache-folder'));await updateCacheLocation();}catch(error){$('cache-status').textContent=error.message;}};
   updateCacheLocation();
   $('cache-auto').checked=GM_getValue('cache-auto',true);
   $('cache-auto').onchange=()=>{GM_setValue('cache-auto',$('cache-auto').checked);preferOnline=false;autoChecked='';cacheEpoch++;};
@@ -876,6 +882,7 @@
     $('cache-source').textContent='当前：在线视频';$('cache-status').textContent='已切回在线来源，保留当前进度与倍速。';
   }
   $('cache-download').onclick=async()=>{
+    if(batchRunning){$('cache-status').textContent='批量缓存正在运行，请先停止队列';return;}
     if(cacheAbort){cacheAbort.abort();return;}
     const downloadVideoElement=mainVideo,key=courseIdentity(location.hash),src=mainVideo?.currentSrc || mainVideo?.src || '';
     if(!/^https?:/i.test(src) || !/\.(mp4|webm)(?:[?#]|$)/i.test(src)) {
@@ -895,12 +902,12 @@
     const source=mainVideo?.currentSrc || mainVideo?.src || '';let origin='无视频源',kind='未知';
     try{const url=new URL(source);origin=url.origin;kind=url.protocol==='blob:'?'blob / 分片播放':url.pathname.match(/\.(mp4|webm|m3u8|mpd)$/i)?.[1] || '无扩展名';}catch{}
     $('cache-diagnostic').hidden=false;
-    $('cache-diagnostic').textContent=`版本：0.13.0\n来源域名：${origin}\n格式：${kind}\n状态：${$('cache-status').textContent}\n（不包含视频完整地址、登录参数或 API Key）`;
+    $('cache-diagnostic').textContent=`版本：0.14.0\n来源域名：${origin}\n格式：${kind}\n状态：${$('cache-status').textContent}\n（不包含视频完整地址、登录参数或 API Key）`;
   };
   $('cache-details').addEventListener('toggle',()=>{if($('cache-details').open)$('cache-diagnose').click();});
   $('cache-file').onchange=async()=>{
     const file=$('cache-file').files[0],key=courseIdentity(location.hash);if(!file) return;
-    if(cacheAbort){$('cache-status').textContent='请等待当前缓存完成或取消后再导入';$('cache-file').value='';return;}
+    if(cacheAbort || batchRunning){$('cache-status').textContent='请先停止缓存任务再导入';$('cache-file').value='';return;}
     const controller=new AbortController();cacheAbort=controller;$('cache-download').textContent='取消缓存';
     try {if(!/\.(mp4|webm)$/i.test(file.name)) throw new Error('请选择 MP4 或 WebM 视频');await saveVideo(file,key,controller.signal);if(key===courseIdentity(location.hash)) $('cache-status').textContent='导入完成，可播放已缓存视频。';}
     catch(error){$('cache-status').textContent=error.message;}
@@ -926,7 +933,101 @@
   };
   $('cache-play').onclick=()=>{preferOnline=false;playCached();};
   $('cache-online').onclick=()=>{preferOnline=true;cancelAlignment?.();restoreOnline();};
-  $('cache-clear').onclick=async()=>{try{if(cacheAbort){cacheAbort.abort();$('cache-status').textContent='正在取消下载，结束后再次点击清除';return;}restoreOnline();const key=courseIdentity(location.hash);await removeCacheFile(await cacheStore('readonly',s=>s.get(key)));await removeCacheFile(await cacheStore('readonly',s=>s.get(key+':pending')));await cacheStore('readwrite',s=>s.delete(key+':pending'));await cacheStore('readwrite',store=>store.delete(key));$('cache-status').textContent='本课程缓存已清除';}catch(error){$('cache-status').textContent=error.message;}};
+  $('cache-clear').onclick=async()=>{try{if(batchRunning){$('cache-status').textContent='请先停止批量队列再清除缓存';return;}if(cacheAbort){cacheAbort.abort();$('cache-status').textContent='正在取消下载，结束后再次点击清除';return;}restoreOnline();const key=courseIdentity(location.hash);await removeCacheFile(await cacheStore('readonly',s=>s.get(key)));await removeCacheFile(await cacheStore('readonly',s=>s.get(key+':pending')));await cacheStore('readwrite',s=>s.delete(key+':pending'));await cacheStore('readwrite',store=>store.delete(key));$('cache-status').textContent='本课程缓存已清除';}catch(error){$('cache-status').textContent=error.message;}};
+
+  // Catalog entries stay in site storage; signed media URLs are never shown in the list.
+  const batchSelection=new Set();
+  let observedCourse='',observedSource='',observedSince=0,rememberedPair='';
+  function currentCacheCourse() {
+    const key=courseIdentity(location.hash),ids=JSON.parse(key);
+    const source=localPlayback?.video===mainVideo ? localPlayback.src : (mainVideo?.currentSrc || mainVideo?.src);
+    if(!ids[0] || !ids[1] || !source) return null;
+    try {const url=new URL(source);
+      if(!['video.cmc.zju.edu.cn','vod.cmc.zju.edu.cn','interactivemeta.cmc.zju.edu.cn'].includes(url.hostname) || !/^https?:$/.test(url.protocol) || !/\.(mp4|webm)$/i.test(url.pathname)) return null;
+    }catch{return null;}
+    return {key,source,title:(document.title || '智云课堂').slice(0,100)+' · 课次 '+ids[1],visited:Date.now()};
+  }
+  async function rememberCacheCourse(entry) {
+    const id='seen:'+entry.key,old=await cacheStore('readonly',s=>s.get(id));
+    await cacheStore('readwrite',s=>s.put({...old,...entry},id));
+  }
+  function observeCacheCourse() {
+    const entry=currentCacheCourse();if(!entry)return;
+    if(entry.key!==observedCourse || entry.source!==observedSource) {
+      // Do not assign the previous lesson's still-loading player source to the new route.
+      const stale=observedCourse && entry.key!==observedCourse && entry.source===observedSource;
+      observedCourse=entry.key;observedSource=entry.source;observedSince=stale?Infinity:Date.now();
+    }
+    const pair=entry.key+'\n'+entry.source;
+    if(mainVideo.readyState<1 || Date.now()-observedSince<1200 || rememberedPair===pair)return;
+    rememberedPair=pair;
+    rememberCacheCourse(entry).then(()=>{if($('cache-batch').open)return renderBatch();}).catch(()=>{rememberedPair='';});
+  }
+  async function renderBatch() {
+    const entries=(await cacheStore('readonly',s=>s.getAll())).filter(e=>e?.key && e?.source && e?.visited).sort((a,b)=>b.visited-a.visited);
+    const list=$('batch-list');list.replaceChildren();
+    if(!entries.length){const p=document.createElement('p');p.textContent='暂无记录。先打开一节回放，或点击「加入当前课」。';list.append(p);}
+    for(const entry of entries) {
+      const label=document.createElement('label'),check=document.createElement('input'),text=document.createElement('span');
+      check.type='checkbox';check.checked=batchSelection.has(entry.key);check.disabled=batchRunning;
+      check.onchange=()=>{if(check.checked)batchSelection.add(entry.key);else batchSelection.delete(entry.key);};
+      const state=['下载中','等待中'].includes(entry.state) && !batchRunning?'上次未完成，可重新缓存':entry.state;
+      text.textContent=entry.title+(state?' · '+state:'');text.style.overflowWrap='anywhere';
+      label.append(check,text);list.append(label);
+    }
+    $('batch-start').disabled=batchRunning;$('batch-stop').disabled=!batchRunning;
+  }
+  async function batchState(key,state) {
+    const id='seen:'+key,entry=await cacheStore('readonly',s=>s.get(id));
+    if(entry)await cacheStore('readwrite',s=>s.put({...entry,state},id));
+    await renderBatch();
+  }
+  $('batch-add').onclick=async()=>{
+    try {const entry=currentCacheCourse();if(!entry)throw new Error('请先打开具体课次并加载可缓存的 MP4/WebM 视频');
+      await rememberCacheCourse(entry);batchSelection.add(entry.key);await renderBatch();$('batch-status').textContent='已加入当前课，可继续打开其他课次；最后回到此处勾选缓存。';
+    }catch(error){$('batch-status').textContent=error.message;}
+  };
+  $('batch-refresh').onclick=()=>renderBatch().catch(error=>{$('batch-status').textContent=error.message;});
+  $('cache-batch').addEventListener('toggle',()=>{if($('cache-batch').open)$('batch-refresh').click();});
+  $('batch-stop').onclick=()=>{batchController?.abort();$('batch-status').textContent='正在停止队列，已完成的缓存会保留…';};
+  $('batch-start').onclick=async()=>{
+    if(batchRunning)return;
+    if(cacheAbort){$('batch-status').textContent='请先完成或取消当前单课缓存';return;}
+    if(!batchSelection.size){$('batch-status').textContent='请先勾选要缓存的课程';return;}
+    const keys=[...batchSelection],controller=new AbortController();batchController=controller;batchRunning=true;
+    let completed=0,failed=0;
+    const run=async()=>{
+      for(const key of keys) {
+        if(controller.signal.aborted)break;
+        const entry=await cacheStore('readonly',s=>s.get('seen:'+key));if(!entry)continue;
+        await batchState(key,'下载中');
+        try {
+          const existing=await cachedVideo(key).catch(()=>null);
+          if(!existing) await storeLargeVideo(key,write=>downloadInChunks(GM_xmlhttpRequest,entry.source,{
+            signal:controller.signal,write,checkSpace:checkCacheSpace,onProgress:(size,total)=>{
+              $('batch-status').textContent=`${completed+failed+1} / ${keys.length} · ${entry.title} · ${(size/1048576).toFixed(1)}${total?' / '+(total/1048576).toFixed(1):''} MB`;
+            }
+          }),controller.signal);
+          if(controller.signal.aborted)break;
+          completed++;await batchState(key,existing?'已有缓存，已跳过':'缓存完成');batchSelection.delete(key);
+          const current=currentCacheCourse();
+          if(current?.key===key && current.source===entry.source && $('cache-auto').checked && !preferOnline)await playCached({quiet:true});
+        }catch(error){
+          if(controller.signal.aborted){await batchState(key,'已停止，可重新缓存');break;}
+          failed++;await batchState(key,'失败：'+error.message+'；地址失效时重新打开该课并加入');
+        }
+      }
+    };
+    try {
+      await renderBatch();
+      if(navigator.locks) await navigator.locks.request('zhiyun-batch-cache',{ifAvailable:true},async lock=>{
+        if(!lock)throw new Error('另一个标签页正在执行批量队列，请在那个页面查看或停止');await run();
+      });else await run();
+      $('batch-status').textContent=`${controller.signal.aborted?'队列已停止':'队列结束'}：完成 / 已有缓存 ${completed} 节，失败 ${failed} 节。${failed?'失败项仍已勾选，可重试。':''}`;
+    }catch(error){$('batch-status').textContent=error.message;}
+    finally{batchRunning=false;batchController=null;await renderBatch().catch(()=>{});}
+  };
+
   let apiKey = GM_getValue('ark-api-key', '');
   function arkRequest(text, source, target) {
     let handle;
@@ -1100,6 +1201,7 @@
     layoutSlides(); syncSlide();
     $('focus-fullscreen').textContent=fs?'⛶ 退出全屏':'⛶ 专注全屏';
     mainVideo=selected?.video ?? null;
+    observeCacheCourse();
     if(mainVideo?.readyState>=1 && $('cache-auto').checked && !preferOnline && !localPlayback && autoChecked!==route) {autoChecked=route;playCached({quiet:true});}
     const cue = selected ? activeCue(cues, subtitleTime(selected.video.currentTime, value('offset', 0, -3600, 3600))) : null;
     if (selected && translator.enabled && $('enabled').checked && $('mode').value === 'both') {
