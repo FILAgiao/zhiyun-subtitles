@@ -1,16 +1,23 @@
 {
   "name": "zhiyun-subtitles",
-  "version": "0.14.1",
+  "version": "0.15.0",
   "private": true,
   "description": "智云课堂伴读字幕、豆包翻译与 PPT 悬浮窗",
   "scripts": {
     "test": "node --test subtitle.test.cjs",
-    "test:ui": "node ui.test.cjs"
+    "test:ui": "node ui.test.cjs",
+    "build:stream": "node build-stream.cjs",
+    "test:media": "node generate-test-media.cjs",
+    "test:stream": "node progressive.test.cjs && node progressive.test.cjs .test-media/tail.mp4 && node progressive-ui.test.cjs"
   },
   "engines": {
-    "node": ">=18"
+    "node": ">=20.8"
   },
   "devDependencies": {
+    "esbuild": "0.25.12",
     "playwright": "1.62.1"
+  },
+  "dependencies": {
+    "mp4box": "2.4.1"
   }
 }

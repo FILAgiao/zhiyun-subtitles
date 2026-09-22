@@ -11,3 +11,5 @@ requirements-asr.txt
 smoke_bridge.py
 start-asr.cmd
 test_asr_bridge.py
+.testdeps/
+.test-media/
