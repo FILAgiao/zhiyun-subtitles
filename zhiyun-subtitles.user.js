@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         智云课堂同步字幕
 // @namespace    zhiyunzimu.local
-// @version      0.14.1
+// @version      0.15.0
 // @description  将右侧语音识别及平台译文同步显示在视频底部，支持字幕导出。
 // @match        https://interactivemeta.cmc.zju.edu.cn/*
 // @grant        GM_xmlhttpRequest
@@ -14,6 +14,7 @@
 // @connect      video.cmc.zju.edu.cn
 // @connect      vod.cmc.zju.edu.cn
 // @connect      interactivemeta.cmc.zju.edu.cn
+// @require      https://raw.githubusercontent.com/FILAgiao/zhiyun-subtitles/5bf8f134fc71f6836b2d832eea8c2566bf35fd3f/progressive-cache.bundle.js
 // @run-at       document-idle
 // ==/UserScript==
 
@@ -341,7 +342,7 @@
     <button class="slide-edge" data-edge="left" aria-label="调整 PPT 左边缘"></button><button class="slide-edge" data-edge="right" aria-label="调整 PPT 右边缘"></button><button class="slide-edge" data-edge="top" aria-label="调整 PPT 上边缘"></button><button class="slide-edge" data-edge="bottom" aria-label="调整 PPT 下边缘"></button>
   </section>
   <section id="panel" aria-label="智云字幕设置">
-    <header id="panel-head"><span class="mascot">🌱</span><div><h3>伴读字幕</h3><span class="subtitle">让每一句，都跟得上 · v0.14.1</span></div><button id="collapse" aria-label="收起字幕设置">−</button></header>
+    <header id="panel-head"><span class="mascot">🌱</span><div><h3>伴读字幕</h3><span class="subtitle">让每一句，都跟得上 · v0.15.0</span></div><button id="collapse" aria-label="收起字幕设置">−</button></header>
     <div id="panel-body">
     <div class="section"><div class="section-title">一起看懂 <span id="translation-ready" class="badge"></span><input id="enabled" aria-label="显示字幕" type="checkbox" checked></div>
     <label>字幕<select id="mode"><option value="original">仅原文</option><option value="both">中英对照 · 豆包翻译</option></select></label>
@@ -356,9 +357,13 @@
     <div class="section"><div class="actions"><button id="show-slides">① 左右并排</button><button id="reset-ppt">复位 PPT</button><button id="focus-fullscreen">⛶ 专注全屏</button></div><p id="slides-status">翻页不会打断视频。拖动可超出屏幕。左右拉边缘裁掉黑边，上下拉边缘按比例放大；复位可找回窗口。</p></div>
     <details class="section"><summary>视频缓存</summary>
     <p>布局按钮循环：左右并排 → PPT 主讲（小课堂在右下）→ 恢复课堂。PPT 可直接拖拽缩放。</p>
+    <label>边缓存边播放 MP4<input id="cache-progressive" type="checkbox" checked></label>
+    <label>准备时长<select id="stream-minutes"><option value="600">10 分钟</option><option value="1200">20 分钟</option></select></label>
+    <label>开始位置<select id="stream-from"><option value="beginning">视频开头</option><option value="current">当前观看位置</option></select></label>
     <button id="cache-download">缓存当前视频</button>
+    <p id="stream-status" role="status"></p><button id="stream-play" hidden>✓ 已就绪 · 开始观看</button>
     <label>自动使用缓存<input id="cache-auto" type="checkbox" checked></label>
-    <p id="cache-source">当前：在线视频</p><p id="cache-status">边看边缓存；完整下载后自动接着当前进度播放本地文件。不是边下载边播放未完成的缓存。</p>
+    <p id="cache-source">当前：在线视频</p><p id="cache-status">MP4 可先准备 10 / 20 分钟，再点击就绪按钮观看；关闭分段模式时仍需完整下载。</p>
     <div id="cache-transport" hidden><div class="actions"><button id="cache-back">← 后退 10 秒</button><button id="cache-forward">快进 10 秒 →</button></div><label>缓存进度<input id="cache-seek" aria-label="缓存播放进度" type="range" min="0" max="100" step="0.1"></label><p id="cache-time"></p></div>
     <details id="cache-batch"><summary>批量缓存 · 打开过的课</summary>
     <p>打开回放并加载视频后会记录在本机；也可手动加入。勾选后顺序下载，保留此任务页。刷新后需重新点击开始，未完成的一课会重新下载。</p>
@@ -862,6 +867,9 @@
   };
   $('cache-default-folder').onclick=async()=>{if(cacheAbort || batchRunning){$('cache-status').textContent='请先停止缓存任务再更改目录';return;}try{await cacheStore('readwrite',s=>s.delete('cache-folder'));await updateCacheLocation();}catch(error){$('cache-status').textContent=error.message;}};
   updateCacheLocation();
+  $('cache-progressive').checked=typeof ZYProgressive!=='undefined';
+  $('cache-progressive').disabled=typeof ZYProgressive==='undefined';
+  if(typeof ZYProgressive==='undefined')$('stream-status').textContent='分段引擎未加载：请完整更新脚本（包含 @require），并确认可访问脚本下载地址。';
   $('cache-auto').checked=GM_getValue('cache-auto',true);
   $('cache-auto').onchange=()=>{GM_setValue('cache-auto',$('cache-auto').checked);preferOnline=false;autoChecked='';cacheEpoch++;};
   const pendingResume=new WeakMap();
@@ -895,10 +903,12 @@
   $('cache-download').onclick=async()=>{
     if(batchRunning){$('cache-status').textContent='批量缓存正在运行，请先停止队列';return;}
     if(cacheAbort){cacheAbort.abort();return;}
-    const downloadVideoElement=mainVideo,key=courseIdentity(location.hash),src=mainVideo?.currentSrc || mainVideo?.src || '';
+    const downloadVideoElement=mainVideo,key=courseIdentity(location.hash),src=localPlayback?.src || mainVideo?.currentSrc || mainVideo?.src || '';
+    if($('cache-progressive').checked && /\.mp4(?:[?#]|$)/i.test(src)) {await startStreamDownload(key,src);return;}
     if(!/^https?:/i.test(src) || !/\.(mp4|webm)(?:[?#]|$)/i.test(src)) {
       $('cache-status').textContent='当前不是可直接缓存的 MP4/WebM 地址（可能是分片流或 blob 地址）。请查看缓存诊断，需进一步适配此来源。';return;
     }
+    if(streamSession){restoreOnline();dropStream();}
     const controller=new AbortController();cacheAbort=controller;$('cache-download').textContent='取消缓存';
     try {
       $('cache-status').textContent='正在连接视频服务器；如果油猴询问，请允许连接视频域名…';
@@ -913,7 +923,7 @@
     const source=mainVideo?.currentSrc || mainVideo?.src || '';let origin='无视频源',kind='未知';
     try{const url=new URL(source);origin=url.origin;kind=url.protocol==='blob:'?'blob / 分片播放':url.pathname.match(/\.(mp4|webm|m3u8|mpd)$/i)?.[1] || '无扩展名';}catch{}
     $('cache-diagnostic').hidden=false;
-    $('cache-diagnostic').textContent=`版本：0.14.1\n来源域名：${origin}\n格式：${kind}\n状态：${$('cache-status').textContent}\n（不包含视频完整地址、登录参数或 API Key）`;
+    $('cache-diagnostic').textContent=`版本：0.15.0\n来源域名：${origin}\n格式：${kind}\n状态：${$('cache-status').textContent}\n（不包含视频完整地址、登录参数或 API Key）`;
   };
   $('cache-details').addEventListener('toggle',()=>{if($('cache-details').open)$('cache-diagnose').click();});
   $('cache-file').onchange=async()=>{
@@ -930,6 +940,12 @@
     try {
       if(!video) throw new Error('请先打开课程视频');
       if(localPlayback?.video===video && video.getAttribute('src')===localPlayback.url)return;
+      const streamRecord=typeof ZYProgressive!=='undefined'?await cacheStore('readonly',s=>s.get('stream:'+key)):null;
+      if(streamRecord && !await cacheStore('readonly',s=>s.get(key))){
+        if(quiet && !streamRecord.complete)return;
+        const source=localPlayback?.src || video.currentSrc || video.src || '';
+        await getStream(key,source);await playStream(video.currentTime,video.paused);return;
+      }
       const blob=await cachedVideo(key);
       if(key!==courseIdentity(location.hash) || mainVideo!==video || epoch!==cacheEpoch) return;
       if(!blob && quiet)return;
@@ -946,7 +962,7 @@
   };
   $('cache-play').onclick=()=>{preferOnline=false;playCached();};
   $('cache-online').onclick=()=>{preferOnline=true;cancelAlignment?.();restoreOnline();};
-  $('cache-clear').onclick=async()=>{try{if(batchRunning){$('cache-status').textContent='请先停止批量队列再清除缓存';return;}if(cacheAbort){cacheAbort.abort();$('cache-status').textContent='正在取消下载，结束后再次点击清除';return;}restoreOnline();const key=courseIdentity(location.hash);await removeCacheFile(await cacheStore('readonly',s=>s.get(key)));await removeCacheFile(await cacheStore('readonly',s=>s.get(key+':pending')));await cacheStore('readwrite',s=>s.delete(key+':pending'));await cacheStore('readwrite',store=>store.delete(key));$('cache-status').textContent='本课程缓存已清除';}catch(error){$('cache-status').textContent=error.message;}};
+  $('cache-clear').onclick=async()=>{try{if(batchRunning){$('cache-status').textContent='请先停止批量队列再清除缓存';return;}if(cacheAbort){cacheAbort.abort();$('cache-status').textContent='正在取消下载，结束后再次点击清除';return;}restoreOnline();const key=courseIdentity(location.hash);dropStream();await deleteStreamRecord(key);await removeCacheFile(await cacheStore('readonly',s=>s.get(key)));await removeCacheFile(await cacheStore('readonly',s=>s.get(key+':pending')));await cacheStore('readwrite',s=>s.delete(key+':pending'));await cacheStore('readwrite',store=>store.delete(key));$('cache-status').textContent='本课程缓存已清除';}catch(error){$('cache-status').textContent=error.message;}};
 
   function seekCached(time) {
     const video=localPlayback?.video;if(!video || !Number.isFinite(video.duration) || video.duration<=0)return;
@@ -975,6 +991,86 @@
     $('cache-time').textContent=`${Math.floor(video.currentTime/60)}:${String(Math.floor(video.currentTime%60)).padStart(2,'0')} / ${Number.isFinite(duration)?Math.floor(duration/60)+' 分钟':'载入中'} · ← / → 跳转 10 秒`;
   }
 
+
+  let streamSession=null,streamOpening=null,streamTarget=0,streamStarting=false;
+  const clockTime=t=>{t=Math.max(0,Math.floor(t));return Math.floor(t/60)+':'+String(t%60).padStart(2,'0');};
+  function dropStream(){const session=streamSession;streamSession=null;session?.cache.close();session?.unlock?.();$('stream-play').hidden=true;$('stream-status').textContent='';}
+  async function deleteStreamRecord(key){
+    const record=await cacheStore('readonly',s=>s.get('stream:'+key));if(!record)return;
+    const names=new Set(Object.values(record.parts||{}).map(p=>p.name));
+    // Also reclaim a block whose write completed just before a tab crash, before manifest commit.
+    for await(const [name,handle] of record.directory.entries())if(handle.kind==='file' && name.startsWith(record.id+'-') && /^\d+\.part$/.test(name.slice(record.id.length+1)))names.add(name);
+    for(const name of names){try{await record.directory.removeEntry(name);}catch(error){if(error.name!=='NotFoundError')throw error;}}
+    await cacheStore('readwrite',s=>s.delete('stream:'+key));
+  }
+  async function getStream(key,source){
+    if(streamSession?.key===key && streamSession.source===source)return streamSession;
+    if(streamSession){restoreOnline();dropStream();}
+    if(streamOpening)return streamOpening;
+    const wantedCourse=courseIdentity(location.hash);
+    streamOpening=new Promise((resolve,reject)=>{
+      const acquire=async lock=>{
+        if(!lock){reject(new Error('另一个标签页正在使用此课缓存，请先关闭它的缓存播放或任务页'));return;}
+        let unlock;const held=new Promise(r=>{unlock=r;});
+        try{
+          const cache=await ZYProgressive.openCache({source,
+            load:()=>cacheStore('readonly',s=>s.get('stream:'+key)),
+            save:r=>cacheStore('readwrite',s=>s.put({...r,complete:r.total>0 && Object.keys(r.parts).length===Math.ceil(r.total/r.blockSize)},'stream:'+key)),
+            directory:cacheDirectory,checkSpace:checkCacheSpace,
+            request:(url,options)=>downloadVideo(GM_xmlhttpRequest,url,options),
+            onChange:state=>{
+              if(courseIdentity(location.hash)!==key)return;
+              const range=state.ranges.find(r=>r[0]<=streamTarget+.1 && r[1]>streamTarget);
+              const end=Math.min(state.duration,streamTarget+Number($('stream-minutes').value));
+              const ready=!!range && range[1]>=end-.05;
+              $('stream-play').hidden=!ready;
+              $('stream-play').textContent=`✓ ${clockTime(streamTarget)}–${clockTime(end)} 已就绪 · 开始观看`;
+              const label=state.ranges.map(r=>clockTime(r[0])+'–'+clockTime(r[1])).join('，') || '正在读取音视频时间索引';
+              $('stream-status').textContent='已保存范围：'+label+(ready?' ✓':'')+(range?`；按当前倍速可看约 ${Math.floor((range[1]-streamTarget)/Math.max(.25,mainVideo?.playbackRate||1)/60)} 分钟`:'');
+              $('cache-status').textContent=`${state.complete?'完整缓存已就绪':'正在分块保存'} ${(state.bytes/1048576).toFixed(1)} / ${(state.total/1048576).toFixed(1)} MB`;
+            }
+          });
+          if(courseIdentity(location.hash)!==wantedCourse){cache.close();unlock();throw new Error('课程已切换');}
+          streamSession={key,source,cache,unlock};resolve(streamSession);await held;
+        }catch(error){unlock();reject(error);}
+      };
+      if(!navigator.locks){reject(new Error('此浏览器缺少安全的分块缓存锁，请使用新版 Chrome / Edge'));return;}
+      navigator.locks.request('zhiyun-cache:'+key,{ifAvailable:true},acquire).catch(reject);
+    });
+    try{return await streamOpening;}finally{streamOpening=null;}
+  }
+  async function startStreamDownload(key,source){
+    const controller=new AbortController();cacheAbort=controller;$('cache-download').textContent='停止下载（保留分块）';
+    streamTarget=$('stream-from').value==='current'?(mainVideo?.currentTime||0):0;
+    try{
+      const session=await getStream(key,source);if(controller.signal.aborted)return;
+      session.cache.resume();controller.signal.addEventListener('abort',()=>session.cache.pause(),{once:true});
+      await session.cache.prepare(streamTarget,Number($('stream-minutes').value));
+      await session.cache.download();
+    }catch(error){if(key===courseIdentity(location.hash))$('cache-status').textContent=controller.signal.aborted?'下载已停止，完成的分块已保留，可继续观看已缓存范围。':error.message+'；可关闭“边缓存边播放”使用完整缓存。';}
+    finally{if(cacheAbort===controller){cacheAbort=null;$('cache-download').textContent='缓存 / 继续下载';}}
+  }
+  async function playStream(time=streamTarget,paused=false){
+    const session=streamSession,video=mainVideo;if(!session || !video || streamStarting)return;
+    if(localPlayback?.stream && localPlayback.video===video){video.currentTime=time;if(!paused)video.play().catch(()=>{});return;}
+    if(localPlayback)restoreOnline();cancelAlignment?.();
+    const saved={video,src:video.getAttribute('src'),controls:video.controls,rate:video.playbackRate};
+    const epoch=++cacheEpoch;streamStarting=true;
+    try{
+      const playback=await session.cache.play(video,{time,paused,rate:saved.rate,
+        onAttach:playback=>{if(streamSession!==session || epoch!==cacheEpoch)throw new Error('播放已取消');localPlayback={...saved,url:playback.url,stream:true,cleanup:playback.dispose};},
+        onStatus:message=>{if(streamSession===session)$('cache-source').textContent=message;},
+        onError:error=>{if(streamSession===session)$('cache-status').textContent=error.message;}
+      });
+      if(streamSession!==session || mainVideo!==video || epoch!==cacheEpoch){playback.dispose();return;}
+      localPlayback={...saved,url:playback.url,stream:true,cleanup:playback.dispose};video.controls=true;
+      $('cache-source').textContent='当前：磁盘分块播放（后续内容继续缓存）';
+    }catch(error){if(epoch===cacheEpoch){if(localPlayback?.stream)restoreOnline();else{video.src=saved.src||'';video.load();}$('cache-status').textContent='分段播放失败：'+error.message;}}
+    finally{streamStarting=false;}
+  }
+  $('stream-play').onclick=()=>{preferOnline=false;playStream();};
+  $('stream-minutes').onchange=()=>streamSession?.cache.refresh();
+  $('stream-from').onchange=()=>{streamTarget=$('stream-from').value==='current'?(mainVideo?.currentTime||0):0;streamSession?.cache.refresh();};
   // Catalog entries stay in site storage; signed media URLs are never shown in the list.
   const batchSelection=new Set(), suppressedCourses=new Set();
   let observedCourse='',observedSource='',observedSince=0,rememberedPair='';
@@ -1025,9 +1121,11 @@
   }
   async function removeBatchEntry(key,erase) {
     if(batchRunning || cacheAbort)throw new Error('请先停止下载，再管理课程');
+    if(erase && streamSession?.key===key){restoreOnline();dropStream();}
     const remove=async()=>{
       if(erase) {
         if(key===courseIdentity(location.hash)){preferOnline=true;restoreOnline();}
+        await deleteStreamRecord(key);
         await removeCacheFile(await cacheStore('readonly',s=>s.get(key)));
         await removeCacheFile(await cacheStore('readonly',s=>s.get(key+':pending')));
         await cacheStore('readwrite',s=>s.delete(key));await cacheStore('readwrite',s=>s.delete(key+':pending'));
@@ -1240,7 +1338,7 @@
   });
   function tick() {
     if (route !== courseIdentity(location.hash)) {
-      cacheAbort?.abort();restoreOnline();autoChecked='';preferOnline=false;cancelAlignment?.(); closeSlides(); slideUrls=[];
+      cacheAbort?.abort();restoreOnline();dropStream();autoChecked='';preferOnline=false;cancelAlignment?.(); closeSlides(); slideUrls=[];
       translator.reset(); stopTranslation('课程已切换，请按需重新开启翻译');
       route = courseIdentity(location.hash); collected.clear(); cues = []; dirty = true;
       releaseVideo(); loadOffset();
