@@ -1,0 +1,52 @@
+const fs=require('node:fs');
+const assert=require('node:assert/strict');
+const {chromium}=require(process.env.PLAYWRIGHT_MODULE||'playwright');
+(async()=>{
+ const browser=await chromium.launch({headless:true,executablePath:process.env.PLAYWRIGHT_EXECUTABLE_PATH||'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe'});
+ try{
+  const page=await browser.newPage({viewport:{width:1440,height:900}}),errors=[];
+  page.on('pageerror',error=>errors.push(error.message));
+  await page.setContent('<style>body{margin:0;background:#e8edf4;font-family:Segoe UI,sans-serif}.course{margin:60px;width:880px;height:520px;border-radius:24px;background:#fffdf7;padding:40px;box-sizing:border-box}.course p{color:#6d8096}.slide{margin-top:55px;border-left:5px solid #f5d158;padding-left:28px;color:#234970}h1{font-size:40px}small{letter-spacing:3px;color:#7b91ac}</style><main class="course"><small>COURSE / 08</small><div class="slide"><h1>把复杂的问题，<br>想明白。</h1><p>数据结构 · 从理解开始</p></div></main><div id="host"></div>');
+  const script=fs.readFileSync('zhiyun-subtitles.user.js','utf8'),base=script.match(/shadow\.innerHTML = `([\s\S]*?)`;\s*document\.body\.append\(host\)/)?.[1];
+  assert.ok(base,'base userscript markup exists');
+  await page.evaluate(markup=>{const shadow=document.getElementById('host').attachShadow({mode:'open'});shadow.innerHTML=markup;window.baseIds=[...shadow.querySelectorAll('[id]')].map(e=>e.id);},base);
+  await page.addScriptTag({content:fs.readFileSync('study-ui.js','utf8')});
+  await page.evaluate(mascot=>window.study=ZYStudyUI.mount({shadow:document.getElementById('host').shadowRoot,mascot}),`data:image/png;base64,${fs.readFileSync('assets/study-eagle.png').toString('base64')}`);
+  const ui=page.locator('#host');
+  const preserved=await page.evaluate(()=>{const shadow=document.getElementById('host').shadowRoot;return{lost:baseIds.filter(id=>!shadow.getElementById(id)),duplicates:[...shadow.querySelectorAll('[id]')].map(e=>e.id).filter((id,i,a)=>a.indexOf(id)!==i)};});
+  assert.deepEqual(preserved,{lost:[],duplicates:[]},'all existing handlers retain unique DOM targets');
+  assert.equal(await ui.locator('#panel-head h3').textContent(),'浙大上课爽');
+  assert.equal(await ui.locator('#panel-head .subtitle').textContent(),'网课不硬扛，浙大上课爽！');
+  await page.evaluate(()=>study.feedback('请先加载课堂 PPT'));assert.ok(await ui.locator('#study-feedback').isVisible());await page.evaluate(()=>study.feedback(''));assert.ok(await ui.locator('#study-feedback').isHidden());
+  const panel=await ui.locator('#panel').boundingBox();assert.ok(panel.height>=200&&panel.height<=330,`default panel is compact (${panel.height}px)`);
+  assert.equal(await ui.locator('#panel button:visible').count(),7,'only essential actions appear by default');
+  assert.ok(await ui.locator('#auto-align').isHidden());assert.ok(await ui.locator('#cache-download').isHidden());
+  assert.ok(await ui.locator('#ai-open').isVisible());assert.ok(await ui.locator('#show-slides').isVisible());
+  await ui.locator('#mode').selectOption('both');assert.equal(await ui.locator('#mode').inputValue(),'both');
+  await page.screenshot({path:'simple-ui-preview.png'});
+  await ui.locator('#settings-open').click();
+  await ui.locator('[data-settings=sync]').click();assert.ok(await ui.locator('#auto-align').isVisible());
+  await ui.locator('[data-settings=layout]').click();assert.ok(await ui.locator('#reset-ppt').isVisible());assert.ok(await ui.locator('#edit-layout').isVisible());
+  await ui.locator('[data-settings=storage]').click();assert.ok(await ui.locator('#cache-auto').isVisible());assert.ok(await ui.locator('#cache-progressive').isVisible());
+  await ui.locator('[data-settings=translation]').click();assert.ok(await ui.locator('#placement').isVisible());
+  // Keyboard navigation across tabs and a real focus trap in the modal.
+  await ui.locator('[data-settings=translation]').focus();await page.keyboard.press('ArrowRight');assert.equal(await ui.locator('[data-settings=layout]').getAttribute('aria-selected'),'true');
+  await ui.locator('#settings-close').focus();await page.keyboard.press('Shift+Tab');
+  assert.ok(await page.evaluate(()=>document.getElementById('host').shadowRoot.activeElement.id!=='settings-close'));
+  await page.keyboard.press('Escape');assert.ok(await ui.locator('#settings-dialog').isHidden());
+  assert.ok(await ui.locator('#settings-open').evaluate(e=>e===e.getRootNode().activeElement));
+  await ui.locator('#study-cache > summary').click();assert.ok(await ui.locator('#cache-download').isVisible());
+  await ui.locator('#settings-shortcut').click();assert.equal(await ui.locator('[data-settings=storage]').getAttribute('aria-selected'),'true');await ui.locator('#settings-close').click();
+  await ui.locator('#cache-details > summary').click();assert.ok(await ui.locator('#cache-clear').isVisible());
+  await ui.locator('#study-cache > summary').click();
+  await page.setViewportSize({width:360,height:760});
+  const mobile=await ui.locator('#panel').boundingBox();assert.ok(mobile.x>=0&&mobile.x+mobile.width<=360&&mobile.height<=330);
+  const overflow=await ui.locator('#panel-head').evaluate(e=>e.scrollWidth>e.clientWidth);assert.equal(overflow,false,'small screens retain all header actions');
+  await ui.locator('#settings-open').click();await ui.locator('[data-settings=sync]').click();
+  const settings=await ui.locator('#settings-card').boundingBox();assert.ok(settings.x>=0&&settings.x+settings.width<=360);
+  await page.waitForTimeout(250);assert.equal(await ui.locator('[data-settings=sync]').evaluate(e=>getComputedStyle(e).backgroundColor),'rgb(33, 93, 161)');
+  await page.screenshot({path:'simple-ui-mobile-preview.png'});
+  assert.deepEqual(errors,[]);
+  console.log(`PASS: compact ${panel.height}px main panel, all original IDs, accessible settings, cache drawer, mobile layout.`);
+ }finally{await browser.close();}
+})().catch(e=>{console.error(e);process.exit(1);});

@@ -1,0 +1,17 @@
+const assert=require('node:assert/strict');
+const fs=require('node:fs');
+const source=fs.readFileSync('zhiyun-subtitles.user.js','utf8');
+const metadata=source.match(/^\/\/ ==UserScript==[\s\S]*?\/\/ ==\/UserScript==/)[0]+'\n';
+assert.equal(fs.readFileSync('zhiyun-subtitles.meta.js','utf8'),metadata,'Published update metadata must match the installable script');
+const field=name=>metadata.match(new RegExp('^// @'+name+'\\s+(.+)$','m'))?.[1].trim();
+assert.equal(field('name'),'浙大上课爽');
+assert.equal(field('version'),JSON.parse(fs.readFileSync('package.json','utf8')).version);
+assert.equal(field('namespace'),'zhiyunzimu.local');
+assert.equal(field('updateURL'),'https://raw.githubusercontent.com/FILAgiao/zhiyun-subtitles/main/zhiyun-subtitles.meta.js');
+assert.equal(field('downloadURL'),'https://raw.githubusercontent.com/FILAgiao/zhiyun-subtitles/main/zhiyun-subtitles.user.js');
+assert.match(field('description'),/网课不硬扛，浙大上课爽！/);
+assert.ok(!/^\/\/ @require\s/m.test(metadata),'Release must include its modules without remote code dependencies');
+for(const file of ['progressive-cache.bundle.js','cache-storage.js','study-ui.js','player-interactions.js','ai-learning.js'])assert.ok(source.includes(fs.readFileSync(file,'utf8')),file+' needs rebuilding');
+assert.equal(source.split('// BEGIN BUNDLED LEARNING MODULES').length,2);
+assert.equal(source.split('// END BUNDLED LEARNING MODULES').length,2);
+console.log('PASS: release name, version, update/download URLs, metadata and bundled modules agree.');

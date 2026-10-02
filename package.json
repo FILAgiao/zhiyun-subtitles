@@ -1,14 +1,18 @@
 {
   "name": "zhiyun-subtitles",
-  "version": "0.15.0",
+  "version": "0.17.0",
   "private": true,
-  "description": "智云课堂伴读字幕、豆包翻译与 PPT 悬浮窗",
+  "description": "浙大上课爽：网课不硬扛，浙大上课爽！同步字幕、PPT 讲解与本机缓存。",
   "scripts": {
-    "test": "node --test subtitle.test.cjs",
-    "test:ui": "node ui.test.cjs",
+    "test": "node --test subtitle.test.cjs translation-sync.test.cjs cache-close.test.cjs ai-learning.test.cjs",
+    "test:ui": "node ui.test.cjs && node playback-ui.test.cjs && node player-edge-ui.test.cjs && node translation-sync-ui.test.cjs && node course-route-ui.test.cjs && node ai-learning-ui.test.cjs && node simple-ui.test.cjs",
     "build:stream": "node build-stream.cjs",
     "test:media": "node generate-test-media.cjs",
-    "test:stream": "node progressive.test.cjs && node progressive.test.cjs .test-media/tail.mp4 && node progressive-ui.test.cjs"
+    "test:stream": "node progressive.test.cjs && node progressive.test.cjs .test-media/tail.mp4 && node progressive-ui.test.cjs",
+    "test:cache": "node cache-flow.test.cjs && node cache-source-race.test.cjs",
+    "build": "node build-stream.cjs && node build-userscript.cjs",
+    "test:release": "node release.test.cjs",
+    "test:storage": "node chrome-cache.test.cjs && node cache-storage-ui.test.cjs"
   },
   "engines": {
     "node": ">=20.8"

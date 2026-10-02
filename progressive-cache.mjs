@@ -8,12 +8,16 @@ function lower(samples,time){let a=0,b=samples.length;while(a<b){const m=(a+b)>>
 // HTTP, storage permission and course identity remain in the userscript adapter.
 export async function openCache({source,load,save,directory,request,checkSpace=async()=>{},onChange=()=>{},blockSize=2*MiB}) {
   let record=await load();
-  if(!record)record={kind:'stream-v1',id:crypto.randomUUID(),blockSize,parts:{},total:0,validator:null,directory:await directory()};
+  if(!record)record={kind:'stream-v1',id:crypto.randomUUID(),blockSize,parts:{},total:0,validator:null};
   if(record.kind!=='stream-v1')throw new Error('分段缓存版本不兼容，请删除后重新缓存');
-  const dir=record.directory;blockSize=record.blockSize;
-  let stopped=false,closed=false,validated=false,working=false,network=new AbortController(),parser=null,tracks=[],segments=[],duration=0,inits=[],playback=null;
-  const pending=new Map(),queue=[],readCache=new Map();
-  const notify=()=>onChange({bytes:Object.values(record.parts).reduce((n,p)=>n+p.size,0),total:record.total,duration,ranges:ranges(),complete:complete()});
+  const dir=await directory(record);blockSize=record.blockSize;
+  let stopped=false,closed=false,validated=false,working=false,network=new AbortController(),parser=null,tracks=[],segments=[],duration=0,inits=[],playback=null,phase='index',targetBlocks=null,targetFrom=0,targetEnd=0;
+  const pending=new Map(),queue=[],readCache=new Map(),idleWaiters=[];
+  const notify=()=>{const bytes=Object.values(record.parts).reduce((n,p)=>n+p.size,0);
+    const total=targetBlocks?[...targetBlocks].reduce((n,b)=>n+Math.min(blockSize,record.total-b*blockSize),0):record.total;
+    const saved=targetBlocks?[...targetBlocks].reduce((n,b)=>n+(record.parts[b]?.size||0),0):bytes;
+    onChange({bytes,total:record.total,duration,ranges:ranges(),complete:complete(),stopped,phase,progress:{bytes:saved,total,from:targetFrom,end:targetEnd}});
+  };
   const complete=()=>record.total>0 && Object.keys(record.parts).length===Math.ceil(record.total/blockSize);
   async function persist(){await save(record);notify();}
   async function disk(n){const part=record.parts[n];if(!part)return null;try{const f=await(await dir.getFileHandle(part.name)).getFile();if(f.size===part.size)return f;}catch(error){if(error.name!=='NotFoundError')throw error;}delete record.parts[n];await persist();return null;}
@@ -22,7 +26,7 @@ export async function openCache({source,load,save,directory,request,checkSpace=a
     if(stopped || closed)throw abortError();
     const first=await request(source,{signal:network.signal,limit:blockSize,range:{start:0,end:blockSize-1}});
     if(record.total && (record.total!==first.total || !record.validator || /^W\//.test(record.validator) || !first.validator || record.validator!==first.validator))throw new Error('源文件无法核验或已改变，请删除此课分段缓存再重新下载；旧块未被混用');
-    await checkSpace(Math.max(0,first.total-Object.values(record.parts).reduce((n,p)=>n+p.size,0)));
+    await checkSpace(Math.max(0,first.total-Object.values(record.parts).reduce((n,p)=>n+p.size,0)),record);
     record.total=first.total;record.validator=first.validator || null;validated=true;
     if(!await disk(0))await commit(0,first.blob);
   }
@@ -41,7 +45,7 @@ export async function openCache({source,load,save,directory,request,checkSpace=a
           await commit(task.n,part.blob);file=await disk(task.n);
         }task.resolve(file);
       }catch(error){stopped=true;network.abort();task.reject(error);}finally{pending.delete(task.n);}
-    }}finally{working=false;}
+    }}finally{working=false;idleWaiters.splice(0).forEach(resolve=>resolve());}
   }
   async function block(n,priority=2){
     const cached=await disk(n);if(cached)return cached;
@@ -102,8 +106,8 @@ export async function openCache({source,load,save,directory,request,checkSpace=a
   }
   function available(segment){return segment.blocks.every(n=>record.parts[n]);}
   function ranges(){const out=[];for(const s of segments){if(!available(s))continue;const last=out.at(-1);if(last && s.start<=last[1]+.1)last[1]=s.end;else out.push([s.start,s.end]);}return out;}
-  async function prepare(from,seconds){await index();const end=Math.min(duration,from+seconds),needed=new Set();for(const s of segments){if(s.end<=from || s.start>=end)continue;for(const n of s.blocks)needed.add(n);}for(const n of needed)await block(n,3);notify();return end;}
-  async function download(){await index();for(let n=0;n<Math.ceil(record.total/blockSize);n++){if(stopped||closed)throw abortError();await block(n,0);}notify();}
+  async function prepare(from,seconds){phase='index';targetBlocks=null;notify();await index();from=Math.max(0,Math.min(duration,from));const end=Math.min(duration,from+seconds),needed=new Set();for(const s of segments){if(s.end<=from || s.start>=end)continue;for(const n of s.blocks)needed.add(n);}phase='prepare';targetBlocks=needed;targetFrom=from;targetEnd=end;notify();for(const n of needed)await block(n,3);phase='ready';notify();return end;}
+  async function download(){await index();phase='download';targetBlocks=null;notify();for(let n=0;n<Math.ceil(record.total/blockSize);n++){if(stopped||closed)throw abortError();await block(n,0);}phase='complete';notify();}
   async function fragment(segment){
     const buffers=[];
     // Only one GOP's sample bytes are held; disk keeps the rest, including rewind history.
@@ -118,7 +122,7 @@ export async function openCache({source,load,save,directory,request,checkSpace=a
   async function play(video,{time=0,paused=false,rate=1,onStatus=()=>{},onError=()=>{},onAttach=()=>{}}={}){
     await index();playback?.dispose();
     const media=new MediaSource(),url=URL.createObjectURL(media),sourceBuffers=new Map();let disposed=false,busy=false,epoch=0,wanted=time,initial=true,timer,readyTimer,rejectReady;
-    const appended=new Set(),listeners=[];
+    const appended=new Set(),listeners=[],fillWaiters=[];let disposal=null;
     const listen=(target,event,fn)=>{target.addEventListener(event,fn);listeners.push(()=>target.removeEventListener(event,fn));};
     const update=(sb,operation)=>new Promise((resolve,reject)=>{
       if(disposed){reject(abortError());return;}
@@ -148,7 +152,7 @@ export async function openCache({source,load,save,directory,request,checkSpace=a
         }
         if(!disposed && media.readyState==='open' && appended.has(segments.length-1) && ![...sourceBuffers.values()].some(sb=>sb.updating))media.endOfStream();
         if(!disposed)onStatus('正在播放磁盘分块；后续内容继续缓存');
-      }catch(error){if(!disposed)onError(error);}finally{busy=false;}
+      }catch(error){if(!disposed)onError(error);}finally{busy=false;fillWaiters.splice(0).forEach(resolve=>resolve());}
     }
     const ready=new Promise((resolve,reject)=>{rejectReady=reject;readyTimer=setTimeout(()=>reject(new Error('播放器初始化超时，请切回在线来源')),15000);
       const open=async()=>{media.removeEventListener('sourceopen',open);try{media.duration=duration;
@@ -160,10 +164,10 @@ export async function openCache({source,load,save,directory,request,checkSpace=a
     ready.catch(()=>{}); // Disposal may happen before the caller starts awaiting initialization.
     listen(video,'seeking',()=>{if(initial)return;epoch++;fill();});
     listen(video,'error',()=>onError(new Error('浏览器未能解码此视频片段，请切回在线来源')));
-    const dispose=()=>{if(disposed)return;disposed=true;epoch++;clearTimeout(readyTimer);rejectReady?.(abortError());clearInterval(timer);listeners.forEach(fn=>fn());for(const sb of sourceBuffers.values()){try{if(sb.updating)sb.abort();}catch{}}URL.revokeObjectURL(url);};
+    const dispose=()=>{if(disposed)return disposal;disposed=true;epoch++;clearTimeout(readyTimer);rejectReady?.(abortError());clearInterval(timer);listeners.forEach(fn=>fn());for(const sb of sourceBuffers.values()){try{if(sb.updating)sb.abort();}catch{}}URL.revokeObjectURL(url);disposal=busy?new Promise(resolve=>fillWaiters.push(resolve)):Promise.resolve();return disposal;};
     playback={dispose,url};try{onAttach(playback);}catch(error){dispose();throw error;}video.src=url;video.load();timer=setInterval(fill,750);try{await ready;return playback;}catch(error){dispose();throw error;}
   }
-  function close(){closed=true;pause();playback?.dispose();parser=null;tracks=[];segments=[];inits=[];readCache.clear();}
+  async function close(){closed=true;pause();const disposed=playback?.dispose();if(working)await new Promise(resolve=>idleWaiters.push(resolve));await disposed;parser=null;tracks=[];segments=[];inits=[];readCache.clear();}
   // Recheck committed files after reload before advertising their time ranges.
   for(const n of Object.keys(record.parts))await disk(n);
   return {record,index,prepare,download,play,pause,resume,close,ranges,complete,refresh:notify,get duration(){return duration;}};
