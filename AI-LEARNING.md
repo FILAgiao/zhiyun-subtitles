@@ -38,13 +38,13 @@ learning = globalThis.ZhiyunLearning.mountLearningAssistant({
 
 ## 行为
 
-当前 PPT 讲解、中键词语解释、选区截图、粘贴截图均复用翻译 API Key。设置提供费曼、专业、复习、自定义四种模式。图片截图在用户选择后等待发送；“讲解本页”和中键则直接发起讲解。默认使用费曼大白话，打开即可直接问，不要求先配置模式。模式可以在面板切换。知识卡仅在有回答后出现，避免空对话先展示无效按钮；翻页上下文状态仅在开启后显示。
+当前 PPT 讲解、框选/粘贴截图和多轮对话使用已登录账号。设置提供费曼、专业、复习、自定义四种模式。中键只启动页面截图；框选预览后点击发送才上传。“讲解本页”会直接发起讲解。知识卡在回答后出现，翻页上下文状态仅在开启后显示。
 
-字幕层保持 pointer-events:none。中键使用字幕文本 Range 做坐标命中，左键继续穿透至播放器。取词范围限定为课件、平台字幕、右侧字幕列表和带 data-zy-ai-text 标记的课程区域，不会在普通设置文案上触发付费请求。图片里的文字应使用框选解释。
+字幕层保持 pointer-events:none，左键继续穿透至播放器。中键在页面空白、课程内容及插件界面中直接启动截图；链接、输入框和带修饰键的中键保留浏览器操作。图片中文字由视觉模型理解，选中文字仍可右键“问插件”。
 
 自动翻页上下文默认关闭。打开后只在本页内记住最近两页，在下次用户提问时附上；不会因翻页发起后台模型请求。连续追问保留最近四轮文字和最近两张问题附图，切课或“新对话”会清空。
 
-截图优先框选当前 PPT；没有 PPT 时尝试从当前视频帧取图。跨域图片先尝试 canvas，再通过 GM 请求受支持的浙大课堂图片域名读取。无权限或浏览器拒绝读图时明确提示截图后粘贴。不启用麦克风，不调用桌面共享，不后台截屏。浏览器 GET 图片读取受 userscript 的 @connect 权限约束。
+截图使用用户手势直接调用 getDisplayMedia，由浏览器要求选择当前标签页，不先打开或放大 PPT。采集当前画面后立即停止所有共享轨道，再在本地框选预览，只有点击发送才上传。浏览器不支持或用户取消时提示系统截图后粘贴。没有后台截图，也不采集麦克风。讲解本页读取课件时仍使用限定域名的 GM 图片请求。
 
 ## 请求与预算
 
@@ -67,12 +67,12 @@ node ai-learning-ui.test.cjs
 
 10 项 Node 测试已通过：请求字段、预算、模式、历史截断、响应解析、Key 隔离、错误不泄露、取消及词语提取。
 
-Chrome 交互回归已通过：文字对话、切模式、PPT 图片、多轮图片、框选与发送、翻页无后台请求、中键课程词语、字幕中键且左键穿透、非课程文案不请求、取消、切课、无 Key、全屏和纯文本安全渲染。全部网络为 mock，未使用真实 Key，未验证账户额度和指定模型的实际开通状态。
+Chrome 交互回归已通过：文字对话、切模式、PPT 图片、多轮图片、框选与发送、翻页无后台请求、页面与字幕中键截图且左键穿透、非课程文案不请求、取消、切课、无 Key、全屏和纯文本安全渲染。全部网络为 mock，未使用真实 Key，未验证账户额度和指定模型的实际开通状态。
 
 ## 核对的官方资料
 
 - [Responses API 输入项与图像格式](https://docs.volcengine.com/docs/ark/get-response-context-api?lang=zh)：input_image、image_url 字符串及 Base64 data URL，system/user/assistant 消息角色。
-- [流式输出及响应样例](https://docs.volcengine.com/docs/ark/streaming-output?lang=zh)：output 数组里的 message / output_text。当前实现选择非流式以避免半截 SSE 文本污染对话。
+- [流式输出及响应样例](https://docs.volcengine.com/docs/ark/streaming-output?lang=zh)：output 数组里的 message / output_text。AI 实现 HTTP SSE，逐步显示 output_text.delta，只有 response.completed 才把完整回答加入历史；翻译保留 JSON。
 - [Response 生命周期与 store 状态](https://docs.volcengine.com/docs/ark/response-lifecycle?lang=zh)：completed/incomplete/failed 以及 store 字段。
 
 后续语音方案可用独立 ASR + 当前文字讲解模型 + TTS。实时打断、边听边答则需额外接入实时语音对话服务；本次实现聚焦文字链路，不默认开通语音产品。

@@ -1,0 +1,31 @@
+{
+  "installer": {
+    "version": "0.19.1",
+    "script_matches_build": true,
+    "update_metadata_matches": true
+  },
+  "guest_speech": {
+    "logged_in": false,
+    "audio_seconds": 12,
+    "utterances": 2,
+    "seconds": 6.19,
+    "recognized_known_phrase": true
+  },
+  "screenshot_stream": {
+    "http": 200,
+    "first_text_seconds": 4.56,
+    "completed_seconds": 5.22,
+    "delta_events": 21,
+    "answer_characters": 37,
+    "usage_recorded": true
+  },
+  "verified_at": "2026-10-09 Asia/Shanghai",
+  "browser_ai": {
+    "real_login": true,
+    "two_turns": true,
+    "history_retained": true,
+    "text_visible_before_completion": true,
+    "waiting_feedback_visible": true,
+    "page_errors": 0
+  }
+}

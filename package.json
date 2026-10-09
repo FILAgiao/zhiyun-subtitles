@@ -1,6 +1,6 @@
 {
   "name": "zhiyun-subtitles",
-  "version": "0.17.0",
+  "version": "0.19.1",
   "private": true,
   "description": "浙大上课爽：网课不硬扛，浙大上课爽！同步字幕、PPT 讲解与本机缓存。",
   "scripts": {
@@ -12,7 +12,10 @@
     "test:cache": "node cache-flow.test.cjs && node cache-source-race.test.cjs",
     "build": "node build-stream.cjs && node build-userscript.cjs",
     "test:release": "node release.test.cjs",
-    "test:storage": "node chrome-cache.test.cjs && node cache-storage-ui.test.cjs"
+    "test:storage": "node chrome-cache.test.cjs && node cache-storage-ui.test.cjs",
+    "test:gateway": "python -m unittest backend.test_server -v && node --test gateway-client.test.cjs",
+    "start:backend": "python backend/server.py serve",
+    "test:gateway:ui": "node gateway-ui.test.cjs && node backend-ui.test.cjs && node ai-actions-ui.test.cjs"
   },
   "engines": {
     "node": ">=20.8"

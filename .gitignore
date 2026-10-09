@@ -13,3 +13,17 @@ start-asr.cmd
 test_asr_bridge.py
 .testdeps/
 .test-media/
+
+backend/data/
+*.sqlite3
+*.sqlite3-wal
+*.sqlite3-shm
+!backend/.env.example
+backend/.known_hosts
+backend/.bootstrap-account.json
+
+backend/.test-account.json
+
+# Generated direct-server installer and update metadata
+backend/install.user.js
+backend/install.meta.js

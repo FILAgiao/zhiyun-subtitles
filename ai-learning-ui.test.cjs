@@ -11,7 +11,7 @@ const {chromium}=require(process.env.PLAYWRIGHT_MODULE||'playwright');
   const canvas=document.createElement('canvas');canvas.width=960;canvas.height=540;const ctx=canvas.getContext('2d');ctx.fillStyle='#ffefcc';ctx.fillRect(0,0,960,540);ctx.fillStyle='#18334c';ctx.font='40px sans-serif';ctx.fillText('Polymorphism / virtual methods',45,100);
   window.slide={url:'https://interactivemeta.cmc.zju.edu.cn/ppt/1.jpg',index:0,time:20,dataUrl:canvas.toDataURL('image/png')};
   window.calls=[];window.answers=0;window.abortCount=0;window.delay=5;window.saved={};window.key='fake-test-key';
-  window.assistant=ZhiyunLearning.mountLearningAssistant({shadow,getCourseTitle:()=> '程序设计 · 多态与继承',getSlide:()=>window.slide,getContext:()=> '本课程：程序设计；当前字幕：虚函数可以实现多态。',getApiKey:()=>window.key,getValue:(k,d)=>saved[k]||d,setValue:(k,v)=>saved[k]=v,request:o=>{
+  Object.defineProperty(navigator,'mediaDevices',{value:{getDisplayMedia:async()=>{const stream=canvas.captureStream(10);setInterval(()=>canvas.getContext('2d').fillRect(0,0,1,1),50);return stream;}},configurable:true});window.assistant=ZhiyunLearning.mountLearningAssistant({shadow,getCourseTitle:()=> '程序设计 · 多态与继承',getSlide:()=>window.slide,getContext:()=> '本课程：程序设计；当前字幕：虚函数可以实现多态。',getApiKey:()=>window.key,getValue:(k,d)=>saved[k]||d,setValue:(k,v)=>saved[k]=v,request:o=>{
    calls.push(JSON.parse(o.data));const timer=setTimeout(()=>{answers++;o.onload({status:200,responseText:JSON.stringify({output:[{type:'message',content:[{type:'output_text',text:'多态让同一个调用呈现不同实现。<img src=x onerror=alert(1)> #'+answers}]}]})});},window.delay);return{abort(){abortCount++;clearTimeout(timer);o.onabort?.();}};
   }});
  });
@@ -28,11 +28,11 @@ const {chromium}=require(process.env.PLAYWRIGHT_MODULE||'playwright');
  const size=await page.evaluate(src=>new Promise(resolve=>{const i=new Image();i.onload=()=>resolve([i.width,i.height]);i.src=src;}),image);assert.ok(size[0]<960&&size[1]<540);assert.match(await page.evaluate(()=>calls[4].input[0].content),/考点/);
  await page.evaluate(()=>{const inputs=document.getElementById('host').shadowRoot.querySelectorAll('.ai-settings input[type=checkbox]');inputs[1].checked=true;inputs[1].dispatchEvent(new Event('change'));slide={...slide,url:'https://interactivemeta.cmc.zju.edu.cn/ppt/2.jpg',index:1};assistant.notifySlide(slide);});
  assert.equal(await page.evaluate(()=>calls.length),5);await host.locator('#ai-question').fill('比较这两页');await host.locator('#ai-send').click();await page.waitForFunction(()=>answers===6);assert.equal(await page.evaluate(()=>calls[5].input.at(-1).content.filter(c=>c.type==='input_image').length),2);
- await host.locator('#ai-close').click();await page.locator('#course-word').click({button:'middle'});await page.waitForFunction(()=>answers===7);assert.match(await page.evaluate(()=>calls[6].input.at(-1).content[0].text),/polymorphism/);
+ await host.locator('#ai-close').click();await page.locator('#course-word').click({button:'middle'});await host.locator('#ai-crop-whole').click();await host.locator('#ai-question').fill('请解释 polymorphism');await host.locator('#ai-send').click();await page.waitForFunction(()=>answers===7);assert.match(await page.evaluate(()=>calls[6].input.at(-1).content[0].text),/polymorphism/);
  await page.evaluate(()=>window.delay=1000);await host.locator('#ai-question').fill('一个慢请求');await host.locator('#ai-send').click();await host.locator('#ai-stop').click();assert.equal(await page.evaluate(()=>abortCount),1);
  await host.locator('#ai-question').fill('切课前的问题');await host.locator('#ai-send').click();await page.evaluate(()=>assistant.resetCourse());assert.equal(await page.evaluate(()=>abortCount),2);assert.equal(await host.locator('#ai-save-card').isDisabled(),true);assert.equal(await host.locator('#ai-question').inputValue(),'');
  await page.waitForTimeout(1100);assert.equal(await page.evaluate(()=>answers),7);assert.equal(await host.locator('#ai-log .ai-message').count(),1);
- await page.evaluate(()=>{window.key='';});await host.locator('#ai-question').fill('无 Key');await host.locator('#ai-send').click();assert.match(await host.locator('#ai-status').textContent(),/API Key/);assert.equal(await page.evaluate(()=>calls.length),9);
+ await page.evaluate(()=>{window.key='';});await host.locator('#ai-question').fill('无 Key');await host.locator('#ai-send').click();assert.match(await host.locator('#ai-status').textContent(),/登录/);assert.equal(await page.evaluate(()=>calls.length),9);
  await page.evaluate(()=>document.documentElement.requestFullscreen());await page.waitForTimeout(100);assert.equal(await host.locator('#ai-learning').isVisible(),true);await page.evaluate(()=>document.exitFullscreen());
 
  // Caption hit testing preserves left-click pass-through while reading middle-click text.
@@ -45,8 +45,8 @@ const {chromium}=require(process.env.PLAYWRIGHT_MODULE||'playwright');
  const captionBox=await host.locator('#original').boundingBox();
  await page.mouse.click(captionBox.x+10,captionBox.y+10);assert.equal(await page.evaluate(()=>leftPassed),true);
  const beforeCaption=await page.evaluate(()=>calls.length);
- await page.locator('#settings-copy').click({button:'middle'});assert.equal(await page.evaluate(()=>calls.length),beforeCaption);
- await page.mouse.click(captionBox.x+10,captionBox.y+10,{button:'middle'});await page.waitForFunction(()=>answers===8);
+ await page.locator('#settings-copy').click({button:'middle'});await host.locator('#ai-crop-cancel').click();assert.equal(await page.evaluate(()=>calls.length),beforeCaption);
+ await page.mouse.click(captionBox.x+10,captionBox.y+10,{button:'middle'});await host.locator('#ai-crop-whole').click();await host.locator('#ai-question').fill('请解释 inheritance');await host.locator('#ai-send').click();await page.waitForFunction(()=>answers===8);
  assert.match(await page.evaluate(()=>calls.at(-1).input.at(-1).content[0].text),/inheritance/);
  assert.equal(await host.locator('#caption').evaluate(e=>getComputedStyle(e).pointerEvents),'none');
 

@@ -4,7 +4,7 @@ const ai=require('./ai-learning.js');
 const image='data:image/png;base64,aGVsbG8=';
 test('Responses input is bounded, follows chosen mode and sends data images only',()=>{
  const b=ai.makeBody({question:'解释变量',context:'老师正在讲编译器',images:[image,image,image,image,'https://bad.test/x?token=secret'],settings:{mode:'technical'}});
- assert.equal(b.model,'doubao-seed-2-1-lite-260915');assert.equal(b.stream,false);assert.equal(b.store,false);assert.match(b.input[0].content,/术语/);
+ assert.equal(b.model,'doubao-seed-2-1-lite-260915');assert.equal(b.stream,true);assert.equal(b.store,false);assert.match(b.input[0].content,/术语/);
  assert.match(b.input.at(-1).content[0].text,/编译器/);assert.equal(b.input.at(-1).content.filter(c=>c.type==='input_image').length,3);
  assert.equal(JSON.stringify(b).includes('secret'),false);assert.equal(b.tools,undefined);
 });
@@ -31,7 +31,7 @@ test('Errors never echo server body or credentials',async()=>{
 test('Abort request, ignore late callback; precancelled and missing key make no request',async()=>{
  const c=new AbortController();let options,aborted=0;const result=ai.requestResponse(o=>{options=o;return{abort(){aborted++;}};},{},'key',c.signal);
  c.abort();options.onload({status:200,responseText:'{}'});await assert.rejects(result,e=>e.name==='AbortError');assert.equal(aborted,1);
- let calls=0;await assert.rejects(ai.requestResponse(()=>calls++,{},'key',c.signal),e=>e.name==='AbortError');await assert.rejects(ai.requestResponse(()=>calls++,{},''),/API Key/);assert.equal(calls,0);
+ let calls=0;await assert.rejects(ai.requestResponse(()=>calls++,{},'key',c.signal),e=>e.name==='AbortError');await assert.rejects(ai.requestResponse(()=>calls++,{},''),/登录/);assert.equal(calls,0);
 });
 test('Middle-click word extraction does not capture blank space',()=>{assert.equal(ai.wordAt('hello polymorphism world',11),'polymorphism');assert.equal(ai.wordAt('a b',1),'');assert.equal(ai.wordAt('value_type',4),'value_type');});
 
@@ -44,3 +44,32 @@ test('Knowledge card wraps text within available width and truncates long answer
  const result=ai.wrapCardText(ctx,'大学课堂知识点'.repeat(60),100,4);
  assert.equal(result.lines.length,4);assert.equal(result.truncated,true);assert.ok(result.lines.every(s=>ctx.measureText(s).width<=100));assert.match(result.lines.at(-1),/…$/);
 });
+
+function event(data){return 'data: '+JSON.stringify(data)+'\n\n';}
+test('SSE displays partial text before completion and ignores reasoning',async()=>{
+ let o;const seen=[];const c=new AbortController();const p=ai.requestResponse(opts=>{o=opts;return{abort(){}};},{},'secret',c.signal,t=>seen.push(t));
+ const first=event({type:'response.reasoning_summary_text.delta',delta:'hidden'})+event({type:'response.output_text.delta',delta:'你'});
+ o.onprogress({responseText:first.slice(0,-1)});assert.deepEqual(seen,[]);
+ o.onprogress({responseText:first});assert.deepEqual(seen,['你']);o.onprogress({responseText:first});assert.deepEqual(seen,['你']);
+ const raw=first+event({type:'response.output_text.delta',delta:'好'})+event({type:'response.completed',response:{status:'completed',output:[{type:'message',content:[{type:'output_text',text:'你好'}]}]}});
+ o.onprogress({responseText:raw});assert.deepEqual(seen,['你','你好']);o.onload({status:200,responseText:raw});assert.equal(await p,'你好');
+});
+test('SSE disconnect and explicit errors terminate with useful feedback',async()=>{
+ for(const suffix of ['',event({type:'error',message:'服务暂时不可用'})]){
+  await assert.rejects(ai.requestResponse(o=>{queueMicrotask(()=>o.onload({status:200,responseText:event({type:'response.output_text.delta',delta:'partial'})+suffix}));return{};},{},'key'),/中断|不可用/);
+ }
+});
+
+test('readable stream transport renders a delta before final callback',async()=>{
+ let o,controller;const seen=[];const stream=new ReadableStream({start(c){controller=c;}});const encode=x=>new TextEncoder().encode(event(x));
+ const p=ai.requestResponse(opts=>{o=opts;return{abort(){}};},{},'key',new AbortController().signal,t=>seen.push(t));assert.equal(o.responseType,'stream');o.onloadstart({status:200,response:stream});
+ controller.enqueue(encode({type:'response.output_text.delta',delta:'实时'}));await new Promise(r=>setImmediate(r));assert.deepEqual(seen,['实时']);
+ o.onload({status:200,response:stream});controller.enqueue(encode({type:'response.completed',response:{status:'completed',output:[{type:'message',content:[{type:'output_text',text:'实时'}]}]}}));controller.close();assert.equal(await p,'实时');
+});
+test('readable stream handles JSON errors and abort without waiting for onload',async()=>{
+ const stream=new ReadableStream({start(c){c.enqueue(new TextEncoder().encode('{"error":"模型未开通"}'));c.close();}});
+ await assert.rejects(ai.requestResponse(o=>{queueMicrotask(()=>o.onloadstart({status:400,response:stream}));return{abort(){}};},{},'key'),/模型未开通/);
+ let o,cancelled=false;const c=new AbortController(),pending=new ReadableStream({cancel(){cancelled=true;}});const p=ai.requestResponse(opts=>{o=opts;return{abort(){}};},{},'key',c.signal);o.onloadstart({status:200,response:pending});c.abort();await assert.rejects(p,e=>e.name==='AbortError');assert.equal(cancelled,true);
+});
+
+test('Interactive Seed 2 learning avoids spending the answer budget on hidden reasoning',()=>{assert.deepEqual(ai.makeBody({question:'hello'}).reasoning,{effort:'minimal'});assert.equal(ai.makeBody({settings:{model:'custom-model'},question:'hello'}).reasoning,undefined);});

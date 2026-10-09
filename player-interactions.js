@@ -48,10 +48,10 @@ function mount({shadow,host,getVideo,getLocal,getCues,getCourse,getClock,getSeek
   const index=cues.findIndex(c=>c.start<=time&&c.end>time),start=following?Math.max(0,index-20):0;
   // A bounded moving window in follow mode, full loaded list in browse mode.
   const shown=following?cues.slice(start,start+80):cues;
-  const sig=JSON.stringify([getCourse(),$('mode').value,following,start,shown.map(c=>[c.start,c.original,$('mode').value==='both'?translate(c):''])]);
+  const sig=JSON.stringify([getCourse(),$('mode').value,following,start,shown.map(c=>[c.start,getSeekTime(c.start),c.original,$('mode').value==='both'?translate(c):''])]);
   const list=$('transcript-list');
   if(sig!==signature){signature=sig;const old=list.scrollTop;list.replaceChildren();if(!shown.length)list.textContent='请先打开课堂右侧“语音识别”，加载字幕后会显示在这里。';
-   for(const c of shown){const b=document.createElement('button');b.className='transcript-cue';b.dataset.time=c.start;const t=document.createElement('small');t.textContent=new Date(Math.max(0,c.start)*1000).toISOString().slice(11,19);b.append(t,document.createTextNode(c.original));if($('mode').value==='both'){const tr=document.createElement('em');tr.textContent=translate(c);b.append(tr);}b.onclick=()=>seek(getSeekTime(c.start));list.append(b);}list.scrollTop=old;
+   for(const c of shown){const b=document.createElement('button');b.className='transcript-cue';b.dataset.time=c.start;const t=document.createElement('small');t.textContent=new Date(Math.max(0,getSeekTime(c.start))*1000).toISOString().slice(11,23).replace(/\.000$/,'');b.append(t,document.createTextNode(c.original));if($('mode').value==='both'){const tr=document.createElement('em');tr.textContent=translate(c);b.append(tr);}b.onclick=()=>seek(getSeekTime(c.start));list.append(b);}list.scrollTop=old;
   }
   const cue=cues[index];for(const b of list.children)b.setAttribute('aria-current',String(cue&&Number(b.dataset.time)===cue.start));
   if(following&&cue!==lastCue)list.querySelector('[aria-current="true"]')?.scrollIntoView({block:'nearest'});lastCue=cue;

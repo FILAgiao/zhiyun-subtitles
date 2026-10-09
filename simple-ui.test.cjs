@@ -25,7 +25,7 @@ const {chromium}=require(process.env.PLAYWRIGHT_MODULE||'playwright');
   await ui.locator('#mode').selectOption('both');assert.equal(await ui.locator('#mode').inputValue(),'both');
   await page.screenshot({path:'simple-ui-preview.png'});
   await ui.locator('#settings-open').click();
-  await ui.locator('[data-settings=sync]').click();assert.ok(await ui.locator('#auto-align').isVisible());
+  await ui.locator('[data-settings=sync]').click();assert.ok(await ui.locator('#auto-sync').isVisible());
   await ui.locator('[data-settings=layout]').click();assert.ok(await ui.locator('#reset-ppt').isVisible());assert.ok(await ui.locator('#edit-layout').isVisible());
   await ui.locator('[data-settings=storage]').click();assert.ok(await ui.locator('#cache-auto').isVisible());assert.ok(await ui.locator('#cache-progressive').isVisible());
   await ui.locator('[data-settings=translation]').click();assert.ok(await ui.locator('#placement').isVisible());
