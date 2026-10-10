@@ -16,7 +16,7 @@ const {chromium}=require('playwright');
    const controller=new AbortController();active.set(packet.id,controller);
    if(packet.url.endsWith('/ark/responses')){
     paid++;const body=JSON.parse(packet.data);
-    if(paid===2)historyVerified=body.input.some(i=>i.role==='user'&&typeof i.content==='string'&&i.content.includes('37'))&&body.input.some(i=>i.role==='assistant');
+    if(paid===2)historyVerified=body.input.some(i=>i.role==='user'&&typeof i.content==='string'&&i.content.includes('特征向量'))&&body.input.some(i=>i.role==='assistant');
    }
    try{
     console.log('REQUEST',packet.id,packet.url.split('/').pop(),!!packet.stream);const response=await fetch(packet.url,{method:packet.method,headers:packet.headers,body:packet.data,signal:controller.signal});
@@ -45,12 +45,12 @@ const {chromium}=require('playwright');
    const s=document.getElementById('zy-subtitle-host').shadowRoot;
    new MutationObserver(()=>{if(s.getElementById('ai-learning').getAttribute('aria-busy')==='true'&&s.querySelector('.ai-stream-text')?.textContent)sawPartialWhileBusy=true;if(s.getElementById('ai-status').textContent.includes('已等待'))sawWaitingFeedback=true;}).observe(s.getElementById('ai-learning'),{childList:true,subtree:true,characterData:true,attributes:true});
   });
-  await ui.locator('#ai-open').click();await ui.locator('#ai-question').fill('请记住这个数字：37。只回复已记住。');await ui.locator('#ai-send').click();
+  await ui.locator('#ai-open').click();await ui.locator('#ai-question').fill('我正在学习特征向量，请用一句话介绍这个概念。');await ui.locator('#ai-send').click();
   await page.waitForFunction(()=>document.getElementById('zy-subtitle-host').shadowRoot.querySelector('.ai-stream-text')?.textContent&&document.getElementById('zy-subtitle-host').shadowRoot.getElementById('ai-learning').getAttribute('aria-busy')==='false',null,{timeout:120000});
   assert.equal(await page.evaluate(()=>sawPartialWhileBusy),true);
-  await ui.locator('#ai-question').fill('刚才的数字是多少？只回复数字。');await ui.locator('#ai-send').click();
+  await ui.locator('#ai-question').fill('我们刚才讨论的数学概念叫什么？只回复概念名称。');await ui.locator('#ai-send').click();
   await page.waitForFunction(()=>{const s=document.getElementById('zy-subtitle-host').shadowRoot;return s.querySelectorAll('.ai-stream-text').length===2&&s.getElementById('ai-learning').getAttribute('aria-busy')==='false';},null,{timeout:120000});
-  assert.match(await ui.locator('.ai-stream-text').last().textContent(),/37/);assert.equal(historyVerified,true);assert.equal(paid,2);assert.deepEqual(errors,[]);
+  assert.match(await ui.locator('.ai-stream-text').last().textContent(),/特征向量/);assert.equal(historyVerified,true);assert.equal(paid,2);assert.deepEqual(errors,[]);
   const result={real_login:true,two_turns:true,history_retained:true,text_visible_before_completion:await page.evaluate(()=>sawPartialWhileBusy),waiting_feedback_visible:await page.evaluate(()=>sawWaitingFeedback),page_errors:0};
   const reportPath='backend/acceptance-'+JSON.parse(fs.readFileSync('package.json','utf8')).version.replaceAll('.','')+'.json';const report=fs.existsSync(reportPath)?JSON.parse(fs.readFileSync(reportPath,'utf8')):{version:JSON.parse(fs.readFileSync('package.json','utf8')).version};report.browser_ai=result;fs.writeFileSync(reportPath,JSON.stringify(report,null,2)+'\n');
   console.log('PASS: real browser login, live readable-stream text, waiting feedback and two-turn conversation.',JSON.stringify(result));
