@@ -1,11 +1,13 @@
 """Explicit deployment acceptance: synthetic preview image and generated speech only."""
-import base64, io, json, sys, time, urllib.error, urllib.request, uuid, wave
+import base64, datetime, io, json, sys, time, urllib.error, urllib.request, uuid, wave
 from pathlib import Path
 sys.stdout.reconfigure(encoding='utf-8')
 ROOT=Path(__file__).resolve().parent.parent
 origin=json.loads((ROOT/'gateway.config.json').read_text(encoding='utf-8'))['url']
 headers={'Content-Type':'application/json','X-App-Id':'zhiyun-subtitles','X-Client-Type':'userscript'}
-report={}
+version=json.loads((ROOT/'package.json').read_text(encoding='utf-8'))['version']
+report_path=ROOT/('backend/acceptance-'+version.replace('.','')+'.json')
+report=json.loads(report_path.read_text(encoding='utf-8')) if report_path.exists() else {'version':version}
 def request(path,body=None,extra=None):
     return urllib.request.urlopen(urllib.request.Request(origin+path,None if body is None else json.dumps(body).encode(),{**headers,**(extra or {})},method='GET' if body is None else 'POST'),timeout=120)
 def status(path):
@@ -17,8 +19,8 @@ with request('/health') as r:
 with request('/install.user.js') as r:
     installed=r.read();expected=(ROOT/'backend/install.user.js').read_bytes();assert installed==expected
 with request('/install.meta.js') as r:
-    metadata=r.read();assert metadata==(ROOT/'backend/install.meta.js').read_bytes();assert b'0.19.1' in metadata
-report['installer']={'version':'0.19.1','script_matches_build':True,'update_metadata_matches':True}
+    metadata=r.read();assert metadata==(ROOT/'backend/install.meta.js').read_bytes();assert version.encode() in metadata
+report['installer']={'version':version,'script_matches_build':True,'update_metadata_matches':True}
 assert status('/v1/me')==401
 try:
     request('/v1/ark/responses',{'model':'doubao-seed-2-1-lite-260915','input':[{'role':'user','content':'test'}]})
@@ -76,6 +78,6 @@ try:
     print('PASS: real screenshot answer streamed before completion; usage returned.',flush=True)
 finally:
     with request('/v1/auth/logout',{},auth) as r:r.read()
-report['verified_at']='2026-10-09 Asia/Shanghai'
-(ROOT/'backend/acceptance-0191.json').write_text(json.dumps(report,ensure_ascii=False,indent=2)+'\n',encoding='utf-8')
+report['verified_at']=datetime.datetime.now(datetime.timezone(datetime.timedelta(hours=8))).strftime('%Y-%m-%d Asia/Shanghai')
+report_path.write_text(json.dumps(report,ensure_ascii=False,indent=2)+'\n',encoding='utf-8')
 print(json.dumps(report,ensure_ascii=False,indent=2),flush=True)

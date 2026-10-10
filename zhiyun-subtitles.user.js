@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         浙大上课爽
 // @namespace    zhiyunzimu.local
-// @version      0.19.1
+// @version      0.19.2
 // @description  网课不硬扛，浙大上课爽！智云课堂同步字幕、PPT 讲解与本机缓存。
 // @match        https://interactivemeta.cmc.zju.edu.cn/*
 // @grant        GM_xmlhttpRequest
@@ -302,27 +302,48 @@ if(typeof module!=='undefined'&&module.exports)module.exports={isEditing};else r
     return {model:s.model,stream:true,store:false,max_output_tokens:2200,...(s.model.startsWith('doubao-seed-2-')?{reasoning:{effort:'minimal'}}:{}),input:[{role:'system',content:instruction},...trimHistory(history),{role:'user',content}],...(s.webSearch?{tools:[{type:'web_search',max_keyword:3}]}:{})};
   }
   function abortError(){const e=new Error('已停止本次讲解');e.name='AbortError';return e;}
-  function requestResponse(request,body,key,signal,onText=()=>{}) {
+  function requestResponse(request,body,key,signal,onText=()=>{},onTransport=()=>{}) {
     return new Promise((resolve,reject)=>{
       if(!key?.trim()){reject(new Error('请先登录账号，解锁 AI 讲解。'));return;}
-      let handle,settled=false,timer,position=0,answer='',complete=null,reading=false,reader=null;
-      const finish=(error,value)=>{if(settled)return;settled=true;clearTimeout(timer);signal?.removeEventListener('abort',abort);error?reject(error):resolve(value);};
-      const abort=()=>{finish(abortError());reader?.cancel().catch(()=>{});handle?.abort?.();};
-      const consume=(raw,final=false)=>{if(typeof raw!=='string'||!/^\s*(event:|data:|:)/.test(raw))return false;const tail=raw.slice(position),blocks=tail.split(/\r?\n\r?\n/);if(!final)blocks.pop();for(const block of blocks){position+=block.length+(raw.slice(position+block.length,position+block.length+4)==='\r\n\r\n'?4:2);const data=block.split(/\r?\n/).filter(l=>l.startsWith('data:')).map(l=>l.slice(5).trimStart()).join('\n');if(!data||data==='[DONE]')continue;const event=JSON.parse(data);if(event.type==='response.output_text.delta'){answer+=event.delta||'';onText(answer);}else if(event.type==='response.completed'){complete=event.response;}else if(['error','response.failed','response.incomplete'].includes(event.type))throw Error(cardText(event.error?.message||event.message||'模型回答中断，请重试。',key).slice(0,200));}return true;};
+      let handle,settled=false,timer,firstTimer,position=0,answer='',reading=false,reader=null;
+      const finish=(error,value)=>{if(settled)return;settled=true;clearTimeout(timer);clearTimeout(firstTimer);signal?.removeEventListener('abort',abort);error?reject(error):resolve(value);};
+      const cancel=()=>{reader?.cancel().catch(()=>{});handle?.abort?.();};
+      const abort=()=>{finish(abortError());cancel();};
+      const completed=response=>{const text=textOfResponse(response);if(!answer)onText(text);finish(null,text);};
+      const consume=(raw,final=false)=>{
+        if(typeof raw!=='string'||!/^\s*(event:|data:|:)/.test(raw))return false;
+        const blocks=raw.slice(position).split(/\r?\n\r?\n/);if(!final)blocks.pop();
+        for(const block of blocks){
+          if(settled)break;
+          position+=block.length+(raw.slice(position+block.length,position+block.length+4)==='\r\n\r\n'?4:2);
+          const data=block.split(/\r?\n/).filter(l=>l.startsWith('data:')).map(l=>l.slice(5).trimStart()).join('\n');if(!data||data==='[DONE]')continue;
+          const event=JSON.parse(data);
+          if(event.type==='response.output_text.delta'){clearTimeout(firstTimer);answer+=event.delta||'';onText(answer);}
+          else if(event.type==='response.completed')completed(event.response);
+          else if(['error','response.failed','response.incomplete'].includes(event.type))throw Error(cardText(event.error?.message||event.message||'模型回答中断，请重试。',key).slice(0,200));
+        }
+        return true;
+      };
       const loaded=r=>{
-            if(settled)return;
-            if(r.status<200 || r.status>=300){let detail='';try{const e=JSON.parse(r.responseText).error;detail=typeof e==='string'?e:e?.message||'';}catch(_){}detail=cardText(detail,key).slice(0,200);finish(new Error(r.status===401?'登录已失效，请重新登录账号。':detail||(r.status===403?'当前账号无权使用此模型，请联系管理员。':r.status===429?'请求过于频繁或额度不足，请稍后重试。':'讲解请求失败（HTTP '+(Number(r.status)||0)+'），请稍后重试。')));return;}
-            try {if(consume(r.responseText,true)){if(!complete)throw Error('回复连接中断，已保留收到的文字，请重试。');finish(null,textOfResponse(complete));}else finish(null,textOfResponse(JSON.parse(r.responseText)));}catch(e){finish(e instanceof SyntaxError?new Error('模型响应格式异常，请重试。'):e);}
-          };
-      const readStream=async r=>{if(reading||!r.response?.getReader)return;reading=true;reader=r.response.getReader();let raw='';const decoder=new TextDecoder();try{while(!settled){const chunk=await reader.read();if(chunk.done)break;raw+=typeof chunk.value==='string'?chunk.value:decoder.decode(chunk.value,{stream:true});if(raw.length>8000000)throw Error('回复内容过大，请缩短问题重试。');consume(raw);}raw+=decoder.decode();if(!settled)loaded({status:r.status,responseText:raw});}catch(e){if(!settled)finish(new Error(e.message||'回复连接中断，请重试。'));handle?.abort?.();}finally{reader.releaseLock();}};
+        if(settled)return;
+        const raw=typeof r.responseText==='string'?r.responseText:typeof r.response==='string'?r.response:'';
+        if(Number(r.status)>=400){let detail='';try{const e=JSON.parse(raw).error;detail=typeof e==='string'?e:e?.message||'';}catch(_){}detail=cardText(detail,key).slice(0,200);finish(new Error(r.status===401?'登录已失效，请重新登录账号。':detail||(r.status===403?'当前账号无权使用此模型，请联系管理员。':r.status===429?'请求过于频繁或额度不足，请稍后重试。':'讲解请求失败（HTTP '+(Number(r.status)||0)+'），请稍后重试。')));return;}
+        try{if(consume(raw,true)){if(!settled)throw Error('回复连接中断，已保留收到的文字，请重试。');}else if(!raw)throw Error('未能读取回复流。请更新油猴和本脚本后重试。');else completed(JSON.parse(raw));}
+        catch(e){finish(e instanceof SyntaxError?new Error('模型响应格式异常，请重试。'):e);}
+      };
+      const readStream=async r=>{
+        if(settled||reading||!r.response?.getReader)return;
+        reading=true;onTransport('connected');let raw='';const decoder=new TextDecoder();
+        try{reader=r.response.getReader();while(!settled){const chunk=await reader.read();if(chunk.done)break;raw+=typeof chunk.value==='string'?chunk.value:decoder.decode(chunk.value,{stream:true});if(raw.length>8000000)throw Error('回复内容过大，请缩短问题重试。');consume(raw);}if(!settled){raw+=decoder.decode();loaded({status:r.status,responseText:raw});}}
+        catch(e){if(!settled)finish(new Error(e.message||'回复连接中断，请重试。'));handle?.abort?.();}
+        finally{reader?.releaseLock();}
+      };
+      const observe=r=>{if(settled)return;try{if(r.response?.getReader){readStream(r);return;}if(Number(r.status)>=200)onTransport('connected');consume(r.responseText);}catch(e){finish(e);cancel();}};
       if(signal?.aborted){abort();return;}signal?.addEventListener('abort',abort,{once:true});
-      timer=setTimeout(()=>{finish(new Error('讲解超过 120 秒，请重试或缩短问题。'));reader?.cancel().catch(()=>{});handle?.abort?.();},120000);
-      try {
-        handle=request({method:'POST',url:ENDPOINT,anonymous:true,responseType:'stream',timeout:120000,headers:{Authorization:'Bearer '+key.trim(),'Content-Type':'application/json',Accept:'text/event-stream'},data:JSON.stringify(body),
-          onprogress:r=>{if(settled)return;try{consume(r.responseText);}catch(e){finish(e);handle?.abort?.();}},
-          onloadstart:r=>{if(r.response?.getReader)readStream(r);},
-          onload:r=>{if(r.response?.getReader&&!reading)readStream(r);else if(!reading)loaded(r);},onerror:()=>finish(new Error('无法连接 AI 服务，请检查网络后重试。')),ontimeout:()=>finish(new Error('讲解超过 120 秒，请重试或缩短问题。')),onabort:()=>finish(abortError())});
-      }catch(_){finish(new Error('未能发出讲解请求，请刷新课堂页面后重试。'));}
+      firstTimer=setTimeout(()=>{finish(new Error('45 秒仍未收到正文，已停止等待。请更新脚本后重试；也可联系管理员检查模型服务。'));cancel();},45000);
+      timer=setTimeout(()=>{finish(new Error('讲解超过 120 秒，已停止。请缩短问题后重试。'));cancel();},120000);
+      try{handle=request({method:'POST',url:ENDPOINT,anonymous:true,fetch:true,responseType:'stream',timeout:120000,headers:{Authorization:'Bearer '+key.trim(),'Content-Type':'application/json',Accept:'text/event-stream'},data:JSON.stringify(body),onloadstart:observe,onprogress:observe,onreadystatechange:observe,onload:r=>{if(r.response?.getReader&&!reading)readStream(r);else if(!reading)loaded(r);},onerror:()=>finish(new Error('无法连接 AI 服务，请检查网络后重试。')),ontimeout:()=>finish(new Error('讲解超过 120 秒，请重试或缩短问题。')),onabort:()=>finish(abortError())});}
+      catch(_){finish(new Error('未能发出讲解请求，请刷新课堂页面后重试。'));}
     });
   }
   function wordAt(text,offset) {
@@ -381,7 +402,7 @@ if(typeof module!=='undefined'&&module.exports)module.exports={isEditing};else r
     const {shadow,request,getApiKey=()=>'',prepareSlide=()=>{},getSlide=()=>null,getContext=()=>'',getCourseTitle=()=>'',getCaptureTarget=()=>null,getValue=(_,d)=>d,setValue=()=>{},onRequireLogin=()=>{},onOpenSettings=()=>{}}=options;
     if(!shadow || typeof request!=='function')throw new Error('AI 助手缺少 shadow 或 request');
     const doc=shadow.ownerDocument,win=doc.defaultView;
-    let settings=settingsOf(getValue(STORAGE_KEY,DEFAULTS)),history=[],lastAnswer=null,conversationImages=[],recentSlides=[],lastSlideKey='',pendingImage=null,controller=null,destroyed=false,cleanupCapture=null,requestSerial=0;
+    let settings=settingsOf(getValue(STORAGE_KEY,DEFAULTS)),history=[],lastAnswer=null,conversationImages=[],recentSlides=[],lastSlideKey='',pendingImage=null,controller=null,destroyed=false,cleanupCapture=null,requestSerial=0,slideContextEnabled=settings.followSlides,captureStream=null,captureVideo=null,capturePersistent=false;
     const cleanups=[];
     function listen(el,event,fn,opts){el?.addEventListener(event,fn,opts);cleanups.push(()=>el?.removeEventListener(event,fn,opts));}
     function make(tag,props={}){const el=doc.createElement(tag);for(const [k,v] of Object.entries(props)){if(k==='text')el.textContent=v;else if(k==='class')el.className=v;else el.setAttribute(k,v);}return el;}
@@ -391,13 +412,14 @@ if(typeof module!=='undefined'&&module.exports)module.exports={isEditing};else r
       '.ai-head{display:flex;align-items:center;gap:8px;padding:15px;background:linear-gradient(120deg,#edf4ff,#fff5ce)}.ai-head strong{font-size:16px;flex:1}.ai-toolbar{display:flex;flex-wrap:wrap;gap:7px;padding:10px 14px;border-bottom:1px solid #e2e9e3}#ai-mode{max-width:none;flex:1;min-width:140px}#ai-log{padding:14px;overflow:auto;flex:1;min-height:80px;user-select:text}.ai-message{white-space:pre-wrap;overflow-wrap:anywhere;padding:10px 12px;border-radius:14px;background:#ecf2f0;margin:0 0 10px}.ai-message[data-role=user]{margin-left:26px;background:#daeef0}.ai-message[data-role=assistant]{margin-right:10px}.ai-message small{display:block;font-size:10px;opacity:.6;margin-bottom:5px}.ai-message img{max-width:100%;max-height:120px;object-fit:contain;border-radius:8px;margin-top:8px}',
       '.ai-card-row{padding:0 14px 9px;display:flex;align-items:center;gap:8px}#ai-status{font-size:12px;color:#527067;padding:4px 14px;min-height:26px}#ai-context-badge{font-size:11px;color:#627973;padding:0 14px 8px}#ai-compose{padding:10px 14px 14px;border-top:1px solid #e2e9e3}#ai-question{display:block;width:100%;max-width:none;min-height:66px;max-height:140px;resize:vertical;border:1px solid #ceded8;border-radius:12px;padding:9px;background:white;color:#213e43;font:inherit}#ai-compose .ai-actions{display:flex;gap:6px;margin-top:8px;align-items:center}#ai-send{background:#1768ae!important;color:white!important;margin-left:auto}#ai-attachment{display:flex;align-items:center;gap:8px;margin-bottom:8px}#ai-attachment img{height:54px;max-width:130px;object-fit:contain;border:1px solid #cbd9d2;border-radius:6px}#ai-attachment[hidden]{display:none!important}',
       '.ai-settings{display:grid;gap:12px}.ai-settings label{display:flex;gap:8px;align-items:center}.ai-settings label.ai-stack{display:grid;gap:5px}.ai-settings input[type=text],.ai-settings textarea{width:100%;max-width:none;font:inherit;padding:8px;border:1px solid #d1dfd7;border-radius:8px}.ai-settings textarea{min-height:90px;resize:vertical}.ai-settings p{margin:0;color:#55716b;font-size:12px}#ai-crop{position:fixed;inset:0;background:#071519ed;z-index:100;pointer-events:auto;display:flex;align-items:center;justify-content:center;flex-direction:column;padding:70px 20px 35px;color:#fff}#ai-crop .ai-crop-head{position:absolute;left:20px;right:20px;top:16px;display:flex;align-items:center;gap:10px;flex-wrap:wrap}#ai-crop .ai-crop-head strong{flex:1}#ai-crop-stage{position:relative;max-width:100%;max-height:100%;line-height:0;touch-action:none;cursor:crosshair}#ai-crop-image{display:block;max-width:calc(100vw - 40px);max-height:calc(100dvh - 120px);object-fit:contain}#ai-crop-selection{position:absolute;border:2px solid #ffe781;background:#ffe78125;pointer-events:none;display:none}.ai-hint{font-size:11px;color:#6e817a}#ai-learning :focus-visible{outline:3px solid #79abb6;outline-offset:2px}@media(max-width:600px){#ai-learning{right:10px;top:48px;height:calc(100dvh - 66px)}}'
+      ,'#ai-crop{padding:0;background:transparent;display:block}#ai-crop-stage{position:absolute;inset:0;max-width:none;max-height:none}#ai-crop-image{width:100vw;height:100dvh;max-width:none;max-height:none;object-fit:fill}#ai-crop-selection{box-shadow:0 0 0 9999px #07151970;background:transparent}#ai-crop .ai-crop-head{left:16px;right:16px;top:auto;bottom:16px;padding:12px;background:#173b43;border-radius:12px;z-index:1;line-height:1.5}#ai-crop-question{flex:1;min-width:150px;font:inherit;padding:8px}#ai-crop button{padding:8px;cursor:pointer}#ai-crop-send{background:#ffe781;color:#173b43}#ai-capture-session{position:fixed;right:18px;top:48px;z-index:110;pointer-events:auto;background:#173b43;color:#fff;border-radius:10px;padding:8px;font:12px sans-serif;display:flex;gap:8px;align-items:center}#ai-capture-session[hidden]{display:none!important}'
     ].join('\n');shadow.append(style);
     const panel=make('section',{id:'ai-learning',role:'dialog','aria-label':'AI 讲解'});panel.hidden=true;
-    panel.innerHTML='<div class="ai-head"><strong>✦ AI 讲解</strong><button id="ai-settings-open" title="AI 设置" aria-label="AI 设置">⚙</button><button id="ai-close" aria-label="收起 AI 讲解">×</button></div><div class="ai-toolbar"><select id="ai-mode" aria-label="讲解模式"></select><button id="ai-slide-action">讲解本页</button><button id="ai-crop-action">框选提问</button></div><div id="ai-log" role="log" aria-label="课程对话" aria-live="polite"></div><div id="ai-status" role="status"></div><div id="ai-context-badge"></div><div id="ai-card-row" class="ai-card-row" hidden><button id="ai-save-card" type="button" disabled title="生成本地 PNG；不会自动发布到任何平台">↓ 保存知识卡</button><span class="ai-hint">本地 PNG · 自行分享</span></div><form id="ai-compose"><div id="ai-attachment" hidden><img alt="待发送的课程截图"><span>截图已就位</span><button type="button" id="ai-remove-image" aria-label="移除截图">×</button></div><textarea id="ai-question" maxlength="4000" placeholder="卡在哪儿了？直接问，也可以粘贴截图。" aria-label="向 AI 提问"></textarea><div class="ai-actions"><button id="ai-clear" type="button" title="清空本课程的对话和图片上下文">新对话</button><button id="ai-stop" type="button" hidden>停止</button><span class="ai-hint">Enter 发送 · Shift 换行</span><button id="ai-send" type="submit">发送 ↗</button></div></form>';
+    panel.innerHTML='<div class="ai-head"><strong>✦ AI 讲解</strong><button id="ai-settings-open" title="AI 设置" aria-label="AI 设置">⚙</button><button id="ai-close" aria-label="收起 AI 讲解">×</button></div><div class="ai-toolbar"><select id="ai-mode" aria-label="讲解模式"></select><button id="ai-slide-action">讲解本页</button><button id="ai-crop-action">框选提问</button><button id="ai-quick-capture" title="首次选择当前标签页，保持本地共享；关闭页面或停止共享后结束">开启连续截图</button></div><div id="ai-log" role="log" aria-label="课程对话" aria-live="polite"></div><div id="ai-status" role="status"></div><div id="ai-context-badge"></div><div id="ai-card-row" class="ai-card-row" hidden><button id="ai-save-card" type="button" disabled title="生成本地 PNG；不会自动发布到任何平台">↓ 保存知识卡</button><span class="ai-hint">本地 PNG · 自行分享</span></div><form id="ai-compose"><div id="ai-attachment" hidden><img alt="待发送的课程截图"><span>截图已就位</span><button type="button" id="ai-remove-image" aria-label="移除截图">×</button></div><textarea id="ai-question" maxlength="4000" placeholder="卡在哪儿了？直接问，也可以粘贴截图。" aria-label="向 AI 提问"></textarea><div class="ai-actions"><button id="ai-clear" type="button" title="清空本课程的对话和图片上下文">新对话</button><button id="ai-stop" type="button" hidden>停止</button><span class="ai-hint">Enter 发送 · Shift 换行</span><button id="ai-send" type="submit">发送 ↗</button></div></form>';
     shadow.append(panel);const $=id=>panel.querySelector('#'+id);
     for(const [value,item] of Object.entries(MODES))$('ai-mode').append(make('option',{value,text:item.label}));$('ai-mode').value=settings.mode;
     function status(message){$('ai-status').textContent=message;}
-    function badge(){$('ai-context-badge').textContent=settings.followSlides?'已记住最近 '+recentSlides.length+' 页 · 下次提问时一起看':'';$('ai-context-badge').hidden=!settings.followSlides;}
+    function badge(){$('ai-context-badge').textContent=settings.followSlides?'已记住最近 '+recentSlides.length+' 页 · 下次提问时一起看':'';$('ai-context-badge').hidden=!settings.followSlides||!slideContextEnabled;}
     function message(role,text,image){const item=make('div',{class:'ai-message','data-role':role});item.append(make('small',{text:role==='user'?'我':'AI 讲解'}),doc.createTextNode(text));if(image)item.append(make('img',{src:image,alt:'本次问题附图'}));$('ai-log').append(item);while($('ai-log').children.length>32)$('ai-log').firstChild.remove();$('ai-log').scrollTop=$('ai-log').scrollHeight;return item;}
     function greeting(){message('assistant','哪页卡住了？点「讲解本页」，或者直接问。');}
     function save(){setValue(STORAGE_KEY,{...settings});$('ai-mode').value=settings.mode;badge();}
@@ -407,7 +429,7 @@ if(typeof module!=='undefined'&&module.exports)module.exports={isEditing};else r
     function attach(src){pendingImage=src;$('ai-attachment').hidden=!src;$('ai-attachment').querySelector('img').src=src||'';}
     function notifySlide(slide=getSlide()) {
       if(!slide)return;const key=String(slide.url||slide.index||'');if(!key || key===lastSlideKey)return;lastSlideKey=key;
-      if(settings.followSlides){recentSlides=recentSlides.filter(s=>s.key!==key);recentSlides.push({url:slide.url,index:slide.index,time:slide.time,title:slide.title,dataUrl:slide.dataUrl,key});recentSlides=recentSlides.slice(-2);badge();}
+      if(settings.followSlides&&slideContextEnabled){recentSlides=recentSlides.filter(s=>s.key!==key);recentSlides.push({url:slide.url,index:slide.index,time:slide.time,title:slide.title,dataUrl:slide.dataUrl,key});recentSlides=recentSlides.slice(-2);badge();}
     }
     function slideLabel(slide){return slide?'PPT 第 '+(Number(slide.index||0)+1)+' 页'+(slide.title?' · '+String(slide.title).slice(0,180):'')+(Number.isFinite(slide.time)?'，课件时间 '+Math.round(slide.time)+' 秒':''):'';}
     async function blobToData(blob,signal){
@@ -442,20 +464,20 @@ if(typeof module!=='undefined'&&module.exports)module.exports={isEditing};else r
       question=String(question||'').trim();if(!question && !image && !pendingImage)return;if(controller)return;
       open();const currentKey=String(getApiKey()||'');if(!currentKey.trim()){status('请先登录账号，解锁 AI 讲解与截图问答。');onRequireLogin();return;}
       controller=new AbortController();const ownController=controller,signal=controller.signal,serial=++requestSerial;
-      const chosenSettings=settingsOf(settings),currentImage=image||pendingImage,currentSlide=slide||getSlide();let images=[],labels=[],warning='',reply=null,feedbackTimer=null;
+      const chosenSettings=settingsOf(settings),currentImage=image||pendingImage,currentSlide=slide||getSlide();let images=[],labels=[],warning='',reply=null,feedbackTimer=null,transportConnected=false;
       setBusy(true);status(slide?'正在读取本页 PPT…':'正在整理课程上下文…');
       try {
         notifySlide(currentSlide);
-        if(settings.followSlides && !currentImage){for(const s of recentSlides.filter(s=>s.url!==currentSlide?.url).slice(-1)){try{images.push(await slideImage(s,signal));labels.push(slideLabel(s));}catch(e){if(e.name==='AbortError')throw e;warning='上一页图片未读取，已使用其余课程上下文。';}}}
+        if(settings.followSlides && slideContextEnabled && !currentImage){for(const s of recentSlides.filter(s=>s.url!==currentSlide?.url).slice(-1)){try{images.push(await slideImage(s,signal));labels.push(slideLabel(s));}catch(e){if(e.name==='AbortError')throw e;warning='上一页图片未读取，已使用其余课程上下文。';}}}
         if(currentImage){images.push(currentImage);labels.push('用户选择的课程区域');}
-        else if(currentSlide && (slide||settings.followSlides)){images.push(await slideImage(currentSlide,signal));labels.push(slideLabel(currentSlide));}
+        else if(currentSlide && (slide||(settings.followSlides&&slideContextEnabled))){images.push(await slideImage(currentSlide,signal));labels.push(slideLabel(currentSlide));}
         else if(conversationImages.length){images=conversationImages.map(i=>i.data);labels=conversationImages.map(i=>i.label);}
         const context=[String(getContext()||''),labels.length?'附图依次为：'+labels.join('；'):currentImage?'附图是用户选择的课程区域。':''].filter(Boolean).join('\n');
         const body=makeBody({settings:chosenSettings,history,question,context,images});
         if(signal.aborted)throw abortError();
         message('user',question||'请解释这张截图。',currentImage||images.at(-1));$('ai-question').value='';attach(null);status('正在讲解，约需几秒钟…');
-        const began=Date.now();feedbackTimer=setInterval(()=>{if(!reply)status('AI 正在处理'+(images.length?'截图与':'')+'问题 · 已等待 '+Math.floor((Date.now()-began)/1000)+' 秒 · 可点击停止');},1000);
-        const answer=await requestResponse(request,body,currentKey,signal,text=>{if(destroyed||serial!==requestSerial)return;if(!reply){reply=message('assistant','');reply.append(make('span',{class:'ai-stream-text'}));}reply.querySelector('.ai-stream-text').textContent=text;status('正在回复…');$('ai-log').scrollTop=$('ai-log').scrollHeight;});
+        const began=Date.now();feedbackTimer=setInterval(()=>{if(!reply)status((transportConnected?'已连接 AI，正在生成'+(images.length?'截图回复':'回复'):'正在连接 AI 服务')+' · 已等待 '+Math.floor((Date.now()-began)/1000)+' 秒 · 可点击停止');},1000);
+        const answer=await requestResponse(request,body,currentKey,signal,text=>{if(destroyed||serial!==requestSerial)return;if(!reply){reply=message('assistant','');reply.append(make('span',{class:'ai-stream-text'}));}reply.querySelector('.ai-stream-text').textContent=text;status('正在回复…');$('ai-log').scrollTop=$('ai-log').scrollHeight;},()=>{transportConnected=true;});
         if(destroyed || serial!==requestSerial)return;
         conversationImages=images.map((data,i)=>({data,label:labels[i]||'上一轮问题附图'})).slice(-2);
         lastAnswer={text:answer,mode:MODES[chosenSettings.mode].label,course:String(getCourseTitle()||getContext()||'我的课堂知识卡').split('\n')[0].slice(0,100)};$('ai-save-card').disabled=false;$('ai-card-row').hidden=false;
@@ -463,36 +485,62 @@ if(typeof module!=='undefined'&&module.exports)module.exports={isEditing};else r
       }catch(e){if(!destroyed && serial===requestSerial){status(e.name==='AbortError'?'已停止。':e.message||'讲解暂时失败，请重试。');if(e.name!=='AbortError'){if(!$('ai-question').value)$('ai-question').value=question;if(currentImage)attach(currentImage);}}}
       finally{clearInterval(feedbackTimer);if(controller===ownController){controller=null;setBusy(false);}}
     }
-    async function explainSlide(){if(!String(getApiKey()||'').trim()){onRequireLogin();return;}await prepareSlide();const slide=getSlide();if(!slide){open();status('请先打开本课程的 PPT，再点击讲解本页。');return;}await send('请讲解当前这页 PPT，结合老师附近的字幕说明重点和我需要掌握的内容。',{slide:slide||{}});}
-    function clear(){lastAnswer=null;$('ai-save-card').disabled=true;$('ai-card-row').hidden=true;stop();cleanupCapture?.();panel.querySelector('#ai-question').value='';history=[];conversationImages=[];recentSlides=[];lastSlideKey='';$('ai-log').replaceChildren();attach(null);greeting();badge();status('已开始新对话。');}
-    async function startCapture(){
-      if(controller)return;if(!String(getApiKey()||'').trim()){open();status('请先登录账号，解锁截图问答。');onRequireLogin();return;}cleanupCapture?.();
-      if(!win.navigator.mediaDevices?.getDisplayMedia){open();status('此浏览器不支持页面截图，请使用系统截图并粘贴到提问框。');return;}
-      const captureController=new AbortController();controller=captureController;const serial=++requestSerial;setBusy(true);let stream;
-      try{
-        // Called directly from the click/middle-button gesture, before any await.
-        stream=await win.navigator.mediaDevices.getDisplayMedia({video:{displaySurface:'browser'},audio:false,preferCurrentTab:true,selfBrowserSurface:'include'});
-        if(serial!==requestSerial||destroyed)return;
-        const video=make('video');video.muted=true;video.srcObject=stream;await video.play();
-        if(!video.videoWidth)await new Promise((resolve,reject)=>{const timer=setTimeout(()=>reject(Error('截图画面未就绪，请重试。')),10000);video.onloadeddata=()=>{clearTimeout(timer);resolve();};captureController.signal.addEventListener('abort',()=>{clearTimeout(timer);reject(abortError());},{once:true});});
-        const src=await imageData('',video,captureController.signal);video.pause();video.srcObject=null;
-        if(serial!==requestSerial||destroyed)return;showCrop(src);
-      }catch(e){if(serial===requestSerial){open();status(e.name==='NotAllowedError'?'截图已取消。也可使用系统截图并粘贴到提问框。':e.message||'截图失败，请重试。');}}
-      finally{stream?.getTracks().forEach(t=>t.stop());if(controller===captureController){controller=null;setBusy(false);}}
+    async function explainSlide(){const before=requestSerial;if(!String(getApiKey()||'').trim()){onRequireLogin();return;}await prepareSlide();if(destroyed||before!==requestSerial)return;slideContextEnabled=settings.followSlides;const slide=getSlide();if(!slide){open();status('请先打开本课程的 PPT，再点击讲解本页。');return;}await send('请讲解当前这页 PPT，结合老师附近的字幕说明重点和我需要掌握的内容。',{slide:slide||{}});}
+    function clear(){lastAnswer=null;$('ai-save-card').disabled=true;$('ai-card-row').hidden=true;stop();cleanupCapture?.();panel.querySelector('#ai-question').value='';history=[];conversationImages=[];recentSlides=[];lastSlideKey='';slideContextEnabled=false;$('ai-log').replaceChildren();attach(null);greeting();badge();status('已开始新对话，旧截图与 PPT 上下文已清空。');}
+    function captureActive(){return !!captureVideo&&captureStream?.getVideoTracks().some(t=>t.readyState==='live');}
+    const captureNotice=make('div',{id:'ai-capture-session',role:'status'});captureNotice.hidden=true;captureNotice.innerHTML='<span>连续截图已开启 · 仅在本页本地取图</span><button type="button" id="ai-capture-session-stop">停止共享</button>';shadow.append(captureNotice);
+    function stopCaptureSession(){const stream=captureStream;captureStream=null;const video=captureVideo;captureVideo=null;capturePersistent=false;video?.pause();if(video)video.srcObject=null;stream?.getTracks().forEach(t=>t.stop());captureNotice.hidden=true;$('ai-quick-capture').textContent='开启连续截图';}
+    async function captureSource(signal){
+      if(captureActive())return captureVideo;
+      stopCaptureSession();
+      if(!win.navigator.mediaDevices?.getDisplayMedia)throw Error('此浏览器不支持页面截图，请使用系统截图并粘贴。');
+      const stream=await win.navigator.mediaDevices.getDisplayMedia({video:{displaySurface:'browser'},audio:false,preferCurrentTab:true,selfBrowserSurface:'include'});
+      if(signal?.aborted||destroyed){stream.getTracks().forEach(t=>t.stop());throw abortError();}
+      const track=stream.getVideoTracks()[0];
+      if(track?.getSettings?.().displaySurface&&track.getSettings().displaySurface!=='browser'){stream.getTracks().forEach(t=>t.stop());throw Error('请选择当前浏览器标签页，以便选框与课程位置一致。');}
+      captureStream=stream;captureVideo=make('video');captureVideo.muted=true;captureVideo.srcObject=stream;
+      track?.addEventListener('ended',()=>{stopCaptureSession();cleanupCapture?.();status('截图共享已停止，再次截图需要重新选择当前标签页。');},{once:true});
+      await captureVideo.play();
+      if(!captureVideo.videoWidth)await new Promise((resolve,reject)=>{const timer=setTimeout(()=>reject(Error('截图画面未就绪，请重试。')),10000);const done=()=>{clearTimeout(timer);signal?.removeEventListener('abort',abort);resolve();};const abort=()=>{clearTimeout(timer);reject(abortError());};captureVideo.onloadeddata=done;signal?.addEventListener('abort',abort,{once:true});});
+      if(signal?.aborted)throw abortError();return captureVideo;
     }
-    function showCrop(src){
-      const layer=make('section',{id:'ai-crop',role:'dialog','aria-label':'框选课程图片'});layer.innerHTML='<div class="ai-crop-head"><strong>框选要问的地方 · 拖动选择</strong><button id="ai-crop-cancel">取消 / Esc</button><button id="ai-crop-whole">使用整张</button><button id="ai-crop-use" disabled>使用选区</button></div><div id="ai-crop-stage"><img id="ai-crop-image" alt="待框选课程图片"><div id="ai-crop-selection"></div></div>';
-      shadow.append(layer);const img=layer.querySelector('img');img.src=src;const stage=layer.querySelector('#ai-crop-stage'),selection=layer.querySelector('#ai-crop-selection'),use=layer.querySelector('#ai-crop-use');let start=null,rect=null;
-      const cancel=()=>{layer.remove();doc.removeEventListener('keydown',onKey,true);cleanupCapture=null;};cleanupCapture=cancel;
+    async function enableQuickCapture(){
+      if(captureActive()){stopCaptureSession();status('连续截图已停止。');return;}
+      if(controller)return;if(!String(getApiKey()||'').trim()){onRequireLogin();return;}
+      const own=new AbortController();controller=own;const serial=++requestSerial;setBusy(true);
+      try{await captureSource(own.signal);if(destroyed||serial!==requestSerial)return;capturePersistent=true;captureNotice.hidden=false;$('ai-quick-capture').textContent='停止连续截图';status('已开启连续截图。按中键拖框，松开后点击发送提问；本页无需重复授权。');}
+      catch(e){if(serial===requestSerial)status(e.name==='NotAllowedError'?'未开启连续截图。也可使用系统截图并粘贴。':e.message);}
+      finally{if(!capturePersistent)stopCaptureSession();if(controller===own){controller=null;setBusy(false);}}
+    }
+    async function startCapture(event){
+      if(controller)return;if(!String(getApiKey()||'').trim()){open();status('请先登录账号，解锁截图问答。');onRequireLogin();return;}cleanupCapture?.();
+      const initial=event?.button===1?{x:event.clientX,y:event.clientY}:null;
+      const gesture=initial?{start:initial,end:initial,held:true}:null;
+      const trackMove=e=>{if(gesture?.held)gesture.end={x:e.clientX,y:e.clientY};};const trackUp=e=>{if(gesture&&e.button===1){gesture.end={x:e.clientX,y:e.clientY};gesture.held=false;}};
+      doc.addEventListener('mousemove',trackMove,true);doc.addEventListener('mouseup',trackUp,true);
+      const own=new AbortController();controller=own;const serial=++requestSerial;setBusy(true);
+      try{
+        const video=await captureSource(own.signal);const src=await imageData('',video,own.signal);
+        if(serial!==requestSerial||destroyed)return;showCrop(src,gesture);
+      }catch(e){if(serial===requestSerial){open();status(e.name==='NotAllowedError'?'截图已取消。开启连续截图可在本页只授权一次。':e.message||'截图失败，请重试。');}}
+      finally{doc.removeEventListener('mousemove',trackMove,true);doc.removeEventListener('mouseup',trackUp,true);if(!capturePersistent)stopCaptureSession();if(controller===own){controller=null;setBusy(false);}}
+    }
+    function showCrop(src,gesture=null){
+      const serial=requestSerial;
+      const layer=make('section',{id:'ai-crop',role:'dialog','aria-label':'原位置框选课程区域'});layer.innerHTML='<div id="ai-crop-stage"><img id="ai-crop-image" alt="当前标签页本地截图"><div id="ai-crop-selection"></div></div><div class="ai-crop-head"><strong>按住中键拖框，松开选定 · Esc 取消</strong><input id="ai-crop-question" aria-label="截图问题" maxlength="2000" placeholder="想问什么？可留空"><button id="ai-crop-cancel">取消</button><button id="ai-crop-use" disabled>放入对话</button><button id="ai-crop-send" disabled>发送提问 ↗</button></div>';
+      shadow.append(layer);const img=layer.querySelector('img');img.src=src;const stage=layer.querySelector('#ai-crop-stage'),selection=layer.querySelector('#ai-crop-selection'),use=layer.querySelector('#ai-crop-use'),submit=layer.querySelector('#ai-crop-send');let start=gesture?.start||null,rect=null;
+      const cancel=()=>{layer.remove();doc.removeEventListener('keydown',onKey,true);if(cleanupCapture===cancel)cleanupCapture=null;};cleanupCapture=cancel;
       const onKey=e=>{if(e.key==='Escape'){e.preventDefault();e.stopImmediatePropagation();cancel();}};doc.addEventListener('keydown',onKey,true);
-      const point=e=>{const b=img.getBoundingClientRect();return{x:Math.max(0,Math.min(b.width,e.clientX-b.left)),y:Math.max(0,Math.min(b.height,e.clientY-b.top))};};
-      stage.onpointerdown=e=>{if(e.button!==0)return;e.preventDefault();start=point(e);rect=null;use.disabled=true;stage.setPointerCapture(e.pointerId);};
-      stage.onpointermove=e=>{if(!start)return;const p=point(e);rect={x:Math.min(start.x,p.x),y:Math.min(start.y,p.y),w:Math.abs(start.x-p.x),h:Math.abs(start.y-p.y)};Object.assign(selection.style,{display:'block',left:rect.x+'px',top:rect.y+'px',width:rect.w+'px',height:rect.h+'px'});};
-      stage.onpointerup=()=>{start=null;use.disabled=!rect||rect.w<8||rect.h<8;};stage.onpointercancel=()=>{start=null;};
-      const choose=data=>{if(!validImage(data)){status('选区图片过大，请选择更小区域。');cancel();return;}attach(data);cancel();open();if(!$('ai-question').value)$('ai-question').value='请解释截图中的内容。';status('选区已添加。直接发送，或补一句你想问的。');};
-      layer.querySelector('#ai-crop-cancel').onclick=cancel;layer.querySelector('#ai-crop-whole').onclick=()=>choose(src);
-      use.onclick=()=>{if(!rect)return;try{const b=img.getBoundingClientRect(),sx=img.naturalWidth/b.width,sy=img.naturalHeight/b.height,canvas=make('canvas');canvas.width=Math.max(1,Math.round(rect.w*sx));canvas.height=Math.max(1,Math.round(rect.h*sy));canvas.getContext('2d').drawImage(img,rect.x*sx,rect.y*sy,rect.w*sx,rect.h*sy,0,0,canvas.width,canvas.height);choose(canvas.toDataURL('image/jpeg',.85));}catch(_){status('选区读取失败，请重试。');cancel();}};
-      layer.querySelector('#ai-crop-cancel').focus();
+      const point=e=>({x:Math.max(0,Math.min(win.innerWidth,e.clientX)),y:Math.max(0,Math.min(win.innerHeight,e.clientY))});
+      const update=p=>{if(!start)return;rect={x:Math.min(start.x,p.x),y:Math.min(start.y,p.y),w:Math.abs(start.x-p.x),h:Math.abs(start.y-p.y)};Object.assign(selection.style,{display:'block',left:rect.x+'px',top:rect.y+'px',width:rect.w+'px',height:rect.h+'px'});};
+      const ready=()=>{use.disabled=submit.disabled=!rect||rect.w<8||rect.h<8||!img.complete||!img.naturalWidth;};img.onload=ready;
+      stage.onpointerdown=e=>{if(e.button!==0&&e.button!==1)return;e.preventDefault();if(!start)start=point(e);rect=null;use.disabled=submit.disabled=true;stage.setPointerCapture?.(e.pointerId);};
+      stage.onpointermove=e=>{if(start)update(point(e));};
+      stage.onpointerup=e=>{if(e.button!==0&&e.button!==1)return;if(start)update(point(e));start=null;ready();};stage.onpointercancel=()=>{start=null;};
+      if(gesture){update(gesture.end);if(!gesture.held&&rect?.w>=8&&rect?.h>=8){start=null;ready();}}
+      const chosen=()=>{if(!rect||rect.w<8||rect.h<8)return null;const sx=img.naturalWidth/win.innerWidth,sy=img.naturalHeight/win.innerHeight,canvas=make('canvas');canvas.width=Math.max(1,Math.round(rect.w*sx));canvas.height=Math.max(1,Math.round(rect.h*sy));canvas.getContext('2d').drawImage(img,rect.x*sx,rect.y*sy,rect.w*sx,rect.h*sy,0,0,canvas.width,canvas.height);const data=canvas.toDataURL('image/jpeg',.85);if(!validImage(data))throw Error('选区过大，请选择更小区域。');return data;};
+      const choose=immediate=>{if(serial!==requestSerial){cancel();return;}try{const data=chosen();if(!data)return;const question=layer.querySelector('#ai-crop-question').value.trim()||'请解释截图中的内容。';cancel();if(immediate)send(question,{image:data});else{attach(data);open();$('ai-question').value=question;status('仅选区已添加，点击发送即可提问。');}}catch(e){status(e.message||'选区读取失败，请重试。');cancel();}};
+      layer.querySelector('#ai-crop-cancel').onclick=cancel;use.onclick=()=>choose(false);submit.onclick=()=>choose(true);
     }
     async function saveKnowledgeCard(){
       if(!lastAnswer)return;
@@ -514,7 +562,7 @@ if(typeof module!=='undefined'&&module.exports)module.exports={isEditing};else r
     async function paste(event){const serial=requestSerial;const file=[...(event.clipboardData?.items||[])].find(i=>i.type.startsWith('image/'))?.getAsFile();if(!file)return;event.preventDefault();try{const data=await blobToData(file);if(destroyed||serial!==requestSerial)return;attach(data);status('截图已添加。直接发送，或补一句你想问的。');}catch(e){status(e.message);}}
     const modified=e=>e.ctrlKey||e.metaKey||e.altKey||e.shiftKey;
     const middleAllowed=e=>{const target=e.composedPath?.()[0]||e.target;return e.button===1&&settings.middleClick&&!modified(e)&&!target?.closest?.('a,input,textarea,select,[contenteditable],#ai-crop');};
-    const middle=e=>{if(!middleAllowed(e))return;e.preventDefault();e.stopPropagation();startCapture();};
+    const middle=e=>{if(!middleAllowed(e))return;e.preventDefault();e.stopPropagation();startCapture(e);};
     listen(doc,'mousedown',middle,true);listen(doc,'auxclick',e=>{if(middleAllowed(e))e.preventDefault();},true);
     let selectionMenu=null;
     const closeSelection=()=>{selectionMenu?.remove();selectionMenu=null;};cleanups.push(closeSelection);
@@ -534,20 +582,20 @@ if(typeof module!=='undefined'&&module.exports)module.exports={isEditing};else r
     },true);
     listen($('ai-close'),'click',()=>{panel.hidden=true;});listen($('ai-settings-open'),'click',()=>{panel.hidden=true;onOpenSettings('ai');});
     listen($('ai-mode'),'change',()=>{settings.mode=$('ai-mode').value;save();});listen($('ai-stop'),'click',()=>{stop();status('已停止本次讲解。');});listen($('ai-clear'),'click',clear);listen($('ai-save-card'),'click',saveKnowledgeCard);listen($('ai-remove-image'),'click',()=>attach(null));
-    listen($('ai-slide-action'),'click',explainSlide);listen($('ai-crop-action'),'click',startCapture);listen($('ai-compose'),'submit',e=>{e.preventDefault();send($('ai-question').value);});listen($('ai-question'),'paste',paste);
+    listen($('ai-slide-action'),'click',explainSlide);listen($('ai-crop-action'),'click',startCapture);listen($('ai-quick-capture'),'click',enableQuickCapture);listen(captureNotice.querySelector('button'),'click',()=>{stop();stopCaptureSession();cleanupCapture?.();});listen(win,'pagehide',stopCaptureSession);listen($('ai-compose'),'submit',e=>{e.preventDefault();send($('ai-question').value);});listen($('ai-question'),'paste',paste);
     listen($('ai-question'),'keydown',e=>{e.stopPropagation();if(e.key==='Enter'&&!e.shiftKey&&!e.isComposing){e.preventDefault();send(e.currentTarget.value);}});
     for(const [id,fn] of [['ai-open',explainSlide],['slide-explain',explainSlide],['ai-capture',startCapture]])listen(shadow.getElementById(id),'click',fn);
     function mountSettings(container=shadow.getElementById('settings-ai')){
       if(!container)return;container.replaceChildren();const form=make('div',{class:'ai-settings'});
       const field=(label,el)=>{const row=make('label',{class:'ai-stack'});row.append(make('span',{text:label}),el);form.append(row);return el;};
       const model=field('豆包讲解模型',make('input',{type:'text',maxlength:'160','aria-label':'豆包讲解模型'}));model.value=settings.model;listen(model,'change',()=>{settings.model=model.value.trim()||DEFAULTS.model;model.value=settings.model;save();});
-      for(const [key,label] of [['middleClick','按鼠标中键直接启动页面框选截图（浏览器会请求选择标签页）'],['followSlides','翻页时记住最近两页 PPT，提问时一起发送'],['webSearch','允许联网搜索补充资料（可能产生额外费用）']]){const row=make('label'),input=make('input',{type:'checkbox'});input.checked=settings[key];row.append(input,doc.createTextNode(label));form.append(row);listen(input,'change',()=>{settings[key]=input.checked;if(key==='followSlides'){recentSlides=[];lastSlideKey='';notifySlide();}save();});}
+      for(const [key,label] of [['middleClick','鼠标中键按住并拖动，原位置框选截图（可开启连续截图减少重复授权）'],['followSlides','翻页时记住最近两页 PPT，提问时一起发送'],['webSearch','允许联网搜索补充资料（可能产生额外费用）']]){const row=make('label'),input=make('input',{type:'checkbox'});input.checked=settings[key];row.append(input,doc.createTextNode(label));form.append(row);listen(input,'change',()=>{settings[key]=input.checked;if(key==='followSlides'){slideContextEnabled=settings[key];recentSlides=[];lastSlideKey='';notifySlide();}save();});}
       const custom=field('我的讲解提示词',make('textarea',{maxlength:'1800',placeholder:'例如：我刚接触这门课。先说直觉，再举 Python 例子，最后问我一道判断题。','aria-label':'自定义讲解提示词'}));custom.value=settings.customPrompt;listen(custom,'change',()=>{settings.customPrompt=custom.value;save();});
       form.append(make('p',{text:'在 AI 讲解中选择“我的讲解方式”使用自定义提示词。AI 与翻译共用连接设置中的服务账号。课程截图和附近字幕仅在你提问时发送给豆包；自动翻页只在当前页面内保留最近两页，不会自动请求讲解。'}));
       form.append(make('p',{text:'回答之后可以接着问，AI 会记住本次对话。'}));container.append(form);
     }
     greeting();badge();mountSettings();
-    return {open,explainSlide,startCapture,saveKnowledgeCard,notifySlide,mountSettings,send,resetCourse:clear,close:()=>{panel.hidden=true;},getSettings:()=>({...settings}),destroy(){destroyed=true;stop();cleanupCapture?.();cleanups.forEach(fn=>fn());panel.remove();style.remove();}};
+    return {open,explainSlide,startCapture,saveKnowledgeCard,notifySlide,mountSettings,send,resetCourse:clear,close:()=>{panel.hidden=true;},getSettings:()=>({...settings}),destroy(){destroyed=true;stopCaptureSession();captureNotice.remove();stop();cleanupCapture?.();cleanups.forEach(fn=>fn());panel.remove();style.remove();}};
   }
   return {DEFAULTS,MODES,cardText,wrapCardText,renderKnowledgeCard,settingsOf,makeBody,textOfResponse,requestResponse,trimHistory,wordAt,validImage,mountLearningAssistant};
 });

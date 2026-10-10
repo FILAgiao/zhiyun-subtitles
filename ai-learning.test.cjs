@@ -73,3 +73,31 @@ test('readable stream handles JSON errors and abort without waiting for onload',
 });
 
 test('Interactive Seed 2 learning avoids spending the answer budget on hidden reasoning',()=>{assert.deepEqual(ai.makeBody({question:'hello'}).reasoning,{effort:'minimal'});assert.equal(ai.makeBody({settings:{model:'custom-model'},question:'hello'}).reasoning,undefined);});
+
+test('Completion resolves without waiting for the HTTP connection to close',async()=>{
+ let opts,controller;const stream=new ReadableStream({start(c){controller=c;}});
+ const p=ai.requestResponse(o=>{opts=o;return{abort(){}};},{},'key');opts.onloadstart({status:200,response:stream});
+ controller.enqueue(new TextEncoder().encode(event({type:'response.completed',response:{status:'completed',output:[{type:'message',content:[{type:'output_text',text:'done'}]}]}})));
+ assert.equal(await p,'done');controller.close();
+});
+test('Stream can arrive through progress and buffers decode into text',async()=>{
+ let opts,controller;const seen=[];const stream=new ReadableStream({start(c){controller=c;}});
+ const p=ai.requestResponse(o=>{opts=o;return{abort(){}};},{},'key',null,t=>seen.push(t));assert.equal(opts.fetch,true);
+ opts.onloadstart({status:0});opts.onprogress({status:200,response:stream});
+ controller.enqueue(new TextEncoder().encode(event({type:'response.output_text.delta',delta:'hi'})+event({type:'response.completed',response:{status:'completed',output:[{type:'message',content:[{type:'output_text',text:'hi'}]}]}})).buffer);
+ assert.equal(await p,'hi');assert.deepEqual(seen,['hi']);controller.close();
+});
+test('Unsupported stream transport reports a useful error instead of waiting silently',async()=>{
+ await assert.rejects(ai.requestResponse(o=>{queueMicrotask(()=>o.onload({status:200}));return{};},{},'key'),/读取回复流/);
+});
+
+test('First-text deadline terminates a silent transport and aborts exactly once',async t=>{
+ t.mock.timers.enable({apis:['setTimeout']});let aborted=0;
+ const p=ai.requestResponse(()=>({abort(){aborted++;}}),{},'key');
+ const check=assert.rejects(p,/45 秒/);t.mock.timers.tick(45000);await check;assert.equal(aborted,1);
+});
+
+test('A rejected stream reader terminates with feedback instead of an unhandled rejection',async()=>{
+ const stream=new ReadableStream();const reader=stream.getReader();
+ await assert.rejects(ai.requestResponse(o=>{queueMicrotask(()=>o.onloadstart({status:200,response:stream}));return{abort(){}};},{},'key'),/locked|reader|锁/i);reader.releaseLock();
+});

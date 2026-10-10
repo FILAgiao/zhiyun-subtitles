@@ -119,3 +119,7 @@ compose.server.yml 可放在 /opt/zhiyun-gateway/compose.yml；文件中的网�
 已沿用此前授权的密码连接方式，将候选版本上传至隔离目录；Python 3.12 容器中的 16 项回归测试通过后，备份旧代码并通过 SQLite backup 保存一致的数据库副本，再原子替换代码并重启独立 zhiyun-gateway 容器。数据卷与供应商环境配置保留。公网健康检查、游客语音、真实截图 SSE 和公开安装包核对均已通过。代码回滚副本位于 backend/.rollback-0191-20261009-*，数据库备份为 data/backups/gateway-before-0191-20261009.sqlite3。
 
 安装脚本与更新元数据分别位于 `/gateway/install.user.js` 和 `/gateway/install.meta.js`。`node build-userscript.cjs` 自动生成 backend 下的两个安装文件；这些生成文件不进入 Git，主仓库发布脚本仍保留原 GitHub 更新地址。
+
+## 0.19.2 已部署修复（2026-10-10）
+
+旧客户端的 Seed 2 请求也补充 minimal 思考等级。安装版本已提升到 0.19.2；安装元数据与脚本一致。中键在原位置拖框，直接发送选区；连续截图须显式开启，首次浏览器授权仍必需，本页复用共享流并可停止。流式完成即返回，首段正文 45 秒无响应时停止并提示。部署保留独立 .rollback-0192-* 副本，没有迁移或重置数据库。

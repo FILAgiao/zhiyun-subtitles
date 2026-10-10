@@ -1,0 +1,28 @@
+{
+  "version": "0.19.2",
+  "verified_at": "2026-10-10 Asia/Shanghai",
+  "installer": {
+    "script_matches_build": true,
+    "update_metadata_matches": true
+  },
+  "browser_ai": {
+    "real_login": true,
+    "two_turns": true,
+    "history_retained": true,
+    "text_visible_before_completion": true,
+    "waiting_feedback_visible": true,
+    "page_errors": 0
+  },
+  "capture_ui": {
+    "browser": "Chrome",
+    "capture_provider": "synthetic MediaStream; native permission dialog stubbed",
+    "middle_drag_starts_at_pointer": true,
+    "page_layout_unchanged": true,
+    "one_click_sends_cropped_region_only": true,
+    "continuous_capture_reuses_stream": true,
+    "explicit_stop_ends_tracks": true
+  },
+  "new_conversation": {
+    "greeting_has_no_image_with_follow_slides_enabled": true
+  }
+}

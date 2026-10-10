@@ -10,7 +10,7 @@
 
 用户选择的浏览器标签页画面 → 本地 canvas 压缩 JPEG（最长边 1600，最多约 2.2M 字符）→ 预览或框选 → 用户发送 → HTTPS 后端代理 → 豆包官方 Responses。后端密钥不下发客户端，截图和模型问题/回答不落库；模型输入中的图片数量记入用量。跨域图片读取受限时，可系统截图后粘贴到提问框。历史图片会按对话规则在后续追问中重传并再次计量。
 
-识别文本和图片基于页面 DOM；没有本地 OCR；页面截图使用浏览器 getDisplayMedia，需要用户选择共享标签页，截图后立即停止共享。图片里的文字由豆包视觉模型理解。油猴右键入口是自定义菜单，Chrome 扩展原生菜单仍待实现。
+识别文本和图片基于页面 DOM；没有本地 OCR；页面截图使用浏览器 getDisplayMedia，需要用户选择共享标签页，默认单次截图后立即停止共享；显式开启连续截图时复用本页共享流，并显示停止按钮。图片里的文字由豆包视觉模型理解。油猴右键入口是自定义菜单，Chrome 扩展原生菜单仍待实现。
 
 ## 数据与目前限制
 
@@ -35,3 +35,9 @@ Token 指供应商 usage 的输入和输出 Token。登录令牌仅在客户端�
 `backend/live_acceptance.py` 和 `live-ai-ui.test.cjs` 是明确调用公网的手动验收脚本，使用已忽略的测试账号，消耗实际模型／语音额度；不纳入默认测试。前者上传 synthetic 预览图和本机生成的已知语音，后者仅发送固定无敏感测试文字。详细结果见 `acceptance-0191.json`。
 
 真实 Chrome 最终验收通过：普通账号登录、HTTP ReadableStream 完成前显示文本、每秒等待反馈、两轮对话上下文与答案记忆，页面错误为零。默认 Seed 2 交互请求显式传入 `reasoning.effort=minimal`，避免隐藏思考占满 2200 Token 回复额度；网关只接受受控的思考等级。参数依据：[火山方舟模型列表](https://docs.volcengine.com/docs/ark/model-list?lang=en)。上述时间是此次测试测量值，实际随网络和模型负载变化。
+
+## 0.19.2 复验（2026-10-10）
+
+公网安装包与更新元数据均与最终 0.19.2 构建逐字节相同。真实浏览器登录、两轮文字上下文、流式完成前可见文字、等待反馈均通过。新增 Node 回归覆盖完成事件立即结束、流从 progress 回调到达、ArrayBuffer 解码、无可读流的错误反馈与 45 秒首段超时；后端覆盖旧客户端 minimal 默认值。
+
+截图回归在真实 Chrome 中用合成 MediaStream 替代浏览器授权：验证中键拖框起点、原布局、选区一键发送、两次截图复用一次共享、停止轨道；并未自动操作用户的真实浏览器权限对话框。首次授权不能绕过，依据 [MDN getDisplayMedia](https://developer.mozilla.org/en-US/docs/Web/API/MediaDevices/getDisplayMedia)。新对话在 PPT 跟随开启时发送“嗨”不会带图。结果见 [acceptance-0192.json](acceptance-0192.json)。

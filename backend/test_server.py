@@ -37,6 +37,10 @@ class Tests(unittest.TestCase):
         with new.db() as db:
             self.assertIsNone(db.execute('SELECT 1 FROM sessions WHERE hash=?',(self.token,)).fetchone())
             self.assertNotIn('long-test-password',db.execute('SELECT password FROM users').fetchone()[0])
+    def test_old_learning_clients_also_get_minimal_reasoning(self):
+        self.call('/v1/ark/responses',{**self.body,'model':'doubao-seed-2-1-lite-260915'})
+        self.assertEqual(self.events[-1][2]['reasoning'],{'effort':'minimal'})
+
     def test_learning_reasoning_is_validated_and_forwarded(self):
         body={**self.body,'model':'doubao-seed-2-1-lite-260915','reasoning':{'effort':'minimal'}}
         self.call('/v1/ark/responses',body)

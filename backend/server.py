@@ -190,6 +190,8 @@ class Gateway(AdminMixin):
         if type(output) is not int or not 1<=output<=4096: raise Fault(400,'输出超出限制')
         streaming=body.get('stream') is True and stream_sink is not None
         payload={'model':body['model'],'input':inputs,'max_output_tokens':output,'stream':streaming}
+        if body['model'].startswith('doubao-seed-2-') and 'reasoning' not in body:
+            payload['reasoning']={'effort':'minimal'}
         if 'reasoning' in body:
             reasoning=body['reasoning']
             if not isinstance(reasoning,dict) or set(reasoning)!={'effort'} or reasoning['effort'] not in ('minimal','low','medium','high'): raise Fault(400,'思考参数无效')
