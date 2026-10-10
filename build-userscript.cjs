@@ -1,7 +1,7 @@
 const fs=require('fs');
 let s=fs.readFileSync('zhiyun-subtitles.user.js','utf8').replace(/\r\n/g,'\n');
 const begin='// BEGIN BUNDLED LEARNING MODULES',end='// END BUNDLED LEARNING MODULES';
-const files=['progressive-cache.bundle.js','cache-storage.js','study-ui.js','player-interactions.js','ai-learning.js','gateway-client.js'];
+const files=['progressive-cache.bundle.js','cache-storage.js','study-ui.js','player-interactions.js','math-render.bundle.js','ai-learning.js','gateway-client.js'];
 const configuredGateway=process.env.GATEWAY_ORIGIN??(fs.existsSync('gateway.config.json')?JSON.parse(fs.readFileSync('gateway.config.json','utf8')).url:'');
 const gatewayOrigin=configuredGateway?require('./gateway-client.js').baseURL(configuredGateway):'';
 const code=begin+'\n'+files.map(p=>{let value=fs.readFileSync(p,'utf8');if(p==='gateway-client.js'&&gatewayOrigin)value=value.replace("const DEFAULT_ORIGIN='';",'const DEFAULT_ORIGIN='+JSON.stringify(gatewayOrigin)+';');return value;}).join('\n')+'\nconst ZY_STUDY_MASCOT='+JSON.stringify('data:image/png;base64,'+fs.readFileSync('assets/study-eagle.png').toString('base64'))+';\n'+end;

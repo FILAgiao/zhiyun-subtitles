@@ -8,9 +8,9 @@ test('Responses input is bounded, follows chosen mode and sends data images only
  assert.match(b.input.at(-1).content[0].text,/编译器/);assert.equal(b.input.at(-1).content.filter(c=>c.type==='input_image').length,3);
  assert.equal(JSON.stringify(b).includes('secret'),false);assert.equal(b.tools,undefined);
 });
-test('Custom mode, model fallback, web search and character limits',()=>{
+test('Custom mode, model fallback, hidden web search and character limits',()=>{
  const b=ai.makeBody({settings:{mode:'custom',customPrompt:'先举 Python 例子',webSearch:true},question:'x'.repeat(8000),context:'y'.repeat(20000)});
- assert.match(b.input[0].content,/Python/);assert.deepEqual(b.tools,[{type:'web_search',max_keyword:3}]);assert.ok(b.input.at(-1).content[0].text.length<13100);
+ assert.match(b.input[0].content,/Python/);assert.equal(b.tools,undefined);assert.ok(b.input.at(-1).content[0].text.length<13100);
  assert.equal(ai.settingsOf({mode:'__proto__'}).mode,'feynman');assert.equal(ai.settingsOf({model:'   '}).model,ai.DEFAULTS.model);
 });
 test('History is bounded and starts with a question',()=>{
@@ -101,3 +101,5 @@ test('A rejected stream reader terminates with feedback instead of an unhandled 
  const stream=new ReadableStream();const reader=stream.getReader();
  await assert.rejects(ai.requestResponse(o=>{queueMicrotask(()=>o.onloadstart({status:200,response:stream}));return{abort(){}};},{},'key'),/locked|reader|锁/i);reader.releaseLock();
 });
+
+test('Feynman mode starts with one clear sentence and defers detail until requested',()=>{const b=ai.makeBody({question:'什么是多态？'});assert.match(b.input[0].content,/一句大白话直接回答/);assert.match(b.input[0].content,/不超过150字/);assert.match(b.input[0].content,/不主动出自测题/);});

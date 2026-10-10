@@ -1,6 +1,6 @@
 {
   "name": "zhiyun-subtitles",
-  "version": "0.19.5",
+  "version": "0.19.6",
   "private": true,
   "description": "浙大上课爽：网课不硬扛，浙大上课爽！同步字幕、PPT 讲解与本机缓存。",
   "scripts": {
@@ -10,12 +10,13 @@
     "test:media": "node generate-test-media.cjs",
     "test:stream": "node progressive.test.cjs && node progressive.test.cjs .test-media/tail.mp4 && node progressive-ui.test.cjs",
     "test:cache": "node cache-flow.test.cjs && node cache-source-race.test.cjs",
-    "build": "node build-stream.cjs && node build-userscript.cjs",
+    "build": "node build-stream.cjs && node build-math.cjs && node build-userscript.cjs",
     "test:release": "node release.test.cjs",
     "test:storage": "node chrome-cache.test.cjs && node cache-storage-ui.test.cjs",
     "test:gateway": "python -m unittest backend.test_server -v && node --test gateway-client.test.cjs",
     "start:backend": "python backend/server.py serve",
-    "test:gateway:ui": "node gateway-ui.test.cjs && node backend-ui.test.cjs && node ai-actions-ui.test.cjs"
+    "test:gateway:ui": "node gateway-ui.test.cjs && node backend-ui.test.cjs && node ai-actions-ui.test.cjs",
+    "build:math": "node build-math.cjs"
   },
   "engines": {
     "node": ">=20.8"
@@ -25,6 +26,7 @@
     "playwright": "1.62.1"
   },
   "dependencies": {
+    "katex": "0.19.0",
     "mp4box": "2.4.1"
   }
 }
