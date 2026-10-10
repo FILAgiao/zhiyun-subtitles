@@ -20,3 +20,23 @@ test('production build pins gateway domain and cannot use vendor key while logge
 
 test('guest speech goes through gateway without a session or vendor secret',()=>{const {api,calls}=setup({url:'https://api.test'});api.transport({url:'https://openspeech.bytedance.com/api/v3/auc/bigmodel/submit',headers:{'X-Api-Key':'guest-speech','X-Api-Request-Id':'task'}});assert.equal(calls[0].url,'https://api.test/v1/speech/submit');assert.equal(calls[0].headers.Authorization,undefined);assert.equal(calls[0].headers['X-Api-Key'],undefined);});
 test('expired session clears stored token',()=>{const {api,calls,storage}=setup({url:'https://api.test',token:'expired'});let status;api.transport({url:'https://ark.cn-beijing.volces.com/api/v3/responses',onload:r=>status=r.status});calls[0].onload({status:401});assert.equal(status,401);assert.equal(storage['gateway-account-v1'].token,'');});
+
+test('Incremental learning uses short JSON requests when GM stream is unavailable',async()=>{
+ const calls=[];let polls=0,creates=0;const texts=[];const account={url:'https://api.test',token:'session'};
+ const api=create({getValue:()=>account,setValue(){},request:o=>{
+  assert.notEqual(o.responseType,'stream');assert.equal(o.fetch,undefined);calls.push(o);
+  const path=new URL(o.url).pathname;let result;
+  if(path.endsWith('/create')){creates++;result={id:'opaque-job',state:'pending'};}
+  else if(path.endsWith('/poll')){polls++;result=polls===1?{state:'generating',text:'hi'}:{state:'complete',text:'hi there',response:{status:'completed',output:[{type:'message',content:[{type:'output_text',text:'hi there'}]}]}};}
+  else throw Error('unexpected route');
+  queueMicrotask(()=>o.onload({status:path.endsWith('/create')?202:200,responseText:JSON.stringify(result)}));return{abort(){}};
+ }});
+ const ai=require('./ai-learning.js');const answer=await ai.requestResponse(api.transport,ai.makeBody({question:'hi'}),'session',null,t=>texts.push(t));
+ assert.equal(answer,'hi there');assert.deepEqual(texts,['hi','hi there']);assert.equal(creates,1);assert.equal(polls,2);assert.ok(calls.every(o=>o.headers.Authorization==='Bearer session'));
+});
+test('Aborting incremental learning stops polling and cancels the same server job',async()=>{
+ const calls=[];let handle;
+ const api=create({getValue:()=>({url:'https://api.test',token:'session'}),setValue(){},request:o=>{calls.push(o);if(o.url.endsWith('/create'))queueMicrotask(()=>o.onload({status:202,responseText:'{"id":"one-job"}'}));return{abort(){}};}});
+ handle=api.transport({url:'https://ark.cn-beijing.volces.com/api/v3/responses',responseType:'stream',data:'{}'});await new Promise(r=>setImmediate(r));handle.abort();
+ assert.equal(calls.filter(o=>o.url.endsWith('/cancel')).length,1);assert.equal(JSON.parse(calls.at(-1).data).id,'one-job');assert.equal(calls.filter(o=>o.url.endsWith('/create')).length,1);
+});

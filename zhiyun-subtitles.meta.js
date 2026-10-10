@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         浙大上课爽
 // @namespace    zhiyunzimu.local
-// @version      0.19.2
+// @version      0.19.3
 // @description  网课不硬扛，浙大上课爽！智云课堂同步字幕、PPT 讲解与本机缓存。
 // @match        https://interactivemeta.cmc.zju.edu.cn/*
 // @grant        GM_xmlhttpRequest

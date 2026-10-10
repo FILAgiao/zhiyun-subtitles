@@ -143,6 +143,53 @@ class Tests(unittest.TestCase):
         self.assertEqual(len(self.events),2)
         self.assertNotIn('test-server-only',json.dumps(self.gateway.handle('POST','/v1/speech/query',headers,{},'guest-a')))
 
+    def test_incremental_job_returns_partial_before_completion_and_calls_model_once(self):
+        ready=threading.Event();release=threading.Event();done=threading.Event();count=[]
+        def upstream(*args):
+            count.append(1)
+            yield {'type':'response.output_text.delta','delta':'partial'};ready.set()
+            if not release.wait(5):raise Fault(504,'test timeout')
+            yield {'type':'response.output_text.delta','delta':' answer'}
+            yield {'type':'response.completed','response':{'status':'completed','output':[{'type':'message','content':[{'type':'output_text','text':'partial answer'}]}],'usage':{'total_tokens':10}}};done.set()
+        self.gateway.upstream_stream=upstream
+        created=self.call('/v1/learning/jobs/create',{**self.body,'stream':True});self.assertEqual(created[0],202);key=created[2]['id']
+        try:
+            self.assertTrue(ready.wait(5));snapshot=self.call('/v1/learning/jobs/poll',{'id':key})[2]
+            self.assertEqual(snapshot['text'],'partial');self.assertEqual(snapshot['state'],'generating')
+            self.call('/v1/learning/jobs/poll',{'id':key});self.assertEqual(len(count),1)
+        finally:release.set()
+        # Completion is committed before the worker closes its generator.
+        for _ in range(100):
+            snapshot=self.call('/v1/learning/jobs/poll',{'id':key})[2]
+            if snapshot['state']=='complete':break
+            threading.Event().wait(.01)
+        self.assertEqual(snapshot['text'],'partial answer');self.assertEqual(snapshot['state'],'complete')
+        self.assertEqual(self.gateway.usage(1,'zhiyun-subtitles')['requests'],1);self.assertEqual(self.gateway.usage(1,'zhiyun-subtitles')['total_tokens'],10)
+
+    def test_incremental_jobs_enforce_auth_owner_cancel_and_error(self):
+        entered=threading.Event();release=threading.Event();finished=threading.Event()
+        def upstream(*args):
+            try:
+                entered.set();release.wait(5);yield {'type':'response.output_text.delta','delta':'should not appear'}
+            finally:finished.set()
+        self.gateway.upstream_stream=upstream
+        key=self.call('/v1/learning/jobs/create',self.body)[2]['id'];self.assertTrue(entered.wait(5))
+        try:
+            self.fails(401,lambda:self.call('/v1/learning/jobs/poll',{'id':key},{'X-App-Id':'zhiyun-subtitles'}))
+            self.gateway.add_user('b@example.test','long-test-password','zhiyun-subtitles')
+            token=self.call('/v1/auth/login',{'email':'b@example.test','password':'long-test-password'})[2]['token'];other={**self.headers,'Authorization':'Bearer '+token}
+            self.fails(404,lambda:self.call('/v1/learning/jobs/poll',{'id':key},other));self.fails(404,lambda:self.call('/v1/learning/jobs/cancel',{'id':key},other))
+            self.call('/v1/learning/jobs/cancel',{'id':key});self.assertEqual(self.call('/v1/learning/jobs/poll',{'id':key})[2]['state'],'cancelled')
+        finally:release.set();finished.wait(5)
+        self.assertEqual(self.call('/v1/learning/jobs/poll',{'id':key})[2]['text'],'')
+        self.gateway.upstream_stream=lambda *args:iter([])
+        key=self.call('/v1/learning/jobs/create',self.body)[2]['id']
+        for _ in range(100):
+            result=self.call('/v1/learning/jobs/poll',{'id':key})[2]
+            if result['state']=='error':break
+            threading.Event().wait(.01)
+        self.assertEqual(result['state'],'error');self.assertIn('中断',result['error'])
+
     def test_streamed_reply_and_metering(self):
         def upstream(url,headers,body):
             self.assertTrue(body['stream'])

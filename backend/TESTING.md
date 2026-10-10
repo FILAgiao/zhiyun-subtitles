@@ -41,3 +41,9 @@ Token 指供应商 usage 的输入和输出 Token。登录令牌仅在客户端�
 公网安装包与更新元数据均与最终 0.19.2 构建逐字节相同。真实浏览器登录、两轮文字上下文、流式完成前可见文字、等待反馈均通过。新增 Node 回归覆盖完成事件立即结束、流从 progress 回调到达、ArrayBuffer 解码、无可读流的错误反馈与 45 秒首段超时；后端覆盖旧客户端 minimal 默认值。
 
 截图回归在真实 Chrome 中用合成 MediaStream 替代浏览器授权：验证中键拖框起点、原布局、选区一键发送、两次截图复用一次共享、停止轨道；并未自动操作用户的真实浏览器权限对话框。首次授权不能绕过，依据 [MDN getDisplayMedia](https://developer.mozilla.org/en-US/docs/Web/API/MediaDevices/getDisplayMedia)。新对话在 PPT 跟随开启时发送“嗨”不会带图。结果见 [acceptance-0192.json](acceptance-0192.json)。
+
+## 0.19.3 公网验收
+
+后端 20 项测试通过；新增验证模型尚未完成时 poll 已得到 partial、重复 poll 仅调用一次模型、账号隔离、取消和错误。网关 9 项测试通过，短请求通道不使用 responseType:stream 或 fetch:true。
+
+公网真实 hi：约 0.82 秒建立任务，2.94 秒读到正文，5.12 秒含计量核验完成；3 次读取、只计 1 次模型调用。最终安装包及元数据与构建一致。真实 Chrome 页面通过实际公网接口登录和两轮对话，同时在 GM shim 中**主动抛错禁止所有 stream 请求**，文字仍在完成前显示，等待反馈与上下文保留。仍未操作用户本机的 Tampermonkey；此验收验证的是新路径不需要其流读取能力，而不是声称复现了其内部缺陷。结果见 [acceptance-0193.json](acceptance-0193.json)。

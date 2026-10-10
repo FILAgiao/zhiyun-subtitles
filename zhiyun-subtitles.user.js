@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         浙大上课爽
 // @namespace    zhiyunzimu.local
-// @version      0.19.2
+// @version      0.19.3
 // @description  网课不硬扛，浙大上课爽！智云课堂同步字幕、PPT 讲解与本机缓存。
 // @match        https://interactivemeta.cmc.zju.edu.cn/*
 // @grant        GM_xmlhttpRequest
@@ -611,6 +611,32 @@ function create({request,getValue,setValue}){
  const account=()=>{const saved=getValue(KEY,{})||{};return{...saved,url:DEFAULT_ORIGIN||saved.url||''};};
  const configured=()=>!!account().url;
  const credential=()=>configured()?(account().token||''):'';
+ function incremental(options,a,headers){
+  let stopped=false,current=null,timer=null,networkTimer=null,jobId='',raw='',lastText='';
+  const emit=event=>{if(stopped)return;raw+='data: '+JSON.stringify(event)+'\n\n';options.onprogress?.({status:200,responseText:raw});};
+  const fail=message=>{if(stopped)return;emit({type:'error',message});stopped=true;clearTimeout(timer);clearTimeout(networkTimer);};
+  const json=(path,body,next)=>{
+   if(stopped)return;let delivered=false;
+   const done=()=>{if(delivered||stopped)return false;delivered=true;clearTimeout(networkTimer);return true;};
+   networkTimer=setTimeout(()=>{if(!done())return;const pending=current;fail('无法读取 AI 增量回复，网络请求超过 15 秒。');pending?.abort?.();},15000);
+   try{current=request({method:'POST',url:baseURL(a.url)+path,headers,anonymous:true,timeout:15000,data:JSON.stringify(body),
+    onload:r=>{if(!done())return;let result;try{result=JSON.parse(r.responseText);}catch(_){fail('AI 服务响应格式异常，请稍后重试。');return;}
+     if(r.status<200||r.status>=300){if(r.status===401&&a.token===credential()){setValue(KEY,{url:a.url,token:''});refreshUI?.();changeListener?.();}fail(r.status===401?'登录已失效，请重新登录。':typeof result.error==='string'?result.error:'AI 服务请求失败（HTTP '+r.status+'）。');return;}
+     next(result);},onerror:()=>{if(done())fail('无法连接 AI 服务，请检查网络后重试。');},ontimeout:()=>{if(done())fail('读取 AI 回复超时，请稍后重试。');},onabort:()=>{if(done())fail('AI 网络请求已中止。');}});
+   }catch(_){if(done())fail('未能发出 AI 请求，请刷新页面后重试。');}
+  };
+  const poll=()=>json('/v1/learning/jobs/poll',{id:jobId},result=>{
+   if(typeof result.text==='string'&&result.text.length>lastText.length){emit({type:'response.output_text.delta',delta:result.text.slice(lastText.length)});lastText=result.text;}
+   if(result.state==='complete'){emit({type:'response.completed',response:result.response});if(!stopped)options.onload?.({status:200,responseText:raw});stopped=true;clearTimeout(timer);return;}
+   if(result.state==='error'||result.state==='cancelled'){fail(result.error||'已停止本次回答');return;}
+   timer=setTimeout(poll,500);
+  });
+  let body;try{body=JSON.parse(options.data);}catch(_){queueMicrotask(()=>fail('问题格式无效。'));return{abort(){stopped=true;}};}
+  json('/v1/learning/jobs/create',body,result=>{
+   if(typeof result.id!=='string'){fail('AI 回答任务未创建，请稍后重试。');return;}jobId=result.id;options.onloadstart?.({status:200});emit({type:'response.in_progress'});poll();
+  });
+  return{abort(){if(stopped)return;stopped=true;clearTimeout(timer);clearTimeout(networkTimer);current?.abort?.();if(jobId)try{request({method:'POST',url:baseURL(a.url)+'/v1/learning/jobs/cancel',headers,anonymous:true,timeout:15000,data:JSON.stringify({id:jobId}),onload(){},onerror(){}});}catch(_){}options.onabort?.();}};
+ }
  function transport(options){
   const a=account();let path='';
   if(options.url==='https://ark.cn-beijing.volces.com/api/v3/responses')path='/v1/ark/responses';
@@ -620,6 +646,7 @@ function create({request,getValue,setValue}){
   // Do not pass vendor credentials or arbitrary provider headers to the gateway.
   const headers={...(a.token?{Authorization:'Bearer '+a.token}:{}),'Content-Type':'application/json','X-App-Id':APP,'X-Client-Type':'userscript'};
   for(const [k,v] of Object.entries(options.headers||{}))if(k.toLowerCase()==='x-api-request-id')headers['X-Api-Request-Id']=v;
+  if(path==='/v1/ark/responses'&&options.responseType==='stream')return incremental(options,a,headers);
   return request({...options,url:baseURL(a.url)+path,headers,anonymous:true,onload:r=>{if(r.status===401&&a.token&&a.token===credential()){setValue(KEY,{url:a.url,token:''});refreshUI?.();changeListener?.();}options.onload?.(r);}});
  }
  function call(path,body,token=account().token,url=account().url){return new Promise((resolve,reject)=>{

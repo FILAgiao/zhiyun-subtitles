@@ -1,0 +1,22 @@
+{
+  "version": "0.19.3",
+  "verified_at": "2026-10-10 Asia/Shanghai",
+  "installer_matches_build": true,
+  "live_hi_incremental": {
+    "first_text_seconds": 2.94,
+    "completion_seconds": 5.12,
+    "short_reads": 3,
+    "model_calls": 1,
+    "answered": true
+  },
+  "browser_ai": {
+    "gm_stream_deliberately_unavailable": true,
+    "incremental_short_requests": true,
+    "real_login": true,
+    "two_turns": true,
+    "history_retained": true,
+    "text_visible_before_completion": true,
+    "waiting_feedback_visible": true,
+    "page_errors": 0
+  }
+}

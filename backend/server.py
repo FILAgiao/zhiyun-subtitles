@@ -62,6 +62,7 @@ def official_stream(url,headers,body):
 class Gateway(AdminMixin):
     def __init__(self,path,upstream=official,upstream_stream=official_stream):
         self.path,self.upstream,self.upstream_stream=str(path),upstream,upstream_stream
+        self.learning_jobs={};self.learning_lock=threading.Lock();self.learning_slots=threading.BoundedSemaphore(8)
         Path(self.path).parent.mkdir(parents=True,exist_ok=True)
         with self.db() as db:
             db.executescript(SCHEMA)
@@ -146,7 +147,10 @@ class Gateway(AdminMixin):
             with self.db() as db:
                 db.execute('INSERT OR IGNORE INTO grants VALUES(?,?,?,?)',(guest,app,int(os.environ.get('GUEST_SPEECH_REQUESTS','120')),int(os.environ.get('GUEST_SPEECH_SECONDS','1440'))))
             return self.speech(guest,app,path,headers,body)
-        user=self.auth(token,app); self.throttle('user:'+str(user['id']),90)
+        user=self.auth(token,app)
+        if method=='POST' and path in ('/v1/learning/jobs/poll','/v1/learning/jobs/cancel'):
+            return self.learning_job(user['id'],app,path,body)
+        self.throttle('user:'+str(user['id']),90)
         if method=='POST' and path=='/v1/auth/logout':
             with self.db() as db: db.execute('DELETE FROM sessions WHERE hash=?',(digest(token),))
             self.close_activity(digest(token))
@@ -155,9 +159,56 @@ class Gateway(AdminMixin):
         if method=='POST' and path=='/v1/activity': return 200,{}, {'ok':True,'server_time':int(time.time())}
         if method=='GET' and path=='/v1/history': return 200,{},self.history(user['id'])
         if path.startswith('/v1/admin/'): return self.admin_request(method,path,user,body,month())
+        if method=='POST' and path=='/v1/learning/jobs/create': return self.learning_job(user['id'],app,path,body)
         if method=='POST' and path=='/v1/ark/responses': return self.ark(user['id'],app,body,stream_sink)
         if method=='POST' and path in ('/v1/speech/submit','/v1/speech/query'): return self.speech(user['id'],app,path,headers,body)
         raise Fault(404,'接口不存在')
+    def learning_job(self,user,app,path,body):
+        now=time.monotonic()
+        with self.learning_lock:
+            for key,job in list(self.learning_jobs.items()):
+                if now-job['created']>300 and job['state'] not in ('pending','generating'): del self.learning_jobs[key]
+            if not path.endswith('/create'):
+                key=body.get('id');job=self.learning_jobs.get(key) if isinstance(key,str) else None
+                if not job or job['user']!=user or job['app']!=app: raise Fault(404,'回答任务不存在或已过期')
+                if path.endswith('/cancel'):
+                    job['cancelled']=True
+                    if job['state'] not in ('complete','error'):job['state']='cancelled'
+                    return 200,{}, {'ok':True}
+                self.throttle('learning-poll:'+str(user)+':'+key,180)
+                snapshot={k:job[k] for k in ('id','state','text','revision')}
+                if job.get('response'):snapshot['response']=job['response']
+                if job.get('error'):snapshot['error']=job['error'];snapshot['error_status']=job['error_status']
+                return 200,{},snapshot
+            if len(self.learning_jobs)>=128: raise Fault(503,'回答任务较多，请稍后再试')
+            if sum(j['user']==user and j['state'] in ('pending','generating') for j in self.learning_jobs.values())>=2: raise Fault(429,'请等待当前回答完成')
+            if not self.learning_slots.acquire(blocking=False):raise Fault(503,'模型服务繁忙，请稍后再试')
+            key=secrets.token_urlsafe(24)
+            job={'id':key,'user':user,'app':app,'created':now,'state':'pending','text':'','revision':0,'cancelled':False}
+            self.learning_jobs[key]=job
+        def sink(event):
+            with self.learning_lock:
+                if job['cancelled']:raise Fault(409,'已停止本次回答')
+                kind=event.get('type')
+                if kind=='response.in_progress':job['state']='generating'
+                elif kind=='response.output_text.delta':
+                    delta=event.get('delta','')
+                    if not isinstance(delta,str) or len(job['text'])+len(delta)>200000:raise Fault(502,'模型回复过大')
+                    job['text']+=delta;job['revision']+=1
+                elif kind=='response.completed':job['response']=event['response'];job['state']='complete';job['revision']+=1
+        def run():
+            try:self.ark(user,app,{**body,'stream':True},sink)
+            except Exception as error:
+                with self.learning_lock:
+                    if not job['cancelled']:
+                        job['state']='error';job['error']=error.message if isinstance(error,Fault) else '模型服务暂时不可用';job['error_status']=error.status if isinstance(error,Fault) else 502
+            finally:self.learning_slots.release()
+        try:threading.Thread(target=run,daemon=True).start()
+        except Exception:
+            with self.learning_lock:del self.learning_jobs[key]
+            self.learning_slots.release();raise
+        return 202,{}, {'id':key,'state':'pending','text':'','revision':0}
+
     def ark(self,user,app,body,stream_sink=None):
         key=os.environ.get('ARK_API_KEY')
         if not key: raise Fault(503,'尚未配置模型服务')
