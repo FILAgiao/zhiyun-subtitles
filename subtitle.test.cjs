@@ -277,3 +277,13 @@ test('range cache cancellation between chunks stops before another request',asyn
  await assert.rejects(downloadInChunks(o=>{calls++;queueMicrotask(()=>o.onload({status:206,responseHeaders:'Content-Range: bytes 0-7/16',response:new Blob([new Uint8Array([0,0,0,16,102,116,121,112])])}));return{abort(){}};},'https://vod.cmc.zju.edu.cn/a.mp4',{chunkSize:8,signal:controller.signal,write:async()=>controller.abort()}),/取消/);
  assert.equal(calls,1);
 });
+
+// Automatic source language works in both contextual and economical profiles.
+test('foreign subtitles use automatic source detection rather than a fixed English language',async()=>{
+ const {contextualTranslationBody,translationBody}=require('./zhiyun-subtitles.user.js');
+ for(const text of ['これは勾配降下法です。','Der Gradient zeigt nach oben.','La descente de gradient réduit la perte.']){
+  const body=contextualTranslationBody(text,'auto','zh');assert.match(body.input[0].content,/自动识别目标字幕的语言/);assert.ok(body.input[1].content[0].text.includes(text));
+  const economy=translationBody(text,'auto','zh');assert.equal(economy.model,body.model);assert.match(economy.input[0].content,/翻译为 zh/);
+ }
+ const {calls,request}=mockRequests();const translator=createTranslator(request);translator.start('auto','zh');translator.schedule(['已经是中文','これは勾配降下法です。']);assert.equal(calls.length,1);assert.equal(calls[0].text,'これは勾配降下法です。');translator.stop();
+});

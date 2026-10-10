@@ -1,31 +1,37 @@
 {
   "name": "zhiyun-subtitles",
-  "version": "0.19.6",
+  "version": "0.20.18",
   "private": true,
   "description": "浙大上课爽：网课不硬扛，浙大上课爽！同步字幕、PPT 讲解与本机缓存。",
   "scripts": {
     "test": "node --test subtitle.test.cjs translation-sync.test.cjs cache-close.test.cjs ai-learning.test.cjs",
-    "test:ui": "node ui.test.cjs && node playback-ui.test.cjs && node player-edge-ui.test.cjs && node translation-sync-ui.test.cjs && node course-route-ui.test.cjs && node ai-learning-ui.test.cjs && node simple-ui.test.cjs",
+    "test:ui": "node ui.test.cjs && node playback-ui.test.cjs && node player-edge-ui.test.cjs && node translation-sync-ui.test.cjs && node course-route-ui.test.cjs && node ai-learning-ui.test.cjs && node simple-ui.test.cjs && node question-history-ui.test.cjs",
     "build:stream": "node build-stream.cjs",
     "test:media": "node generate-test-media.cjs",
     "test:stream": "node progressive.test.cjs && node progressive.test.cjs .test-media/tail.mp4 && node progressive-ui.test.cjs",
     "test:cache": "node cache-flow.test.cjs && node cache-source-race.test.cjs",
-    "build": "node build-stream.cjs && node build-math.cjs && node build-userscript.cjs",
+    "build": "node build-stream.cjs && node build-math.cjs && node build-card.cjs && node build-userscript.cjs",
     "test:release": "node release.test.cjs",
     "test:storage": "node chrome-cache.test.cjs && node cache-storage-ui.test.cjs",
     "test:gateway": "python -m unittest backend.test_server -v && node --test gateway-client.test.cjs",
     "start:backend": "python backend/server.py serve",
     "test:gateway:ui": "node gateway-ui.test.cjs && node backend-ui.test.cjs && node ai-actions-ui.test.cjs",
-    "build:math": "node build-math.cjs"
+    "build:math": "node build-math.cjs",
+    "build:card": "node build-card.cjs",
+    "test:card": "node knowledge-card-markdown-ui.test.cjs",
+    "test:appearance": "node appearance-ui.test.cjs"
   },
   "engines": {
     "node": ">=20.8"
   },
   "devDependencies": {
     "esbuild": "0.25.12",
-    "playwright": "1.62.1"
+    "jsqr": "^1.4.0",
+    "playwright": "1.62.1",
+    "qrcode": "^1.5.4"
   },
   "dependencies": {
+    "html2canvas": "^1.4.1",
     "katex": "0.19.0",
     "mp4box": "2.4.1"
   }

@@ -40,6 +40,7 @@ const {chromium}=require(process.env.PLAYWRIGHT_MODULE||'playwright');
  version='test-v1';await page.evaluate(async()=>{cache.close();window.cache=await ZYProgressive.openCache(options);await cache.download();});
  assert.equal(await page.evaluate(()=>cache.complete()),true);
  await page.evaluate(()=>cache.close());
+ const priority=await page.evaluate(async()=>{const order=[];let phase='';const fresh=await ZYProgressive.openCache({...options,load:async()=>null,onChange:s=>phase=s.phase,request:async(url,args)=>{if(phase==='download')order.push(args.range.start);return options.request(url,args);}});await fresh.prepare(25,2);await fresh.download(25);const complete=fresh.complete();fresh.close();return {order,complete};});assert.equal(priority.complete,true);assert.ok(priority.order.some((n,i)=>i&&n<priority.order[i-1]),'download prioritizes remaining future blocks before backfilling the earlier video');
  console.log('PASS: real MP4 audio/video decode before full download, seeking forward/back, disk prefix reuse, complete download.');
  }finally{await browser.close();}
 })().catch(e=>{console.error(e);process.exit(1);});

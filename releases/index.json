@@ -1,0 +1,140 @@
+[
+  {
+    "version": "0.20.18",
+    "source": "verified-public-release",
+    "acceptance": "backend/acceptance-0.20.18.json",
+    "sha256": "496d58a9d3367bc7fc08b9bfd4ce3a7486ec9091c89760e8d301a475e5689907"
+  },
+  {
+    "version": "0.20.17",
+    "source_path": "/app/backend/install.user.js",
+    "sha256": "d6e98009f983959cc8fbd2c5368c3b383f8bd34cba4c88faa1768d909fbcc05f",
+    "source": "server-current"
+  },
+  {
+    "version": "0.20.13",
+    "source_path": "/app/backend/.rollback-userscript-0.20.17-20261010T133522Z/install.user.js",
+    "sha256": "da70163755d1ff8efcb48be56f6a309aa802519e6a7f8f69290d8fafe7388ae0",
+    "source": "server-backup"
+  },
+  {
+    "version": "0.19.6",
+    "source": "git",
+    "commit": "08d72c45e0728ce66e8fc4acbc5b41617033345a",
+    "sha256": "20cda8259148cfe7325271eba3531d2218952db939d92dc17bdd563027dfd543"
+  },
+  {
+    "version": "0.19.5",
+    "source": "git",
+    "commit": "d393d3d16ed42ace115e3ff2e4cd69fe5b0552e6",
+    "sha256": "d279e96594369ddb2734a3e719a3e4481adedc2c8732b6860a4a41e12a27f72f"
+  },
+  {
+    "version": "0.19.4",
+    "source": "git",
+    "commit": "e6eddde041018cc83f0417ac1f93bbe8a5f0f43c",
+    "sha256": "db4b1e89c6f91988251fa249625259c31c558d881759ff74b41c02822054242c"
+  },
+  {
+    "version": "0.19.3",
+    "source": "git",
+    "commit": "a6f3ca29ed57684f56d0ce31fc28c480e78cbd6d",
+    "sha256": "e90b9455c58cfd4c0ac2bd3d3912ef158c34d3badad08f41ef9784f696b3fdfe"
+  },
+  {
+    "version": "0.19.2",
+    "source": "git",
+    "commit": "774d1b378407f2078936a5a0eb234af64271a4fe",
+    "sha256": "1c61dcb5f02a5451685048c1675209e46868c7c9a206c557096e7432ad3d48ed"
+  },
+  {
+    "version": "0.19.1",
+    "source": "git",
+    "commit": "304335508466e2f04af545aeed834b3b336c0a8b",
+    "sha256": "55a0b0104e426a0f95770be8474419a49b7bbcc4a5f314827cac6bffd905d13f"
+  },
+  {
+    "version": "0.19.0",
+    "source_path": "/app/backend/.rollback-0191-20261009-1791525158255/install.user.js",
+    "sha256": "a5982c7fc3da17ba77a129498099c9a227c16930cb59fcb8c49cb4e938e1f588",
+    "source": "server-backup"
+  },
+  {
+    "version": "0.17.0",
+    "source": "git",
+    "commit": "4b1f2c5a9decc57a3090cb520aeb2e6b61dc1cbd",
+    "sha256": "2e655036f80ae327204bda0e0ed5c8dfc99e3c1a0b00d74e0e6a7f0e8e6c6239"
+  },
+  {
+    "version": "0.15.0",
+    "source": "git",
+    "commit": "8c79c29018133b5eda67f053184a3fa610335710",
+    "sha256": "ad0aab00abb57e41108dcc5d716bb5d21b4d315028d31d5a6f4340345d73799b"
+  },
+  {
+    "version": "0.14.1",
+    "source": "git",
+    "commit": "5bf8f134fc71f6836b2d832eea8c2566bf35fd3f",
+    "sha256": "a07d8a5cd4ea723b0cf8bb1bbfa5aad76e69de46affb12a63d67f86c430f3568"
+  },
+  {
+    "version": "0.14.0",
+    "source": "git",
+    "commit": "bcedb890f7c54af8c9a3188e41f7fbfc2d419779",
+    "sha256": "8e03824b64ed4609dd2a4538100431e381c4762e7961d2e03b143d857fff8e06"
+  },
+  {
+    "version": "0.13.0",
+    "source": "git",
+    "commit": "2a0a498b5d05fc61ee122a86c4edec461498e61c",
+    "sha256": "12555f8a68eadd375188f631ce55970d6a2df43382a99a46033fbb1a6e6d3cfe"
+  },
+  {
+    "version": "0.12.0",
+    "source": "git",
+    "commit": "6be0ef7144ac2e4d9bdaca6ed4b902443a1ded5f",
+    "sha256": "09c15ce657314f8fc06e36cf33eb9d0752434b316783e64fb5b3c69c4b7a96c2"
+  },
+  {
+    "version": "0.11.2",
+    "source": "git",
+    "commit": "3773c36fee8d507e432831b7f6e5a169d238e772",
+    "sha256": "2726cc2a0cba16bf5576436655e7ed9527e9d86ba8eae480bcdb74d6b4c04d36"
+  },
+  {
+    "version": "0.11.1",
+    "source": "git",
+    "commit": "9c6a6ef7d6cf727e7abf93a592d8d36dbb3fded2",
+    "sha256": "3f99370b07762e466f1bdfefc43140513cabe1276a2c8ccc6c51379d76192846"
+  },
+  {
+    "version": "0.11.0",
+    "source": "git",
+    "commit": "9869ae0d3691877c82c70d5e80aa7cf3733cd421",
+    "sha256": "ae64ed1a2becadb5787064857be144510a1a407654e2a8db6e0f8efa00fd2f54"
+  },
+  {
+    "version": "0.10.2",
+    "source": "git",
+    "commit": "54256dd9c989a29d64fa44d2dde262c31c7e7b0b",
+    "sha256": "419d7e0596d0026c3caf2a5458d9f35c7241ec7e0e6c556ed96302660e716e36"
+  },
+  {
+    "version": "0.10.1",
+    "source": "git",
+    "commit": "7b687875ce37f9c536af988e9f5596a47c99ab42",
+    "sha256": "439844ed07324b75457abcff909da625c0d19af6aba4cf6c1d1f402d7ebf4916"
+  },
+  {
+    "version": "0.10.0",
+    "source": "git",
+    "commit": "2d766ba8755091af6c4335dbe04a2c061f8ff499",
+    "sha256": "eb498977d0784cd76c392c7fa057470f664fb8a1368f260f71173bb6805c805e"
+  },
+  {
+    "version": "0.9.0",
+    "source": "git",
+    "commit": "85c72dbd04b6559c20ae8b13ae550735c59a3582",
+    "sha256": "2740c490511a0b07cc87d4ef145694dc1feb97d5197eb82cadf7e53f97dd3cae"
+  }
+]

@@ -1,0 +1,6 @@
+{
+  "version": "0.20.18",
+  "source": "verified-public-release",
+  "acceptance": "backend/acceptance-0.20.18.json",
+  "sha256": "496d58a9d3367bc7fc08b9bfd4ce3a7486ec9091c89760e8d301a475e5689907"
+}

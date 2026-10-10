@@ -72,7 +72,7 @@ test('readable stream handles JSON errors and abort without waiting for onload',
  let o,cancelled=false;const c=new AbortController(),pending=new ReadableStream({cancel(){cancelled=true;}});const p=ai.requestResponse(opts=>{o=opts;return{abort(){}};},{},'key',c.signal);o.onloadstart({status:200,response:pending});c.abort();await assert.rejects(p,e=>e.name==='AbortError');assert.equal(cancelled,true);
 });
 
-test('Interactive Seed 2 learning avoids spending the answer budget on hidden reasoning',()=>{assert.deepEqual(ai.makeBody({question:'hello'}).reasoning,{effort:'minimal'});assert.equal(ai.makeBody({settings:{model:'custom-model'},question:'hello'}).reasoning,undefined);});
+test('Interactive Seed 2 learning avoids spending the answer budget on hidden reasoning',()=>{assert.deepEqual(ai.makeBody({question:'hello'}).reasoning,{effort:'minimal'});assert.equal(ai.makeBody({settings:{model:'custom-model'},question:'hello'}).model,ai.DEFAULTS.model);});
 
 test('Completion resolves without waiting for the HTTP connection to close',async()=>{
  let opts,controller;const stream=new ReadableStream({start(c){controller=c;}});
@@ -103,3 +103,14 @@ test('A rejected stream reader terminates with feedback instead of an unhandled 
 });
 
 test('Feynman mode starts with one clear sentence and defers detail until requested',()=>{const b=ai.makeBody({question:'什么是多态？'});assert.match(b.input[0].content,/一句大白话直接回答/);assert.match(b.input[0].content,/不超过150字/);assert.match(b.input[0].content,/不主动出自测题/);});
+
+test('Sentence sharing keeps decimal values and structured Markdown blocks intact',()=>{
+ assert.deepEqual(ai.selectionSentences('第一句。第二句！'),['第一句。','第二句！']);
+ assert.deepEqual(ai.selectionSentences('The value is 3.14. Next sentence.'),['The value is 3.14.','Next sentence.']);
+ const code='```python\nprint("a. b.")\n```',formula='$$\n\\frac{1}{2}\n$$',brackets='\\[\nx = 1\n\\]',table='| A | B |\n| --- | --- |\n| a | b |';
+ for(const block of [code,formula,brackets,table])assert.deepEqual(ai.selectionSentences(block),[block]);
+});
+test('Markdown card sanitization preserves formatting while hiding credentials',()=>{
+ const text=ai.cardText('# 标题\n**核心** `code`\nBearer hidden https://example.test/private secret-key','secret-key',true);
+ assert.match(text,/# 标题/);assert.match(text,/\*\*核心\*\*/);assert.match(text,/`code`/);assert.doesNotMatch(text,/hidden|example\.test|secret-key/);
+});

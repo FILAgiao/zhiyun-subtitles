@@ -7,7 +7,7 @@ const {chromium}=require(process.env.PLAYWRIGHT_MODULE||'playwright');
  await page.route('https://ai-ui.test/**',r=>r.fulfill({contentType:'text/html',body:'<html></html>'}));await page.goto('https://ai-ui.test/');
  await page.setContent('<!doctype html><style>body{font:18px sans-serif;background:#edf3f2}#course-word{position:absolute;left:40px;top:40px}#host{position:fixed;inset:0;pointer-events:none}</style><div id="pane-voice"><span id="course-word">polymorphism</span></div><div id="host"></div>');
  await page.addScriptTag({content:fs.readFileSync('math-render.bundle.js','utf8')});
- await page.addScriptTag({content:fs.readFileSync('ai-learning.js','utf8')});
+ await page.addScriptTag({content:(fs.readFileSync('warm-theme.js','utf8')+'\n'+fs.readFileSync('ai-learning.js','utf8'))});
  await page.evaluate(()=>{
   const shadow=document.getElementById('host').attachShadow({mode:'open'});shadow.innerHTML='<style>[hidden]{display:none!important}#ai-open{pointer-events:auto;position:absolute;left:30px;top:100px}</style><button id="ai-open">讲解这页</button><div id="settings-ai" hidden></div>';
   const canvas=document.createElement('canvas');canvas.width=960;canvas.height=540;const ctx=canvas.getContext('2d');ctx.fillStyle='#ffefcc';ctx.fillRect(0,0,960,540);ctx.fillStyle='#18334c';ctx.font='40px sans-serif';ctx.fillText('Polymorphism / virtual methods',45,100);
@@ -23,7 +23,7 @@ const {chromium}=require(process.env.PLAYWRIGHT_MODULE||'playwright');
  assert.equal(await page.evaluate(()=>calls[1].input.length),4);assert.match(await page.evaluate(()=>calls[1].input[0].content),/前置知识/);
  await host.locator('#ai-slide-action').click();await page.waitForFunction(()=>answers===3);assert.equal(await page.evaluate(()=>calls[2].input.at(-1).content.filter(c=>c.type==='input_image').length),1);
  await host.locator('#ai-question').fill('图上这个概念再解释一下');await host.locator('#ai-send').click();await page.waitForFunction(()=>answers===4);assert.equal(await page.evaluate(()=>calls[3].input.at(-1).content.filter(c=>c.type==='input_image').length),0,'text-only followup never resends screenshot');
- await host.locator('#ai-crop-action').click();await host.locator('#ai-crop-image').waitFor();const box=await host.locator('#ai-crop-image').boundingBox();
+ await page.evaluate(()=>assistant.startCapture());await host.locator('#ai-crop-image').waitFor();const box=await host.locator('#ai-crop-image').boundingBox();
  await page.mouse.move(box.x+50,box.y+40);await page.mouse.down();await page.mouse.move(box.x+400,box.y+210);await page.mouse.up();await host.locator('#ai-crop-use').click();
  assert.equal(await page.evaluate(()=>calls.length),4);assert.equal(await host.locator('#ai-attachment').isVisible(),true);await host.locator('#ai-mode').selectOption('exam');await host.locator('#ai-send').click();await page.waitForFunction(()=>answers===5);
  const image=await page.evaluate(()=>calls[4].input.at(-1).content.find(c=>c.type==='input_image').image_url);
@@ -34,7 +34,7 @@ const {chromium}=require(process.env.PLAYWRIGHT_MODULE||'playwright');
  await host.locator('#ai-close').click();await page.locator('#course-word').click({button:'middle'});await host.locator('#ai-crop-image').waitFor();await page.mouse.move(600,400);await page.mouse.down();await page.mouse.move(900,600);await page.mouse.up();await host.locator('#ai-crop-use').click();await host.locator('#ai-question').fill('请解释 polymorphism');await host.locator('#ai-send').click();await page.waitForFunction(()=>answers===7);assert.match(await page.evaluate(()=>calls[6].input.at(-1).content[0].text),/polymorphism/);
  await page.evaluate(()=>window.delay=1000);await host.locator('#ai-question').fill('一个慢请求');await host.locator('#ai-send').click();await host.locator('#ai-stop').click();assert.equal(await page.evaluate(()=>abortCount),1);
  await host.locator('#ai-question').fill('切课前的问题');await host.locator('#ai-send').click();await page.evaluate(()=>assistant.resetCourse());assert.equal(await page.evaluate(()=>abortCount),2);assert.equal(await host.locator('#ai-save-card').isDisabled(),true);assert.equal(await host.locator('#ai-question').inputValue(),'');
- await page.waitForTimeout(1100);assert.equal(await page.evaluate(()=>answers),7);assert.equal(await host.locator('#ai-log .ai-message').count(),1);
+ await page.waitForTimeout(1100);assert.equal(await page.evaluate(()=>answers),7);assert.equal(await host.locator('#ai-log .ai-message').count(),0);
  await page.evaluate(()=>{window.key='';});await host.locator('#ai-question').fill('无 Key');await host.locator('#ai-send').click();assert.match(await host.locator('#ai-status').textContent(),/登录/);assert.equal(await page.evaluate(()=>calls.length),9);
  await page.evaluate(()=>document.documentElement.requestFullscreen());await page.waitForTimeout(100);assert.equal(await host.locator('#ai-learning').isVisible(),true);await page.evaluate(()=>document.exitFullscreen());
 
@@ -54,14 +54,14 @@ const {chromium}=require(process.env.PLAYWRIGHT_MODULE||'playwright');
  assert.equal(await host.locator('#caption').evaluate(e=>getComputedStyle(e).pointerEvents),'none');
 
 
- // A real browser download yields a readable fixed-size PNG without a network request.
- assert.equal(await host.locator('#ai-save-card').isEnabled(),true);assert.equal(await host.locator('#ai-card-row').isVisible(),true);
+ // A real browser download yields a complete single PNG without a network request.
+ assert.equal(await host.locator('#ai-save-card').isEnabled(),false);for(const checkbox of await host.locator('.ai-card-select input').all())await checkbox.check();assert.equal(await host.locator('#ai-save-card').isEnabled(),true);assert.equal(await host.locator('#ai-card-row').isVisible(),true);
  const requestsBeforeCard=await page.evaluate(()=>calls.length);
  const downloadEvent=page.waitForEvent('download');await host.locator('#ai-save-card').click();
  const download=await downloadEvent;assert.match(download.suggestedFilename(),/^浙大上课爽-知识卡-.*\.png$/);assert.equal(await download.failure(),null);
  await download.saveAs('knowledge-card-preview.png');
- const png=fs.readFileSync('knowledge-card-preview.png');assert.equal(png.subarray(1,4).toString(),'PNG');assert.equal(png.readUInt32BE(16),1080);assert.equal(png.readUInt32BE(20),1350);
- assert.equal(await page.evaluate(()=>calls.length),requestsBeforeCard);assert.match(await host.locator('#ai-status').textContent(),/本地.*不会自动发布/);
+ const png=fs.readFileSync('knowledge-card-preview.png');assert.equal(png.subarray(1,4).toString(),'PNG');assert.equal(png.readUInt32BE(16),1080);assert.ok(png.readUInt32BE(20)>=1040);
+ assert.equal(await page.evaluate(()=>calls.length),requestsBeforeCard);assert.match(await host.locator('#ai-status').textContent(),/已保存选中的内容/);
 
  await page.screenshot({path:'ai-learning-preview.png'});
  const beforeMissingSlide=await page.evaluate(()=>calls.length);await page.evaluate(()=>{assistant.resetCourse();assistant.close();slide=null;});await host.locator('#ai-open').click();assert.match(await host.locator('#ai-status').textContent(),/请先打开.*PPT/);assert.equal(await page.evaluate(()=>calls.length),beforeMissingSlide,'missing PPT does not trigger a paid model request');

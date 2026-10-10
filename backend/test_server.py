@@ -23,6 +23,11 @@ class Tests(unittest.TestCase):
     def fails(self,status,fn):
         with self.assertRaises(Fault) as ctx: fn()
         self.assertEqual(status,ctx.exception.status)
+    def test_learning_defaults_to_server_model(self):
+        body={'input':[{'role':'user','content':'hello'}]}
+        self.call('/v1/ark/responses',body)
+        self.assertEqual(self.events[-1][2]['model'],'doubao-seed-2-1-lite-260915')
+        self.assertNotIn('model',body)
     def test_auth_and_app_grant_and_logout(self):
         self.fails(401,lambda:self.call('/v1/me',headers={'X-App-Id':'zhiyun-subtitles'},method='GET'))
         self.fails(403,lambda:self.call('/v1/me',headers={**self.headers,'X-App-Id':'other'},method='GET'))

@@ -1,0 +1,19 @@
+{
+  "version": "0.20.17",
+  "backup": "/opt/zhiyun-gateway/backend/.rollback-userscript-0.20.17-20261010T133522Z",
+  "public_files": {
+    "install.user.js": {
+      "version": "0.20.17",
+      "sha256": "d6e98009f983959cc8fbd2c5368c3b383f8bd34cba4c88faa1768d909fbcc05f",
+      "bytes": 1361438
+    },
+    "install.meta.js": {
+      "version": "0.20.17",
+      "sha256": "8be904b7205ffa3407f714696f690ea1b8a36e37c094541184df063509677cda",
+      "bytes": 1026
+    }
+  },
+  "health": "ok",
+  "url": "https://47.77.182.216.sslip.io/gateway/install.user.js",
+  "learning_default": "server patch verified; default doubao-seed-2-1-lite-260915"
+}

@@ -1,0 +1,1 @@
+const esbuild=require('esbuild');esbuild.buildSync({entryPoints:['card-render.mjs'],bundle:true,minify:true,format:'iife',globalName:'ZYCardRender',outfile:'card-render.bundle.js',legalComments:'inline'});require('fs').appendFileSync('card-render.bundle.js','\nglobalThis.ZYCardRender=ZYCardRender;\n');console.log('Built offline Markdown card renderer.');

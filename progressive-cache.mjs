@@ -107,7 +107,7 @@ export async function openCache({source,load,save,directory,request,checkSpace=a
   function available(segment){return segment.blocks.every(n=>record.parts[n]);}
   function ranges(){const out=[];for(const s of segments){if(!available(s))continue;const last=out.at(-1);if(last && s.start<=last[1]+.1)last[1]=s.end;else out.push([s.start,s.end]);}return out;}
   async function prepare(from,seconds){phase='index';targetBlocks=null;notify();await index();from=Math.max(0,Math.min(duration,from));const end=Math.min(duration,from+seconds),needed=new Set();for(const s of segments){if(s.end<=from || s.start>=end)continue;for(const n of s.blocks)needed.add(n);}phase='prepare';targetBlocks=needed;targetFrom=from;targetEnd=end;notify();for(const n of needed)await block(n,3);phase='ready';notify();return end;}
-  async function download(){await index();phase='download';targetBlocks=null;notify();for(let n=0;n<Math.ceil(record.total/blockSize);n++){if(stopped||closed)throw abortError();await block(n,0);}phase='complete';notify();}
+  async function download(from=0){await index();phase='download';targetBlocks=null;notify();const forward=[...new Set(segments.filter(s=>s.end>Math.max(0,Number(from)||0)).flatMap(s=>s.blocks))].sort((a,b)=>a-b),first=new Set(forward),order=[...forward,...Array.from({length:Math.ceil(record.total/blockSize)},(_,n)=>n).filter(n=>!first.has(n))];for(const n of order){if(stopped||closed)throw abortError();await block(n,0);}phase='complete';notify();}
   async function fragment(segment){
     const buffers=[];
     // Only one GOP's sample bytes are held; disk keeps the rest, including rewind history.

@@ -4,9 +4,9 @@ const {chromium}=require(process.env.PLAYWRIGHT_MODULE||'playwright');
  const browser=await chromium.launch({headless:true,executablePath:process.env.PLAYWRIGHT_EXECUTABLE_PATH});
  try {
   const page=await browser.newPage(),errors=[];page.on('pageerror',error=>errors.push(error.message));
-  await page.route('https://cache-race.test/**',route=>route.fulfill({contentType:'text/html',body:'<video style="width:800px;height:450px" src="https://vod.cmc.zju.edu.cn/first.mp4"></video>'}));
+  await page.route('https://interactivemeta.cmc.zju.edu.cn/**',route=>route.fulfill({contentType:'text/html',body:'<video style="width:800px;height:450px" src="https://vod.cmc.zju.edu.cn/first.mp4"></video>'}));
   await page.route('https://vod.cmc.zju.edu.cn/**',route=>route.abort());
-  await page.goto('https://cache-race.test/#/replay?course_id=race&sub_id=1');
+  await page.goto('https://interactivemeta.cmc.zju.edu.cn/#/replay?course_id=race&sub_id=1');
   await page.evaluate(async()=>{
    window.GM_getValue=(key,fallback)=>key==='cache-auto'?false:fallback;window.GM_setValue=()=>{};window.GM_deleteValue=()=>{};window.GM_registerMenuCommand=()=>{};window.GM_xmlhttpRequest=()=>({abort(){}});
    const video=document.querySelector('video');Object.defineProperty(video,'readyState',{get:()=>1});video.load=()=>{};
@@ -16,11 +16,11 @@ const {chromium}=require(process.env.PLAYWRIGHT_MODULE||'playwright');
   await page.evaluate(()=>{
    window.plays=0;window.opens=0;window.closes=0;window.openGates=[];
    window.ZYProgressive={openCache:async()=>{window.opens++;await new Promise(resolve=>openGates.push(resolve));return {
-    async play(video,{onAttach}){window.plays++;const playback={url:'blob:https://cache-race.test/cached-'+plays,dispose(){}};onAttach(playback);video.setAttribute('src',playback.url);return playback;},close(){window.closes++;},pause(){}
+    async play(video,{onAttach}){window.plays++;const playback={url:'blob:https://interactivemeta.cmc.zju.edu.cn/cached-'+plays,dispose(){}};onAttach(playback);video.setAttribute('src',playback.url);return playback;},close(){window.closes++;},pause(){}
    };}};
   });
   const ui=page.locator('#zy-subtitle-host');
-  const click=async id=>{if(!await ui.locator('#study-cache').evaluate(e=>e.open))await ui.locator('#study-cache > summary').click();if(!await ui.locator('#cache-details').evaluate(e=>e.open))await ui.locator('#cache-details > summary').click();await ui.locator('#'+id).click();};
+  const click=async id=>{await ui.locator('#settings-close').evaluate(e=>e.click());if(await ui.locator('#cache-quick-details').isHidden())await ui.locator('#cache-details-toggle').click();await ui.locator('#'+id).click();};
   const release=()=>page.evaluate(()=>openGates.shift()());
   await page.waitForTimeout(200);await click('cache-play');await page.waitForFunction(()=>opens===1);
   await click('cache-online');await release();await page.waitForTimeout(150);

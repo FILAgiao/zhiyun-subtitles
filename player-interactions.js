@@ -40,7 +40,7 @@ function mount({shadow,host,getVideo,getLocal,getCues,getCourse,getClock,getSeek
   if(event.key===' '||event.key==='Spacebar'){if(event.repeat)return;if(video.paused)Promise.resolve(video.play()).catch(()=>{$('cache-status').textContent='视频暂未就绪，请稍后再播放。';});else video.pause();}
   else seek(video.currentTime+(event.key==='ArrowRight'?10:-10));
  },true);
- $('transcript-open').onclick=()=>{$('transcript').hidden=!$('transcript').hidden;if(!$('transcript').hidden){onCollapse();signature='';updateTranscript();}};
+ // Question history now owns the main list entry.
  $('transcript-close').onclick=()=>{$('transcript').hidden=true;};
  $('transcript-follow').onclick=()=>{following=!following;$('transcript-follow').setAttribute('aria-pressed',String(following));$('transcript-follow').textContent=following?'跟随':'自由浏览';signature='';};
  function updateTranscript(){

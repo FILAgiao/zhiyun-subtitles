@@ -212,6 +212,8 @@ class Gateway(AdminMixin):
     def ark(self,user,app,body,stream_sink=None):
         key=os.environ.get('ARK_API_KEY')
         if not key: raise Fault(503,'尚未配置模型服务')
+        if not body.get('model'):
+            body={**body,'model':os.environ.get('ARK_LEARNING_MODEL','doubao-seed-2-1-lite-260915')}
         models=os.environ.get('ARK_MODELS','doubao-seed-translation-250915,doubao-seed-2-1-lite-260915').split(',')
         if body.get('model') not in models: raise Fault(400,'模型未开通')
         inputs=body.get('input')

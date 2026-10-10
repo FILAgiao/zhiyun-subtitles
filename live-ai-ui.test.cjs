@@ -8,8 +8,8 @@ const {chromium}=require('playwright');
  let page;const active=new Map();let paid=0,historyVerified=false;
  try{
   page=await browser.newPage();const errors=[];page.on('pageerror',e=>errors.push(e.message));
-  await page.route('https://classroom.test/**',r=>r.fulfill({contentType:'text/html',body:'<style>video{width:640px;height:360px}</style><div id="player"><video></video></div><div id="pane-voice"><div class="trans-item"><div class="item-title">00:00:10</div><div class="trans-lan"><div>This is a synthetic classroom fixture.</div></div></div></div>'}));
-  await page.goto('https://classroom.test/#/replay?course_id=live-acceptance&sub_id=1');
+  await page.route('https://interactivemeta.cmc.zju.edu.cn/**',r=>r.fulfill({contentType:'text/html',body:'<style>video{width:640px;height:360px}</style><div id="player"><video></video></div><div id="pane-voice"><div class="trans-item"><div class="item-title">00:00:10</div><div class="trans-lan"><div>This is a synthetic classroom fixture.</div></div></div></div>'}));
+  await page.goto('https://interactivemeta.cmc.zju.edu.cn/#/replay?course_id=live-acceptance&sub_id=1');
   setInterval(()=>console.log('LIVE TEST RUNNING',paid,active.size),30000).unref();await page.exposeFunction('abortRequest',id=>active.get(id)?.abort());
   await page.exposeFunction('dispatchRequest',async packet=>{
    if(!packet.url.startsWith(origin+'/'))throw Error('Unexpected live destination');
