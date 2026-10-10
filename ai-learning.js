@@ -147,7 +147,7 @@
   }
 
   function mountLearningAssistant(options) {
-    const {shadow,request,getApiKey=()=>'',prepareSlide=()=>{},getSlide=()=>null,getContext=()=>'',getCourseTitle=()=>'',getCaptureTarget=()=>null,getValue=(_,d)=>d,setValue=()=>{},onRequireLogin=()=>{},onOpenSettings=()=>{}}=options;
+    const {shadow,request,getApiKey=()=>'',getCapabilities=()=>({webSearch:true}),prepareSlide=()=>{},getSlide=()=>null,getContext=()=>'',getCourseTitle=()=>'',getCaptureTarget=()=>null,getValue=(_,d)=>d,setValue=()=>{},onRequireLogin=()=>{},onOpenSettings=()=>{}}=options;
     if(!shadow || typeof request!=='function')throw new Error('AI 助手缺少 shadow 或 request');
     const doc=shadow.ownerDocument,win=doc.defaultView;
     let settings=settingsOf(getValue(STORAGE_KEY,DEFAULTS)),history=[],lastAnswer=null,conversationImages=[],recentSlides=[],lastSlideKey='',pendingImage=null,controller=null,destroyed=false,cleanupCapture=null,requestSerial=0,slideContextEnabled=settings.followSlides,captureStream=null,captureVideo=null,capturePersistent=false;
@@ -212,7 +212,7 @@
       question=String(question||'').trim();if(!question && !image && !pendingImage)return;if(controller)return;
       open();const currentKey=String(getApiKey()||'');if(!currentKey.trim()){status('请先登录账号，解锁 AI 讲解与截图问答。');onRequireLogin();return;}
       controller=new AbortController();const ownController=controller,signal=controller.signal,serial=++requestSerial;
-      const chosenSettings=settingsOf(settings),currentImage=image||pendingImage,currentSlide=slide||getSlide();let images=[],labels=[],warning='',reply=null,feedbackTimer=null,transportConnected=false;
+      const canSearch=getCapabilities().webSearch===true,chosenSettings=settingsOf({...settings,webSearch:settings.webSearch&&canSearch}),currentImage=image||pendingImage,currentSlide=slide||getSlide();let images=[],labels=[],warning=settings.webSearch&&!canSearch?'联网搜索暂未开通，本次按普通对话回答。':'',reply=null,feedbackTimer=null,transportConnected=false;
       setBusy(true);status(slide?'正在读取本页 PPT…':'正在整理课程上下文…');
       try {
         notifySlide(currentSlide);
@@ -328,7 +328,7 @@
       ask.onclick=()=>{closeSelection();const question='请结合本课程解释以下选中文字：\n'+text;if(controller){open();$('ai-question').value=question;status('文字已放入输入框，当前讲解结束后即可发送。');}else send(question);};
       selectionMenu.append(ask,make('small',{text:' Shift + 右键：原生菜单'}));shadow.append(selectionMenu);ask.focus();
     },true);
-    listen($('ai-close'),'click',()=>{panel.hidden=true;});listen($('ai-settings-open'),'click',()=>{panel.hidden=true;onOpenSettings('ai');});
+    listen($('ai-close'),'click',()=>{panel.hidden=true;});listen($('ai-settings-open'),'click',()=>{panel.hidden=true;mountSettings();onOpenSettings('ai');});
     listen($('ai-mode'),'change',()=>{settings.mode=$('ai-mode').value;save();});listen($('ai-stop'),'click',()=>{stop();status('已停止本次讲解。');});listen($('ai-clear'),'click',clear);listen($('ai-save-card'),'click',saveKnowledgeCard);listen($('ai-remove-image'),'click',()=>attach(null));
     listen($('ai-slide-action'),'click',explainSlide);listen($('ai-crop-action'),'click',startCapture);listen($('ai-quick-capture'),'click',enableQuickCapture);listen(captureNotice.querySelector('button'),'click',()=>{stop();stopCaptureSession();cleanupCapture?.();});listen(win,'pagehide',stopCaptureSession);listen($('ai-compose'),'submit',e=>{e.preventDefault();send($('ai-question').value);});listen($('ai-question'),'paste',paste);
     listen($('ai-question'),'keydown',e=>{e.stopPropagation();if(e.key==='Enter'&&!e.shiftKey&&!e.isComposing){e.preventDefault();send(e.currentTarget.value);}});
@@ -337,7 +337,7 @@
       if(!container)return;container.replaceChildren();const form=make('div',{class:'ai-settings'});
       const field=(label,el)=>{const row=make('label',{class:'ai-stack'});row.append(make('span',{text:label}),el);form.append(row);return el;};
       const model=field('豆包讲解模型',make('input',{type:'text',maxlength:'160','aria-label':'豆包讲解模型'}));model.value=settings.model;listen(model,'change',()=>{settings.model=model.value.trim()||DEFAULTS.model;model.value=settings.model;save();});
-      for(const [key,label] of [['middleClick','鼠标中键按住并拖动，原位置框选截图（可开启连续截图减少重复授权）'],['followSlides','翻页时记住最近两页 PPT，提问时一起发送'],['webSearch','允许联网搜索补充资料（可能产生额外费用）']]){const row=make('label'),input=make('input',{type:'checkbox'});input.checked=settings[key];row.append(input,doc.createTextNode(label));form.append(row);listen(input,'change',()=>{settings[key]=input.checked;if(key==='followSlides'){slideContextEnabled=settings[key];recentSlides=[];lastSlideKey='';notifySlide();}save();});}
+      for(const [key,label] of [['middleClick','鼠标中键按住并拖动，原位置框选截图（可开启连续截图减少重复授权）'],['followSlides','翻页时记住最近两页 PPT，提问时一起发送'],['webSearch','允许联网搜索补充资料（可能产生额外费用）']]){const row=make('label'),input=make('input',{type:'checkbox'});input.checked=settings[key];if(key==='webSearch'&&getCapabilities().webSearch!==true){input.checked=false;input.disabled=true;input.title='当前服务未开通，普通 AI 对话仍可使用';}row.append(input,doc.createTextNode(label));form.append(row);listen(input,'change',()=>{settings[key]=input.checked;if(key==='followSlides'){slideContextEnabled=settings[key];recentSlides=[];lastSlideKey='';notifySlide();}save();});}
       const custom=field('我的讲解提示词',make('textarea',{maxlength:'1800',placeholder:'例如：我刚接触这门课。先说直觉，再举 Python 例子，最后问我一道判断题。','aria-label':'自定义讲解提示词'}));custom.value=settings.customPrompt;listen(custom,'change',()=>{settings.customPrompt=custom.value;save();});
       form.append(make('p',{text:'在 AI 讲解中选择“我的讲解方式”使用自定义提示词。AI 与翻译共用连接设置中的服务账号。课程截图和附近字幕仅在你提问时发送给豆包；自动翻页只在当前页面内保留最近两页，不会自动请求讲解。'}));
       form.append(make('p',{text:'回答之后可以接着问，AI 会记住本次对话。'}));container.append(form);

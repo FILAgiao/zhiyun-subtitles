@@ -16,7 +16,7 @@ const {chromium}=require('playwright');
    const controller=new AbortController();active.set(packet.id,controller);
    if(packet.url.endsWith('/ark/responses')||packet.url.endsWith('/learning/jobs/create')){
     paid++;const body=JSON.parse(packet.data);
-    if(paid===2)historyVerified=body.input.some(i=>i.role==='user'&&typeof i.content==='string'&&i.content.includes('特征向量'))&&body.input.some(i=>i.role==='assistant');
+    assert.equal(body.tools,undefined,'unavailable web search is omitted even when the old saved setting is true');if(paid===2)historyVerified=body.input.some(i=>i.role==='user'&&typeof i.content==='string'&&i.content.includes('特征向量'))&&body.input.some(i=>i.role==='assistant');
    }
    try{
     console.log('REQUEST',packet.id,packet.url.split('/').pop(),!!packet.stream);const response=await fetch(packet.url,{method:packet.method,headers:packet.headers,body:packet.data,signal:controller.signal});
@@ -31,7 +31,7 @@ const {chromium}=require('playwright');
    finally{active.delete(packet.id);}
   });
   await page.evaluate(()=>{
-   window.saved={};window.pending={};let serial=0;
+   window.saved={'ai-learning-settings-v1':{webSearch:true}};window.pending={};let serial=0;
    window.GM_getValue=(k,d)=>saved[k]??d;window.GM_setValue=(k,v)=>saved[k]=v;window.GM_deleteValue=k=>delete saved[k];window.GM_registerMenuCommand=()=>{};
    window.GM_xmlhttpRequest=o=>{if(o.responseType==='stream')throw Error('GM readable-stream transport deliberately unavailable in this acceptance');const id=++serial,p={o};if(o.responseType==='stream')p.stream=new ReadableStream({start(c){p.controller=c;}});pending[id]=p;dispatchRequest({id,url:o.url,method:o.method||'GET',headers:o.headers||{},data:o.data,stream:!!p.stream});return{abort(){abortRequest(id);}};};
    const v=document.querySelector('video');Object.defineProperties(v,{currentTime:{get:()=>12,set(){}},duration:{get:()=>3600},paused:{get:()=>true},readyState:{get:()=>1}});
@@ -51,7 +51,7 @@ const {chromium}=require('playwright');
   await ui.locator('#ai-question').fill('我们刚才讨论的数学概念叫什么？只回复概念名称。');await ui.locator('#ai-send').click();
   await page.waitForFunction(()=>{const s=document.getElementById('zy-subtitle-host').shadowRoot;return s.querySelectorAll('.ai-stream-text').length===2&&s.getElementById('ai-learning').getAttribute('aria-busy')==='false';},null,{timeout:120000});
   assert.match(await ui.locator('.ai-stream-text').last().textContent(),/特征向量/);assert.equal(historyVerified,true);assert.equal(paid,2);assert.deepEqual(errors,[]);
-  const result={gm_stream_deliberately_unavailable:true,incremental_short_requests:true,real_login:true,two_turns:true,history_retained:true,text_visible_before_completion:await page.evaluate(()=>sawPartialWhileBusy),waiting_feedback_visible:await page.evaluate(()=>sawWaitingFeedback),page_errors:0};
+  const result={saved_web_search_enabled_but_unavailable:true,gm_stream_deliberately_unavailable:true,incremental_short_requests:true,real_login:true,two_turns:true,history_retained:true,text_visible_before_completion:await page.evaluate(()=>sawPartialWhileBusy),waiting_feedback_visible:await page.evaluate(()=>sawWaitingFeedback),page_errors:0};
   const reportPath='backend/acceptance-'+JSON.parse(fs.readFileSync('package.json','utf8')).version.replaceAll('.','')+'.json';const report=fs.existsSync(reportPath)?JSON.parse(fs.readFileSync(reportPath,'utf8')):{version:JSON.parse(fs.readFileSync('package.json','utf8')).version};report.browser_ai=result;fs.writeFileSync(reportPath,JSON.stringify(report,null,2)+'\n');
   console.log('PASS: real browser login, live incremental text with GM streaming disabled, waiting feedback and two-turn conversation.',JSON.stringify(result));
  }catch(e){if(page)console.log('UI DIAGNOSTIC',await page.evaluate(()=>{const s=document.getElementById('zy-subtitle-host')?.shadowRoot;return {status:s?.getElementById('ai-status')?.textContent,busy:s?.getElementById('ai-learning')?.getAttribute('aria-busy'),log:s?.getElementById('ai-log')?.textContent};}));throw e;}finally{

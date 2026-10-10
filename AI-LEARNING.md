@@ -56,7 +56,7 @@ learning = globalThis.ZhiyunLearning.mountLearningAssistant({
 - 每次最多三张图片，模块正常流程最多最近两张；历史文字最多 14000 字符，课程上下文 9000 字符，提问 4000 字符。
 - Key 只进入 Authorization header；错误提示不回显服务端原始错误正文。回复使用纯文本渲染，不执行 HTML。
 - 停止、切课和销毁均中断在途 GM 请求；响应序号可阻止迟到回复进入新会话。
-- 联网搜索默认关闭，可在设置启用，使用 web_search / max_keyword:3。
+- 联网搜索默认关闭；服务能力开放时可在设置启用，使用 web_search / max_keyword:3。未开放时新版禁用选项，后端兼容旧开关并按普通对话回答。
 
 ## 验证
 

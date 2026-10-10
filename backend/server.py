@@ -1,4 +1,4 @@
-import argparse, base64, getpass, ipaddress, threading, hashlib, hmac, io, json, os, secrets, sqlite3, time, urllib.request, urllib.error, uuid, wave
+import argparse, copy, base64, getpass, ipaddress, threading, hashlib, hmac, io, json, os, secrets, sqlite3, time, urllib.request, urllib.error, uuid, wave
 from pathlib import Path
 from contextlib import contextmanager
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -137,7 +137,7 @@ class Gateway(AdminMixin):
                 db.execute('DELETE FROM sessions WHERE expires<?',(int(time.time()),))
                 db.execute('INSERT INTO sessions VALUES(?,?,?)',(digest(token),row['id'],int(time.time())+604800))
             self.open_activity(digest(token),row['id'],app,headers.get('X-Client-Type','api'),int(time.time())+604800)
-            return 200,{}, {'token':token,'expires_in':604800}
+            return 200,{}, {'token':token,'expires_in':604800,'capabilities':{'web_search':os.environ.get('ALLOW_WEB_SEARCH')=='1'}}
         token=headers.get('Authorization','').removeprefix('Bearer ')
         if not token and app=='zhiyun-subtitles' and method=='POST' and path in ('/v1/speech/submit','/v1/speech/query'):
             # Guest speech uses an isolated, non-login identity; never a shared model credential.
@@ -155,7 +155,7 @@ class Gateway(AdminMixin):
             with self.db() as db: db.execute('DELETE FROM sessions WHERE hash=?',(digest(token),))
             self.close_activity(digest(token))
             return 200,{}, {'ok':True}
-        if method=='GET' and path=='/v1/me': return 200,{}, {**user,'app':app,'usage':self.usage(user['id'],app)}
+        if method=='GET' and path=='/v1/me': return 200,{}, {**user,'app':app,'usage':self.usage(user['id'],app),'capabilities':{'web_search':os.environ.get('ALLOW_WEB_SEARCH')=='1'}}
         if method=='POST' and path=='/v1/activity': return 200,{}, {'ok':True,'server_time':int(time.time())}
         if method=='GET' and path=='/v1/history': return 200,{},self.history(user['id'])
         if path.startswith('/v1/admin/'): return self.admin_request(method,path,user,body,month())
@@ -249,9 +249,20 @@ class Gateway(AdminMixin):
             payload['reasoning']=reasoning
         # The dedicated translation model rejects store, including store:false.
         if body['model']!='doubao-seed-translation-250915': payload['store']=False
+        notice=''
         if body.get('tools'):
-            if os.environ.get('ALLOW_WEB_SEARCH')!='1' or body['tools']!=[{'type':'web_search','max_keyword':3}]: raise Fault(400,'联网搜索未开通')
-            payload['tools']=body['tools']
+            if body['tools']!=[{'type':'web_search','max_keyword':3}]: raise Fault(400,'不支持此工具')
+            if os.environ.get('ALLOW_WEB_SEARCH')=='1':payload['tools']=body['tools']
+            else:notice='联网搜索未开通，本次按普通对话回答。\n\n'
+        def decorate(result):
+            if not notice:return result
+            result=copy.deepcopy(result)
+            for item in result.get('output',[]):
+                if item.get('type')!='message':continue
+                for content in item.get('content',[]):
+                    if content.get('type')=='output_text':
+                        content['text']=notice+content.get('text','');result['warnings']=[notice.strip()];return result
+            return result
         call=self.reserve(user,app,'ark')
         feature='translation' if body['model']=='doubao-seed-translation-250915' else 'learning'
         if any(isinstance(i.get('content'),str) and '字幕译者' in i['content'] for i in inputs): feature='translation_context'
@@ -259,22 +270,25 @@ class Gateway(AdminMixin):
         try:
             if streaming:
                 stream_sink({'type':'response.in_progress'})
+                if notice:stream_sink({'type':'response.output_text.delta','delta':notice})
                 for event in self.upstream_stream(ARK,{'Authorization':'Bearer '+key,'Content-Type':'application/json'},payload):
                     if event.get('type')=='response.output_text.delta':
                         stream_sink({'type':event['type'],'delta':event.get('delta','')})
                     elif event.get('type')=='response.completed':
                         result=event.get('response',{})
                         if result.get('status') in ('failed','incomplete') or result.get('error'): raise Fault(502,'模型回答未完成，请缩短问题重试')
+                        result=decorate(result)
                         self.state(call,'complete' if result.get('usage') else 'unknown',result.get('usage'))
-                        stream_sink({'type':'response.completed','response':{k:result[k] for k in ('id','status','output','usage') if k in result}})
+                        stream_sink({'type':'response.completed','response':{k:result[k] for k in ('id','status','output','usage','warnings') if k in result}})
                         return 200,{},None
                     elif event.get('type') in ('error','response.failed','response.incomplete'):
                         raise Fault(502,'模型回答未完成，请稍后重试')
                 raise Fault(502,'模型回复连接中断，请重试')
             status,_,result=self.upstream(ARK,{'Authorization':'Bearer '+key,'Content-Type':'application/json'},payload)
             if status!=200 or not isinstance(result,dict): raise Fault(502,'模型服务返回异常')
+            result=decorate(result)
             self.state(call,'complete' if result.get('usage') else 'unknown',result.get('usage'))
-            return 200,{}, {k:result[k] for k in ('id','status','output','usage') if k in result}
+            return 200,{}, {k:result[k] for k in ('id','status','output','usage','warnings') if k in result}
         except Exception: self.state(call,'unknown'); raise
     def speech(self,user,app,path,headers,body):
         with self.db() as db: db.execute('DELETE FROM jobs WHERE created<?',(int(time.time())-86400,))

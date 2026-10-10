@@ -51,9 +51,25 @@ class Tests(unittest.TestCase):
         self.call('/v1/ark/responses',{'model':'doubao-seed-2-1-lite-260915','input':[{'role':'user','content':'hello'}]})
         self.assertFalse(self.events[0][2]['store'])
     def test_provider_validation_prevents_remote_fetch_and_tools(self):
-        bad=[{**self.body,'model':'arbitrary'}, {**self.body,'max_output_tokens':9999}, {**self.body,'tools':[{'type':'web_search','max_keyword':3}]}, {**self.body,'input':[{'role':'user','content':[{'type':'input_image','image_url':'http://127.0.0.1/private'}]}]}]
+        bad=[{**self.body,'model':'arbitrary'}, {**self.body,'max_output_tokens':9999}, {**self.body,'tools':[{'type':'unsupported_tool'}]}, {**self.body,'input':[{'role':'user','content':[{'type':'input_image','image_url':'http://127.0.0.1/private'}]}]}]
         for body in bad: self.fails(400,lambda:self.call('/v1/ark/responses',body))
         self.assertEqual(self.events,[])
+    def test_disabled_web_search_does_not_block_old_client_chat(self):
+        body={**self.body,'model':'doubao-seed-2-1-lite-260915','tools':[{'type':'web_search','max_keyword':3}]}
+        result=self.call('/v1/ark/responses',body)[2]
+        self.assertNotIn('tools',self.events[-1][2]);self.assertIn('联网搜索未开通',result['output'][0]['content'][0]['text'])
+        self.assertFalse(self.call('/v1/me',method='GET')[2]['capabilities']['web_search'])
+        def upstream(*args):
+            self.assertNotIn('tools',args[2])
+            yield {'type':'response.output_text.delta','delta':'hello'}
+            yield {'type':'response.completed','response':{'status':'completed','output':[{'type':'message','content':[{'type':'output_text','text':'hello'}]}],'usage':{'total_tokens':5}}}
+        self.gateway.upstream_stream=upstream;events=[]
+        self.gateway.handle('POST','/v1/ark/responses',self.headers,{**body,'stream':True},'local',events.append)
+        partial=''.join(e.get('delta','') for e in events)
+        completed=events[-1]['response']['output'][0]['content'][0]['text']
+        self.assertEqual(partial,completed);self.assertTrue(completed.endswith('hello'))
+        self.assertEqual(self.gateway.usage(1,'zhiyun-subtitles')['requests'],2)
+
     def test_quota_atomic_under_concurrency(self):
         self.gateway.add_user('a@example.test','long-test-password','zhiyun-subtitles',1,20)
         def invoke(_):

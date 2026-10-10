@@ -48,7 +48,7 @@ function create({request,getValue,setValue}){
   return request({...options,url:baseURL(a.url)+path,headers,anonymous:true,onload:r=>{if(r.status===401&&a.token&&a.token===credential()){setValue(KEY,{url:a.url,token:''});refreshUI?.();changeListener?.();}options.onload?.(r);}});
  }
  function call(path,body,token=account().token,url=account().url){return new Promise((resolve,reject)=>{
-  request({method:body===undefined?'GET':'POST',url:baseURL(url)+path,anonymous:true,timeout:15000,headers:{'Content-Type':'application/json','X-App-Id':APP,'X-Client-Type':'userscript',...(token?{Authorization:'Bearer '+token}:{})},...(body===undefined?{}:{data:JSON.stringify(body)}),onload:r=>{try{const data=JSON.parse(r.responseText);if(r.status<200||r.status>=300){if(r.status===401&&token&&token===credential()){setValue(KEY,{url:account().url,token:''});refreshUI?.();changeListener?.();}throw Error(data.error||'服务请求失败');}resolve(data);}catch(e){reject(e);}},onerror:()=>reject(Error('无法连接服务，请检查地址和域名授权')),ontimeout:()=>reject(Error('服务请求超时'))});
+  request({method:body===undefined?'GET':'POST',url:baseURL(url)+path,anonymous:true,timeout:15000,headers:{'Content-Type':'application/json','X-App-Id':APP,'X-Client-Type':'userscript',...(token?{Authorization:'Bearer '+token}:{})},...(body===undefined?{}:{data:JSON.stringify(body)}),onload:r=>{try{const data=JSON.parse(r.responseText);if(r.status<200||r.status>=300){if(r.status===401&&token&&token===credential()){setValue(KEY,{url:account().url,token:''});refreshUI?.();changeListener?.();}throw Error(data.error||'服务请求失败');}if(data.capabilities)setValue('gateway-capabilities-v1',data.capabilities);resolve(data);}catch(e){reject(e);}},onerror:()=>reject(Error('无法连接服务，请检查地址和域名授权')),ontimeout:()=>reject(Error('服务请求超时'))});
  });}
  async function login(url,email,password){url=baseURL(DEFAULT_ORIGIN||url);const data=await call('/v1/auth/login',{email,password},null,url);if(typeof data.token!=='string'||!data.token)throw Error('登录响应异常');setValue(KEY,{url,token:data.token});return data;}
  async function logout(){try{if(credential())await call('/v1/auth/logout',{});}finally{setValue(KEY,{url:account().url||'',token:''});}}
@@ -70,7 +70,7 @@ function create({request,getValue,setValue}){
   if(credential())usage().catch(()=>{});
  }
 
- return{transport,configured,credential,login,logout,call,mount};
+ return{transport,configured,credential,login,logout,call,mount,features:()=>({webSearch:!configured()||getValue('gateway-capabilities-v1',{}).web_search===true})};
 }
 return{create,baseURL};
 });

@@ -1,0 +1,25 @@
+{
+  "version": "0.19.4",
+  "verified_at": "2026-10-10 Asia/Shanghai",
+  "installer_matches_build": true,
+  "live_hi_with_disabled_search": {
+    "old_client_web_search_enabled": true,
+    "server_web_search_enabled": false,
+    "normal_answer_returned": true,
+    "downgrade_notice_visible": true,
+    "completion_seconds": 6.78,
+    "short_reads": 4,
+    "model_calls": 1
+  },
+  "browser_ai": {
+    "saved_web_search_enabled_but_unavailable": true,
+    "gm_stream_deliberately_unavailable": true,
+    "incremental_short_requests": true,
+    "real_login": true,
+    "two_turns": true,
+    "history_retained": true,
+    "text_visible_before_completion": true,
+    "waiting_feedback_visible": true,
+    "page_errors": 0
+  }
+}
