@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         浙大上课爽
 // @namespace    zhiyunzimu.local
-// @version      0.20.30
+// @version      0.20.31
 // @description  网课不硬扛，浙大上课爽！智云课堂同步字幕、PPT 讲解与本机缓存。
 // @match        https://*/*
 // @match        http://*/*
@@ -250,12 +250,18 @@ function mount({shadow,mascot}){
  const enabledLabel=document.createElement('label');enabledLabel.className='study-switch';enabledLabel.title='显示字幕';enabledLabel.append(enabled);
  captionSection.id='study-caption';captionSection.replaceChildren(modeLabel,enabledLabel,status);
  $('mode').querySelector('[value="both"]').textContent='中外对照';
+ const syncTitle=document.createElement('strong');syncTitle.id='sync-workspace-title';syncTitle.textContent='字幕、PPT 同步';syncSection.prepend(syncTitle);
+ const pptRow=document.createElement('div');pptRow.id='ppt-sync-row';pptRow.innerHTML='<button id="ppt-current-page" type="button" aria-expanded="false" aria-controls="ppt-current-preview">PPT 此页</button><button id="ppt-sync-toggle" type="button" aria-label="设置 PPT 提前或延后" aria-expanded="false" aria-controls="slide-ppt-sync">＋</button>';
+ const pptPreview=document.createElement('div');pptPreview.id='ppt-current-preview';pptPreview.hidden=true;pptPreview.innerHTML='<img alt="当前 PPT 页面"><span id="ppt-current-label"></span>';
+ const pptSync=$('slide-ppt-sync');pptSync.hidden=true;syncSection.append(pptRow,pptPreview,pptSync);
+ $('ppt-sync-toggle').onclick=()=>{pptSync.hidden=!pptSync.hidden;$('ppt-sync-toggle').textContent=pptSync.hidden?'＋':'−';$('ppt-sync-toggle').setAttribute('aria-expanded',String(!pptSync.hidden));};
+ style.textContent+='#sync-workspace-title{display:block;color:var(--zy-text,#513d32);font-size:13px;margin:0 0 10px}#ppt-sync-row{display:flex;gap:8px;border-top:1px solid var(--zy-line,#e5cdb9);margin-top:12px;padding-top:10px}#ppt-current-page{flex:1;text-align:left;background:var(--zy-surface,#fff);color:var(--zy-text,#513d32);border:1px solid var(--zy-line,#e5cdb9);border-radius:9px}#ppt-sync-toggle{width:34px;background:var(--zy-surface,#fff);color:var(--zy-accent,#91401e);border:1px solid var(--zy-line,#e5cdb9);border-radius:9px;font-size:18px}#ppt-current-preview{margin-top:8px}#ppt-current-preview img{display:block;width:auto;max-width:100%;height:auto;max-height:160px;object-fit:contain;border-radius:8px;margin:auto}#ppt-current-label{font-size:11px;color:var(--zy-muted,#8391a0)}#study-sync #slide-ppt-sync{display:grid;gap:8px;padding:10px 0 0;background:transparent;color:var(--zy-text,#513d32)}#study-sync #slide-ppt-sync[hidden],#ppt-current-preview[hidden]{display:none}#study-sync #slide-ppt-sync p{color:var(--zy-muted,#8391a0)!important;font-size:11px;margin:0}#study-sync #slide-ppt-sync label{font-size:12px}#study-sync #slide-ppt-sync input{background:var(--zy-surface,#fff);color:var(--zy-text,#513d32);border-color:var(--zy-line,#e5cdb9);max-width:none}#study-sync #slide-ppt-sync button{background:var(--zy-surface,#fff);color:var(--zy-accent,#91401e);border-color:var(--zy-line,#e5cdb9)}';
  const syncToggle=document.createElement('button');syncToggle.id='sync-toggle';syncToggle.type='button';syncToggle.setAttribute('aria-expanded','false');syncToggle.setAttribute('aria-controls','study-sync');syncToggle.innerHTML='<span id="sync-button-label">↻ 字幕同步</span><span id="sync-complete" hidden aria-label="字幕已匹配">✓</span>';syncToggle.onclick=()=>{$('auto-align').click();syncBox.open=true;syncToggle.setAttribute('aria-expanded','true');};
  const refreshSyncControl=()=>{const busy=$('auto-align').textContent==='停止匹配';$('sync-button-label').textContent=busy?'停止匹配':'↻ 字幕同步';syncToggle.setAttribute('aria-busy',String(busy));syncToggle.setAttribute('aria-expanded',String(syncBox.open));};
  const syncObserver=new MutationObserver(refreshSyncControl);syncObserver.observe($('auto-align'),{childList:true,subtree:true});syncObserver.observe(syncBox,{attributes:true,attributeFilter:['open']});
  const actionRow=document.createElement('div');actionRow.id='study-actions';actionRow.innerHTML='<button id="ai-open">✦ 讲解这页</button><button id="transcript-open">☷ 问题列表</button>';
  const syncParams=document.createElement('div');syncParams.id='sync-params';const stepper=document.createElement('div');stepper.id='sync-stepper';const offsetLabel=$('offset').closest('label');stepper.append($('earlier'),offsetLabel);const unit=document.createElement('span');unit.className='sync-unit';unit.textContent='秒';stepper.append(unit,$('later'));const syncSaved=document.createElement('span');syncSaved.id='sync-saved';syncSaved.textContent='尚未匹配';syncParams.append(syncSaved,stepper);
- $('auto-align').hidden=true;$('reset-offset').hidden=true;$('settings-sync').append($('reset-offset'));syncSection.prepend($('auto-align'));syncSection.append(syncParams);
+ $('auto-align').hidden=true;$('reset-offset').hidden=true;$('settings-sync').append($('reset-offset'));syncSection.prepend($('auto-align'));syncSection.insertBefore(syncParams,pptRow);
  $('offset').title='微调时间，单位为秒';$('offset').setAttribute('aria-label','同步微调秒数');$('earlier').textContent='−';$('earlier').title='提前 0.5 秒';$('earlier').setAttribute('aria-label','提前 0.5 秒');$('later').textContent='＋';$('later').title='延后 0.5 秒';$('later').setAttribute('aria-label','延后 0.5 秒');$('offset-hint').parentElement.hidden=true;syncSection.append($('offset-hint'));$('align-status').textContent='';
  for(const details of syncSection.querySelectorAll('details'))details.hidden=true;
  status.textContent='';
@@ -295,10 +301,18 @@ function mount({shadow,host,getVideo,getLocal,getCues,getCourse,getClock,getSeek
  const $=id=>shadow.getElementById(id);
  const style=document.createElement('style');style.id='zy-player-control-rules';style.textContent=`
  video[data-zy-enhanced]::-webkit-media-controls-fullscreen-button{display:none!important}
- [data-zy-classroom-fullscreen]:fullscreen .cmc-player > .control-content{position:fixed!important;left:0!important;right:0!important;top:auto!important;bottom:0!important;width:100%!important;transform:none!important;z-index:30!important}
- [data-zy-local-player] .cmc-player > .control-content,[data-zy-local-player] .cmc-m-control,[data-zy-local-player] .vjs-control-bar,[data-zy-local-player] .prism-controlbar,[data-zy-local-player] .dplayer-controller,[data-zy-local-player] .xgplayer-controls,[data-zy-local-player] xg-controls,[data-zy-local-player] .jw-controlbar,[data-zy-local-player] .video-controls,[data-zy-local-player] .player-controls,[data-zy-local-player] .control-bar,[data-zy-local-player] .vjs-big-play-button,[data-zy-local-player] .prism-big-play-btn,[data-zy-local-player] .dplayer-controller-mask{display:none!important;pointer-events:none!important}
+ [data-zy-external-player] .cmc-player > .control-content,[data-zy-external-player] .cmc-m-control,[data-zy-external-player] .vjs-control-bar,[data-zy-external-player] .prism-controlbar,[data-zy-external-player] .dplayer-controller,[data-zy-external-player] .xgplayer-controls,[data-zy-external-player] xg-controls,[data-zy-external-player] .jw-controlbar,[data-zy-external-player] .video-controls,[data-zy-external-player] .player-controls,[data-zy-external-player] .control-bar,[data-zy-external-player] .vjs-big-play-button,[data-zy-external-player] .prism-big-play-btn,[data-zy-external-player] .dplayer-controller-mask{display:none!important;pointer-events:none!important}
  `;document.head.append(style);
- let current=null,controlRoot=null,method=null,ownMethod=null,nativeFsRecovery=false,signature='',following=true,lastCue=null;
+ const transport=document.createElement('nav');transport.id='zy-playback';transport.setAttribute('aria-label','课程播放控制');transport.hidden=true;transport.innerHTML='<button id=zy-play-toggle type=button aria-label=播放>▶</button><span id=zy-play-time>00:00 / 00:00</span><input id=zy-play-seek type=range min=0 max=0 step=0.1 value=0 aria-label=课程播放进度><button id=zy-play-mute type=button aria-label=静音>音量</button><input id=zy-play-volume type=range min=0 max=1 step=0.05 value=1 aria-label=音量><select id=zy-play-rate aria-label=播放速度><option value=0.75>0.75×</option><option value=1>1×</option><option value=1.25>1.25×</option><option value=1.5>1.5×</option><option value=2>2×</option><option value=3>3×</option></select>';shadow.append(transport);
+ const transportStyle=document.createElement('style');transportStyle.textContent='#zy-playback{position:fixed;inset:auto 0 0;z-index:90;display:flex;align-items:center;gap:12px;min-height:48px;padding:8px 16px;box-sizing:border-box;background:var(--zy-bg,#fff7ef);color:var(--zy-text,#513d32);border-top:1px solid var(--zy-line,#e5cdb9);box-shadow:0 -3px 15px #0002;pointer-events:auto;font:13px/1.4 Segoe UI,Microsoft YaHei,sans-serif}#zy-playback[hidden]{display:none!important}#zy-playback button{position:static;inset:auto;flex:none;border:1px solid var(--zy-line,#e5cdb9);border-radius:8px;background:var(--zy-card,#fff);color:var(--zy-accent,#91401e);padding:6px 10px;font:inherit}#zy-playback input{margin:0;padding:0;accent-color:var(--zy-accent,#bb582c)}#zy-play-seek{flex:1;min-width:40px;width:auto;max-width:none}#zy-play-volume{width:75px;flex:none}#zy-play-time{white-space:nowrap;font-variant-numeric:tabular-nums}#zy-play-rate{width:68px;background:var(--zy-card,#fff);color:var(--zy-text,#513d32);border:1px solid var(--zy-line,#e5cdb9);border-radius:7px;padding:5px} @media(max-width:600px){#zy-playback{gap:6px;padding:6px}#zy-play-volume{display:none}#zy-play-time{font-size:11px}}';shadow.append(transportStyle);
+ const control=id=>transport.querySelector('#'+id),progress=control('zy-play-seek');let seeking=false;
+ const setText=(el,value)=>{if(el.textContent!==value)el.textContent=value;};
+ const clock=t=>{const seconds=Math.max(0,Math.floor(Number(t)||0));return (seconds>=3600?Math.floor(seconds/3600)+':':'')+String(Math.floor(seconds/60)%60).padStart(2,'0')+':'+String(seconds%60).padStart(2,'0');};
+ control('zy-play-toggle').onclick=()=>{const video=getVideo();if(!video)return;if(video.paused)Promise.resolve(video.play()).catch(()=>{$('cache-status').textContent='视频暂未就绪，请稍后再播放。';});else video.pause();};
+ progress.onpointerdown=()=>{seeking=true;};progress.oninput=()=>{seeking=true;control('zy-play-time').textContent=clock(progress.value)+' / '+clock(getVideo()?.duration);};progress.onchange=()=>{seeking=false;seek(Number(progress.value));};window.addEventListener('pointerup',()=>{seeking=false;});window.addEventListener('pointercancel',()=>{seeking=false;});
+ control('zy-play-volume').oninput=e=>{const video=getVideo();if(video){video.volume=Number(e.target.value);video.muted=false;}};control('zy-play-mute').onclick=()=>{const video=getVideo();if(video)video.muted=!video.muted;};control('zy-play-rate').onchange=e=>{const video=getVideo();if(video)video.playbackRate=Number(e.target.value);};
+ function updateTransport(video){transport.hidden=!video;if(!video)return;const duration=Number.isFinite(video.duration)?Math.max(0,video.duration):0;progress.max=String(duration);progress.disabled=!duration;if(!seeking){progress.value=String(Math.max(0,Math.min(duration,video.currentTime||0)));setText(control('zy-play-time'),clock(video.currentTime)+' / '+clock(duration));}setText(control('zy-play-toggle'),video.paused?'▶':'Ⅱ');control('zy-play-toggle').setAttribute('aria-label',video.paused?'播放':'暂停');control('zy-play-volume').value=String(video.volume);setText(control('zy-play-mute'),video.muted?'取消静音':'音量');control('zy-play-rate').value=String(video.playbackRate);}
+ let current=null,controlRoot=null,extraControlRoot=null,method=null,ownMethod=null,nativeFsRecovery=false,signature='',following=true,lastCue=null;
  const nativeOwners=new Map();
  function playerRoot(video){return video?.parentElement?.closest('.cmc-main,.video-js,.prism-player,.dplayer,.xgplayer,.jwplayer,#player,.video-player,.player-container')||video?.parentElement;}
  async function enterFullscreen(){const video=getVideo();if(!video)throw Error('请先打开课程视频');const container=playerRoot(video);if(!container?.requestFullscreen)throw Error('浏览器不支持课堂全屏');container.setAttribute('data-zy-classroom-fullscreen','true');try{await container.requestFullscreen();}catch(error){container.removeAttribute('data-zy-classroom-fullscreen');throw error;}$('fullscreen-notice').hidden=true;}
@@ -353,11 +367,17 @@ function mount({shadow,host,getVideo,getLocal,getCues,getCourse,getClock,getSeek
    if(video){video.dataset.zyEnhanced='true';ownMethod=Object.getOwnPropertyDescriptor(video,'requestFullscreen');method=()=>enterFullscreen();try{video.requestFullscreen=method;}catch{}}
   }
   const local=getLocal(),localVideo=local?.video;
-  const nativeVideo=localVideo?.isConnected?localVideo:video?.hasAttribute('data-zy-moved-video')?video:null;
-  const next=nativeVideo?playerRoot(nativeVideo):null;
-  if(controlRoot!==next){controlRoot?.removeAttribute('data-zy-local-player');controlRoot=next;controlRoot?.setAttribute('data-zy-local-player','true');}
-  for(const [owned,original] of nativeOwners){if(owned!==nativeVideo){if(!owned.hasAttribute('data-zy-moved-video'))owned.controls=original;nativeOwners.delete(owned);}}
-  if(nativeVideo){if(!nativeOwners.has(nativeVideo))nativeOwners.set(nativeVideo,local?.video===nativeVideo?local.controls??nativeVideo.controls:nativeVideo.getAttribute('data-zy-original-controls')==='true');nativeVideo.controls=true;}
+  const ownedVideo=localVideo?.isConnected?localVideo:video;
+  const next=video?playerRoot(video):null;
+  const localRoot=localVideo?.isConnected?playerRoot(localVideo):null;
+  if(extraControlRoot!==localRoot){if(extraControlRoot&&extraControlRoot!==controlRoot){extraControlRoot.removeAttribute('data-zy-external-player');extraControlRoot.removeAttribute('data-zy-local-player');}extraControlRoot=localRoot;}
+  if(localRoot&&localRoot!==next){localRoot.setAttribute('data-zy-external-player','true');localRoot.setAttribute('data-zy-local-player','true');}
+  if(controlRoot!==next){controlRoot?.removeAttribute('data-zy-external-player');controlRoot?.removeAttribute('data-zy-local-player');controlRoot=next;controlRoot?.setAttribute('data-zy-external-player','true');}
+  if(controlRoot){if(localVideo===video||video?.hasAttribute('data-zy-moved-video'))controlRoot.setAttribute('data-zy-local-player','true');else controlRoot.removeAttribute('data-zy-local-player');}
+  const ownedVideos=new Set([video,ownedVideo].filter(Boolean));
+  for(const [owned,original] of nativeOwners){if(!ownedVideos.has(owned)){owned.controls=original;nativeOwners.delete(owned);}}
+  for(const owned of ownedVideos){if(!nativeOwners.has(owned))nativeOwners.set(owned,local?.video===owned?local.controls??owned.controls:owned.hasAttribute('data-zy-original-controls')?owned.getAttribute('data-zy-original-controls')==='true':owned.controls);if(owned.controls)owned.controls=false;}
+  updateTransport(video);
   $('cache-transport').hidden=true;
   updateTranscript();
  }
@@ -913,7 +933,8 @@ globalThis.ZYCardRender=ZYCardRender;
     if(!shadow || typeof request!=='function')throw new Error('AI 助手缺少 shadow 或 request');
     const doc=shadow.ownerDocument,win=doc.defaultView;
     let settings=settingsOf(getValue(STORAGE_KEY,DEFAULTS)),history=[],lastAnswer=null,recentSlides=[],lastSlideKey='',pendingImage=null,controller=null,destroyed=false,cleanupCapture=null,requestSerial=0,slideContextEnabled=settings.followSlides,captureStream=null,captureVideo=null,capturePending=false;
-    const cleanups=[];if(globalThis.ZYMath)cleanups.push(globalThis.ZYMath.install(shadow));
+    let activeImageDismiss=null,flushPendingReply=null;
+    const cleanups=[()=>activeImageDismiss?.()];if(globalThis.ZYMath)cleanups.push(globalThis.ZYMath.install(shadow));
     function listen(el,event,fn,opts){el?.addEventListener(event,fn,opts);cleanups.push(()=>el?.removeEventListener(event,fn,opts));}
     function make(tag,props={}){const el=doc.createElement(tag);for(const [k,v] of Object.entries(props)){if(k==='text')el.textContent=v;else if(k==='class')el.className=v;else el.setAttribute(k,v);}return el;}
     const style=make('style');style.textContent=[
@@ -947,7 +968,14 @@ globalThis.ZYCardRender=ZYCardRender;
     refreshModes();
     function status(message){$('ai-status').textContent=message;}
     function badge(){$('ai-context-badge').textContent=settings.followSlides?'已记住最近 '+recentSlides.length+' 页 · 下次提问时一起看':'';$('ai-context-badge').hidden=!settings.followSlides||!slideContextEnabled;}
-    function message(role,text,image){const item=make('div',{class:'ai-message','data-role':role});item.append(make('small',{text:role==='user'?'我':'AI 讲解'}),doc.createTextNode(text));if(role==='assistant'){const content=make('div');renderMarkdown(doc,content,text);item.lastChild.remove();item.append(content);}if(image){const picture=make('img',{src:image,alt:'本次问题附图'});picture.tabIndex=0;picture.setAttribute('aria-label','放大本次问题附图');const preview=()=>{const layer=make('div',{id:'ai-image-viewer',role:'dialog','aria-label':'问题附图原图'}),close=make('button',{text:'关闭',type:'button'}),full=make('img',{src:image,alt:'完整问题附图'});layer.append(close,full);const dismiss=()=>{layer.remove();doc.removeEventListener('keydown',key);picture.focus();};const key=e=>{if(e.key==='Escape'){e.stopPropagation();dismiss();}};close.onclick=dismiss;layer.onclick=e=>{if(e.target===layer)dismiss();};doc.addEventListener('keydown',key);cleanups.push(dismiss);shadow.append(layer);close.focus();};picture.onclick=preview;picture.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();preview();}};item.append(picture);}const select=make('label',{class:'ai-card-select'}),check=make('input',{type:'checkbox','aria-label':'选择此'+(role==='user'?'问题':'回答')+'保存知识卡'});select.append(check,doc.createTextNode('选此条'));item.prepend(select);check.onchange=()=>toggleCardPair(item,check.checked);item._cardTurn={role,text,image};const sentenceButton=make('button',{type:'button',class:'ai-sentence-toggle',text:'逐句选择','aria-expanded':'false'});sentenceButton.onclick=()=>showCardSentences(item,sentenceButton);select.after(sentenceButton);$('ai-log').append(item);$('ai-log').scrollTop=$('ai-log').scrollHeight;return item;}
+    let followLog=true;
+    const log=$('ai-log'),jumpLatest=make('button',{id:'ai-jump-latest',type:'button',text:'回到最新回复'});jumpLatest.hidden=true;log.after(jumpLatest);
+    jumpLatest.style.cssText='align-self:center;margin:0 0 6px;font-size:12px';
+    function followLatest(){if(followLog)log.scrollTop=log.scrollHeight;jumpLatest.hidden=followLog;}
+    listen(log,'wheel',e=>{if(e.deltaY<0){followLog=false;jumpLatest.hidden=false;}},{passive:true});
+    listen(log,'scroll',()=>{followLog=log.scrollHeight-log.clientHeight-log.scrollTop<=36;jumpLatest.hidden=followLog;},{passive:true});
+    jumpLatest.onclick=()=>{followLog=true;followLatest();};
+    function message(role,text,image){const item=make('div',{class:'ai-message','data-role':role});item.append(make('small',{text:role==='user'?'我':'AI 讲解'}),doc.createTextNode(text));if(role==='assistant'){const content=make('div');renderMarkdown(doc,content,text);item.lastChild.remove();item.append(content);}if(image){const picture=make('img',{src:image,alt:'本次问题附图'});picture.tabIndex=0;picture.setAttribute('aria-label','放大本次问题附图');const preview=()=>{const layer=make('div',{id:'ai-image-viewer',role:'dialog','aria-label':'问题附图原图'}),close=make('button',{text:'关闭',type:'button'}),full=make('img',{src:image,alt:'完整问题附图'});layer.append(close,full);const dismiss=()=>{layer.remove();doc.removeEventListener('keydown',key);if(activeImageDismiss===dismiss)activeImageDismiss=null;picture.focus();};const key=e=>{if(e.key==='Escape'){e.stopPropagation();dismiss();}};close.onclick=dismiss;layer.onclick=e=>{if(e.target===layer)dismiss();};doc.addEventListener('keydown',key);activeImageDismiss?.();activeImageDismiss=dismiss;shadow.append(layer);close.focus();};picture.onclick=preview;picture.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();preview();}};item.append(picture);}const select=make('label',{class:'ai-card-select'}),check=make('input',{type:'checkbox','aria-label':'选择此'+(role==='user'?'问题':'回答')+'保存知识卡'});select.append(check,doc.createTextNode('选此条'));item.prepend(select);check.onchange=()=>toggleCardPair(item,check.checked);item._cardTurn={role,text,image};const sentenceButton=make('button',{type:'button',class:'ai-sentence-toggle',text:'逐句选择','aria-expanded':'false'});sentenceButton.onclick=()=>showCardSentences(item,sentenceButton);select.after(sentenceButton);$('ai-log').append(item);followLatest();return item;}
     function greeting(){}
     function save(){setValue(STORAGE_KEY,{...settings});$('ai-mode').value=settings.mode;badge();}
     function open(){questions.hidden=true;panel.hidden=false;resume.hidden=true;clampFloating(panel);badge();$('ai-question').focus();persist();}
@@ -970,7 +998,7 @@ globalThis.ZYCardRender=ZYCardRender;
     function restore(){try{const data=JSON.parse(win.sessionStorage.getItem(sessionKey())||'null');if(!data)return;history=(data.history||[]).filter(t=>['user','assistant'].includes(t.role)&&typeof t.text==='string');conversationId=data.conversationId||'';conversationSource=data.conversationSource||'文字提问';conversationCourse=data.conversationCourse||'';conversationOrigin=data.conversationOrigin||'';lastAnswer=data.lastAnswer||null;$('ai-save-card').disabled=!lastAnswer;$('ai-card-row').hidden=!lastAnswer;$('ai-log').replaceChildren();if(!history.length)greeting();for(const t of history)message(t.role,t.text,t.image);archive();$('ai-question').value=String(data.draft||'').slice(0,4000);panel.hidden=!data.open;resume.hidden=!!data.open;}catch(_){} }
     function switchCourse(){resetCardChoices();selectedExcerpt='';persist();const wasOpen=!panel.hidden;stop();cleanupCapture?.();sessionCourse=String(getCourseId());conversationId='';conversationCourse='';conversationOrigin='';history=[];recentSlides=[];lastSlideKey='';slideContextEnabled=false;lastAnswer=null;$('ai-save-card').disabled=true;$('ai-card-row').hidden=true;$('ai-question').value='';$('ai-log').replaceChildren();attach(null);greeting();restore();updateCardSelection();panel.hidden=!wasOpen;resume.hidden=wasOpen;badge();status('已切换课程，对话按课程分别保留。');persist();}
     listen($('ai-question'),'input',persist);listen(win,'pagehide',persist);
-    function stop(){if(controller)persist();requestSerial++;controller?.abort();controller=null;capturePending=false;setBusy(false);}
+    function stop(){if(controller){flushPendingReply?.();flushPendingReply=null;persist();}requestSerial++;controller?.abort();controller=null;capturePending=false;setBusy(false);}
     function setBusy(busy){$('ai-send').disabled=busy;$('ai-slide-action').disabled=busy;$('ai-stop').hidden=!busy;$('ai-save-card').disabled=busy||!lastAnswer;panel.setAttribute('aria-busy',String(busy));updateCardSelection();}
     function attach(src){pendingImage=src;$('ai-attachment').hidden=!src;$('ai-attachment').querySelector('img').src=src||'';}
     function notifySlide(slide=getSlide()) {
@@ -1010,7 +1038,9 @@ globalThis.ZYCardRender=ZYCardRender;
       question=String(question||'').trim();if(!question && !image && !pendingImage)return;if(controller)return;if(fresh||image){clear();conversationSource=source==='文字提问'?'截图提问':source;}
       open();const currentKey=String(getApiKey()||'');if(!currentKey.trim()){status('请先登录账号，解锁 AI 讲解与截图问答。');onRequireLogin();return;}
       controller=new AbortController();const ownController=controller,signal=controller.signal,serial=++requestSerial;
-      const chosenSettings=settingsOf(settings),currentImage=slide?null:(image||pendingImage),currentSlide=slide||getSlide();let images=[],labels=[],warning='',reply=null,replyTurn=null,feedbackTimer=null,transportConnected=false;
+      const chosenSettings=settingsOf(settings),currentImage=slide?null:(image||pendingImage),currentSlide=slide||getSlide();let images=[],labels=[],warning='',reply=null,replyTurn=null,feedbackTimer=null,transportConnected=false,renderTimer=null,pendingReply='';
+      const renderReply=()=>{renderTimer=null;if(!reply||destroyed||serial!==requestSerial)return;renderMarkdown(doc,reply.querySelector('.ai-stream-text'),pendingReply.replace(/^联网搜索未开通，本次按普通对话回答。\s*/,''));followLatest();};
+      const flushRender=()=>{clearTimeout(renderTimer);renderTimer=null;renderReply();};flushPendingReply=flushRender;
       setBusy(true);status(slide?'正在读取本页 PPT…':'正在整理课程上下文…');
       try {
         notifySlide(currentSlide);
@@ -1022,16 +1052,16 @@ globalThis.ZYCardRender=ZYCardRender;
         if(signal.aborted)throw abortError();
         message('user',question||'请解释这张截图。',currentImage||images.at(-1));history.push({role:'user',text:question||'请解释这张截图。',image:currentImage||images.at(-1)||null});persist();$('ai-question').value='';attach(null);status('正在讲解，约需几秒钟…');
         const began=Date.now();feedbackTimer=setInterval(()=>{if(!reply)status((transportConnected?'已连接 AI，正在生成'+(images.length?'截图回复':'回复'):'正在连接 AI 服务')+' · 已等待 '+Math.floor((Date.now()-began)/1000)+' 秒 · 可点击停止');},1000);
-        let answer=await requestResponse(request,body,currentKey,signal,text=>{if(destroyed||serial!==requestSerial)return;if(!reply){replyTurn={role:'assistant',text:''};history.push(replyTurn);reply=message('assistant','');reply.append(make('span',{class:'ai-stream-text'}));}replyTurn.text=text;renderMarkdown(doc,reply.querySelector('.ai-stream-text'),text.replace(/^联网搜索未开通，本次按普通对话回答。\s*/,''));status('正在回复…');$('ai-log').scrollTop=$('ai-log').scrollHeight;},()=>{transportConnected=true;});
+        let answer=await requestResponse(request,body,currentKey,signal,text=>{if(destroyed||serial!==requestSerial)return;if(!reply){replyTurn={role:'assistant',text:''};history.push(replyTurn);reply=message('assistant','');reply.append(make('span',{class:'ai-stream-text'}));}replyTurn.text=text;pendingReply=text;if(renderTimer===null)renderTimer=setTimeout(renderReply,80);status('正在回复…');},()=>{transportConnected=true;});
         if(destroyed || serial!==requestSerial)return;
         if(/^联网搜索未开通，本次按普通对话回答。/.test(answer)){answer=answer.replace(/^联网搜索未开通，本次按普通对话回答。\s*/,'');}
         lastAnswer={text:answer,mode:(MODES[chosenSettings.mode]||chosenSettings.prompts.find(p=>p.id===chosenSettings.mode)).label,course:conversationCourse||String(getCourseTitle()||getContext()||'我的课堂知识卡').split('\n')[0].slice(0,100),image:currentImage||images.at(-1)||history.find(t=>t.image)?.image||null,question:question};$('ai-card-row').hidden=false;
-        if(replyTurn)replyTurn.text=answer;else history.push({role:'assistant',text:answer});if(reply)reply._cardTurn=replyTurn;if(reply)renderMarkdown(doc,reply.querySelector('.ai-stream-text'),answer);else reply=message('assistant',answer);status(warning||'可以继续追问，或换一种讲法。');persist();
+        if(replyTurn)replyTurn.text=answer;else history.push({role:'assistant',text:answer});if(reply)reply._cardTurn=replyTurn;if(reply){clearTimeout(renderTimer);renderTimer=null;renderMarkdown(doc,reply.querySelector('.ai-stream-text'),answer);followLatest();}else reply=message('assistant',answer);status(warning||'可以继续追问，或换一种讲法。');persist();
       }catch(e){if(!destroyed && serial===requestSerial){persist();status(e.name==='AbortError'?'已停止。':e.message||'讲解暂时失败，请重试。');if(e.name!=='AbortError'){if(!$('ai-question').value)$('ai-question').value=question;if(currentImage)attach(currentImage);}}}
-      finally{clearInterval(feedbackTimer);if(controller===ownController){controller=null;setBusy(false);}}
+      finally{clearInterval(feedbackTimer);clearTimeout(renderTimer);if(flushPendingReply===flushRender)flushPendingReply=null;if(controller===ownController){controller=null;setBusy(false);}}
     }
     async function explainSlide(){const before=requestSerial;let slide=getSlide();if(!String(getApiKey()||'').trim()){onRequireLogin();return;}if(!slide){await prepareSlide();slide=getSlide();}if(destroyed||before!==requestSerial)return;slideContextEnabled=settings.followSlides;if(!slide){open();status('请先打开本课程的 PPT，再点击讲解本页。');return;}await send('请讲解当前这页 PPT，结合老师附近的字幕说明重点和我需要掌握的内容。',{slide:slide||{},image:null});}
-    function clear(){resetCardChoices();selectedExcerpt='';persist();stop();conversationId='';conversationSource='文字提问';conversationCourse='';conversationOrigin='';lastAnswer=null;$('ai-save-card').disabled=true;$('ai-card-row').hidden=true;cleanupCapture?.();panel.querySelector('#ai-question').value='';history=[];recentSlides=[];lastSlideKey='';slideContextEnabled=false;$('ai-log').replaceChildren();attach(null);greeting();badge();status('已开始新对话，旧截图与 PPT 上下文已清空。');persist();}
+    function clear(){followLog=true;jumpLatest.hidden=true;activeImageDismiss?.();resetCardChoices();selectedExcerpt='';persist();stop();conversationId='';conversationSource='文字提问';conversationCourse='';conversationOrigin='';lastAnswer=null;$('ai-save-card').disabled=true;$('ai-card-row').hidden=true;cleanupCapture?.();panel.querySelector('#ai-question').value='';history=[];recentSlides=[];lastSlideKey='';slideContextEnabled=false;$('ai-log').replaceChildren();attach(null);greeting();badge();status('已开始新对话，旧截图与 PPT 上下文已清空。');persist();}
     function captureActive(){return !!captureVideo&&captureStream?.getVideoTracks().some(t=>t.readyState==='live');}
     const captureNotice=make('div',{id:'ai-capture-session',role:'status'});captureNotice.hidden=true;captureNotice.innerHTML='<span>连续截图已开启 · 仅在本页本地取图</span><button type="button" id="ai-capture-session-stop">停止共享</button>';shadow.append(captureNotice);
     function stopCaptureSession(){const stream=captureStream;captureStream=null;const video=captureVideo;captureVideo=null;video?.pause();if(video)video.srcObject=null;stream?.getTracks().forEach(t=>t.stop());captureNotice.hidden=true;}
@@ -1778,7 +1808,7 @@ const ZY_SHARE_QR="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAATwAAAE8CAYAAAB
     .slide-edge[data-edge=bottom]{bottom:0;left:12px;right:26px;height:8px;cursor:ns-resize}
     #slide-resize{z-index:3}
     #slide-thumbs-toggle{position:absolute;z-index:4;left:50%;bottom:64px;transform:translateX(-50%);padding:7px 14px;background:#141a18e8;color:#fff;border:1px solid #ffffff40;border-radius:8px;font-size:12px}
-    #slide-thumbs{position:absolute;z-index:5;left:0;right:0;bottom:60px;height:min(360px,calc(100% - 60px));display:flex;flex-direction:column;background:#141a18f5;color:#eee;box-shadow:0 -8px 24px #0005;cursor:default;box-sizing:border-box;border-radius:12px 12px 0 0;overflow:auto}
+    #slide-thumbs{position:absolute;z-index:5;left:0;right:0;bottom:60px;height:auto;max-height:calc(100% - 60px);display:flex;flex-direction:column;background:#141a18f5;color:#eee;box-shadow:0 -8px 24px #0005;cursor:default;box-sizing:border-box;border-radius:12px 12px 0 0;overflow:auto}
     #slides:has(#slide-thumbs:not([hidden])) #slide-toolbar{z-index:6;opacity:1;pointer-events:auto;flex-wrap:nowrap;overflow-x:auto;justify-content:flex-start}
     #slides:has(#slide-thumbs:not([hidden])) #slide-toolbar>*{flex-shrink:0;white-space:nowrap}
     #slide-thumbs[hidden]{display:none}
@@ -1791,13 +1821,13 @@ const ZY_SHARE_QR="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAATwAAAE8CAYAAAB
     #slide-ppt-sync .actions{display:flex;flex-wrap:wrap;gap:4px;margin:6px 0}
     #slide-ppt-sync button{padding:5px 6px;font-size:11px;background:transparent;color:#eee;border-color:#ffffff40}
     #ppt-sync-hint{color:#d4e5d9;font-size:11px;line-height:1.5;margin:4px 0 0}
-    #slide-thumbs-list{display:flex;gap:8px;flex:1;min-height:125px;overflow-x:auto;overflow-y:hidden;overscroll-behavior:contain;padding:8px;touch-action:pan-x}
-    .slide-thumb{display:block;flex:0 0 150px;width:150px;margin:0;padding:6px;border:2px solid transparent;border-radius:8px;background:#ffffff0d;color:#eee;text-align:left;cursor:pointer}
+    #slide-thumbs-list{display:flex;gap:8px;flex:none;min-height:0;align-items:flex-start;overflow-x:auto;overflow-y:hidden;overscroll-behavior:contain;padding:8px;touch-action:pan-x}
+    .slide-thumb{display:block;flex:0 0 auto;width:auto;margin:0;padding:6px;border:2px solid transparent;border-radius:8px;background:#ffffff0d;color:#eee;text-align:left;cursor:pointer}
     .slide-thumb:hover{background:#ffffff20}
     .slide-thumb[aria-current=page]{border-color:#a8dbb9;background:#a8dbb920}
     .slide-thumb:focus-visible{outline:2px solid #fff;outline-offset:-4px}
-    .slide-thumb img{display:block;width:100%;height:90px;object-fit:contain;background:#090b0b;pointer-events:none}
-    .slide-thumb span{display:block;margin-top:5px;font-size:12px;font-variant-numeric:tabular-nums}
+    .slide-thumb img{display:block;width:auto;height:96px;max-width:220px;object-fit:contain;background:#090b0b;pointer-events:none}
+    .slide-thumb span{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-top:5px;font-size:12px;font-variant-numeric:tabular-nums}
 
     .layout-handle{position:fixed;z-index:15;pointer-events:auto;outline:2px dashed #9adbb8;border-radius:10px;cursor:move;touch-action:none;background:#65ac8710}
     .layout-handle span{position:absolute;left:4px;top:4px;padding:4px 8px;border-radius:7px;background:#234a3eeb;color:#fff;font-size:12px;pointer-events:none}
@@ -2080,7 +2110,7 @@ const ZY_SHARE_QR="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAATwAAAE8CAYAAAB
   function updatePptSyncHint(message='') {
     $('ppt-offset').value=Number(pptOffset.toFixed(2));
     $('ppt-sync-hint').textContent=message||('PPT 独立偏移 '+(pptOffset>0?'+':'')+Number(pptOffset.toFixed(2))+' 秒。正数延后，负数提前；字幕不受影响。');
-    $('ppt-align-page').disabled=!splitVideo||!Number.isFinite(slideEntries[slideIndex]?.time);
+    $('ppt-align-page').disabled=!(splitVideo||mainVideo)||!Number.isFinite(slideEntries[slideIndex]?.time);
   }
   function setPptOffset(offset,message='') {
     if(!Number.isFinite(offset))return;
@@ -2091,16 +2121,16 @@ const ZY_SHARE_QR="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAATwAAAE8CAYAAAB
   $('ppt-later').onclick=()=>setPptOffset(pptOffset+1);
   $('ppt-reset').onclick=()=>setPptOffset(0);
   $('ppt-align-page').onclick=()=>{
-    if(!splitVideo||!coursePptReady())return;
-    const offset=pptOffsetForPage(splitVideo.currentTime,slideEntries[slideIndex]?.time);
+    const video=splitVideo||mainVideo;if(!video||!coursePptReady())return;
+    const offset=pptOffsetForPage(video.currentTime,slideEntries[slideIndex]?.time);
     if(offset===null){updatePptSyncHint('这页没有有效时间或校准超出一小时，未修改偏移。');return;}
     slideFollowing=true;updateFollowButton();setPptOffset(offset,'已按这页开始时刻校准，偏移 '+Number(offset.toFixed(2))+' 秒，已恢复跟随老师。');saveSlideState();
   };
   function syncSlide() {
-    if(!slideFollowing || !splitVideo || $('slides').hidden) return;
-    const index=slideAt(slideEntries,pptPlaybackTime(splitVideo.currentTime,pptOffset));
+    const video=splitVideo||mainVideo;if(!slideFollowing || !video || ($('slides').hidden&&$('ppt-current-preview').hidden)) return;
+    const index=slideAt(slideEntries,pptPlaybackTime(video.currentTime,pptOffset));
     const target=index>=0?index:0;
-    if(target!==slideIndex && slideEntries.some(slide=>Number.isFinite(slide.time))) {slideIndex=target;renderSlide();}
+    if(target!==slideIndex && slideEntries.some(slide=>Number.isFinite(slide.time))) {slideIndex=target;if($('slides').hidden){updatePptPreview();updatePptSyncHint();}else renderSlide();}
   }
   function closeSlides() {
     setSlideThumbsOpen(false);
@@ -2115,21 +2145,24 @@ const ZY_SHARE_QR="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAATwAAAE8CAYAAAB
     if(splitVideo && splitControls!==null){splitVideo.controls=splitControls;splitVideo.removeAttribute('data-zy-moved-video');splitVideo.removeAttribute('data-zy-original-controls');}splitControls=null;
     splitStyles=null; splitVideo=null;layoutMode='video';$('caption-custom').checked=false;$('show-slides').textContent='看 PPT';
   }
-  let slideThumbsSignature='', slideThumbsActive=-1;
+  let slideThumbsEntries=null,slideThumbsCourse=null,slideThumbsObserver=null,slideThumbsActive=-1;
+  function updatePptPreview(){if($('ppt-current-preview').hidden)return;const slide=slideEntries[slideIndex],img=$('ppt-current-preview').querySelector('img');if(slide&&img.getAttribute('src')!==slide.url)img.src=slide.url;$('ppt-current-label').textContent=slide?'第 '+(slideIndex+1)+' / '+slideEntries.length+' 页':'';}
+  $('ppt-current-page').onclick=()=>{const preview=$('ppt-current-preview');if(!preview.hidden){preview.hidden=true;preview.querySelector('img').removeAttribute('src');$('ppt-current-page').setAttribute('aria-expanded','false');return;}if(!coursePptReady())return;if(!slideEntries.length){slideEntries=[...document.querySelectorAll('#pane-ppt img')].map(img=>({url:img.currentSrc||img.src,time:slideTime(img.closest('.tab-ppt')?.querySelector('.time')?.textContent||'')})).filter(slide=>/^https?:/.test(slide.url));if(!slideEntries.length)return;slideUrls=slideEntries.map(slide=>slide.url);slideCourse=courseIdentity(location.hash);loadPptOffset();slideIndex=Math.max(0,slideAt(slideEntries,pptPlaybackTime(mainVideo?.currentTime||0,pptOffset)));}preview.hidden=false;$('ppt-current-page').setAttribute('aria-expanded','true');updatePptPreview();};
   function updateSlideThumbs() {
     if($('slide-thumbs').hidden)return;
-    const list=$('slide-thumbs-list'),signature=JSON.stringify([slideCourse,slideEntries]);
-    if(signature!==slideThumbsSignature) {
-      const fragment=document.createDocumentFragment();
+    const list=$('slide-thumbs-list');
+    if(slideEntries!==slideThumbsEntries||slideCourse!==slideThumbsCourse) {
+      slideThumbsObserver?.disconnect();slideThumbsObserver=new IntersectionObserver(entries=>{for(const entry of entries){const img=entry.target;if(entry.isIntersecting){if(img.getAttribute('src')!==img.dataset.src)img.src=img.dataset.src;}else img.removeAttribute('src');}},{root:list,rootMargin:'0px 220px',threshold:0});
+      const originals=[...document.querySelectorAll('#pane-ppt img')],fragment=document.createDocumentFragment();
       slideEntries.forEach((slide,index)=>{
         const button=document.createElement('button'),image=document.createElement('img'),label=document.createElement('span');
         button.className='slide-thumb';button.type='button';button.dataset.index=index;
         const time=Number.isFinite(slide.time)?' · '+stamp(slide.time).split(',')[0]:'';
         label.textContent='第 '+(index+1)+' 页'+time;
-        button.setAttribute('aria-label',label.textContent);image.alt='第 '+(index+1)+' 页 PPT';image.loading='lazy';image.decoding='async';image.draggable=false;image.src=slide.url;
+        button.setAttribute('aria-label',label.textContent);image.alt='第 '+(index+1)+' 页 PPT';image.loading='lazy';image.decoding='async';image.draggable=false;image.dataset.src=slide.url;const original=originals[index];const fit=ratio=>{const width=Math.min(220,96*ratio);image.style.width=width+'px';image.style.height=width/ratio+'px';button.style.width=(width+16)+'px';};fit(original?.naturalWidth/original?.naturalHeight||4/3);image.onload=()=>{if(image.naturalHeight)fit(image.naturalWidth/image.naturalHeight);};
         button.append(image,label);fragment.append(button);
       });
-      list.replaceChildren(fragment);slideThumbsSignature=signature;slideThumbsActive=-1;
+      list.replaceChildren(fragment);slideThumbsEntries=slideEntries;slideThumbsCourse=slideCourse;for(const img of list.querySelectorAll('img'))slideThumbsObserver.observe(img);slideThumbsActive=-1;
     }
     if(slideThumbsActive===slideIndex)return;
     list.children[slideThumbsActive]?.removeAttribute('aria-current');
@@ -2142,7 +2175,7 @@ const ZY_SHARE_QR="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAATwAAAE8CAYAAAB
   }
   function setSlideThumbsOpen(open) {
     $('slide-thumbs').hidden=!open;$('slide-thumbs-toggle').setAttribute('aria-expanded',String(open));
-    if(open){slideThumbsActive=-1;updateSlideThumbs();}
+    if(open){slideThumbsActive=-1;updateSlideThumbs();slideThumbsObserver?.disconnect();for(const img of $('slide-thumbs-list').querySelectorAll('img'))slideThumbsObserver?.observe(img);}else for(const img of $('slide-thumbs-list').querySelectorAll('img'))img.removeAttribute('src');
   }
   $('slide-thumbs-toggle').onclick=()=>setSlideThumbsOpen($('slide-thumbs').hidden);
   $('slide-thumbs-close').onclick=()=>{setSlideThumbsOpen(false);$('slide-thumbs-toggle').focus();};
@@ -2156,7 +2189,7 @@ const ZY_SHARE_QR="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAATwAAAE8CAYAAAB
   function renderSlide() {
     $('slide-image').src=slideUrls[slideIndex]; $('slide-page').textContent=`${slideIndex+1} / ${slideUrls.length}`;
     $('slide-prev').disabled=slideIndex===0; $('slide-next').disabled=slideIndex>=slideUrls.length-1;
-    $('slide-viewport').scrollTo(0,0); updateSlideThumbs(); updatePptSyncHint(); saveSlideState(); updateFollowButton();learning?.notifySlide();
+    $('slide-viewport').scrollTo(0,0); updatePptPreview();updateSlideThumbs(); updatePptSyncHint(); saveSlideState(); updateFollowButton();learning?.notifySlide();
   }
   function showSlides() {
     if (!coursePptReady()) { $('slides-status').textContent = '课程已切换，等待新课程 PPT 加载；暂不展示上一课图片。'; studyUI.feedback?.($('slides-status').textContent); return false; }
@@ -2231,7 +2264,7 @@ const ZY_SHARE_QR="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAATwAAAE8CAYAAAB
   }
   function setVideoBox(r) {
     if(splitControls===null){splitControls=localPlayback?.video===splitVideo?localPlayback.controls:splitVideo.controls;splitVideo.setAttribute('data-zy-original-controls',String(splitControls));}
-    splitVideo.controls=true;splitVideo.setAttribute('data-zy-moved-video','true');
+    splitVideo.controls=false;splitVideo.setAttribute('data-zy-moved-video','true');
     for(const [k,v] of Object.entries({position:'fixed',left:r.left+'px',top:r.top+'px',right:'auto',bottom:'auto',width:r.width+'px',height:r.height+'px','margin-left':'0','z-index':'20'})) splitVideo.style.setProperty(k,v,'important');
   }
   function ensureEditableVideo() {
@@ -2508,7 +2541,7 @@ const ZY_SHARE_QR="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAATwAAAE8CAYAAAB
   }
   function releaseLocalPlayback(local) {
     if(!local)return;local.cleanup?.();pendingResume.get(local.video)?.();
-    local.video.controls=local.video.hasAttribute('data-zy-moved-video') || local.controls;URL.revokeObjectURL(local.url);
+    local.video.controls=false;URL.revokeObjectURL(local.url);
     $('cache-transport').hidden=true;
   }
   function restoreOnline() {
@@ -2594,7 +2627,7 @@ const ZY_SHARE_QR="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAATwAAAE8CAYAAAB
       const url=URL.createObjectURL(blob);localPlayback={video,src:video.getAttribute('src'),url,controls:video===splitVideo && splitControls!==null?splitControls:video.controls};
       resumeState(video,state,()=>localPlayback?.url===url);
       const onError=()=>{if(localPlayback?.url===url){restoreOnline();$('cache-status').textContent='缓存播放失败，已恢复在线来源。';}};
-      video.addEventListener('error',onError,{once:true});localPlayback.cleanup=()=>video.removeEventListener('error',onError);video.controls=true;
+      video.addEventListener('error',onError,{once:true});localPlayback.cleanup=()=>video.removeEventListener('error',onError);video.controls=false;
       video.src=url;video.load();updateCachePlaybackBadge();playerInteractions.update();$('cache-source').textContent='当前：本机缓存';$('cache-status').textContent='缓存完成，已接续当前进度使用本机视频。';
     }catch(error){$('cache-status').textContent=error.message;}
   };
@@ -2658,10 +2691,7 @@ const ZY_SHARE_QR="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAATwAAAE8CAYAAAB
     }
     $('cache-transport').hidden=true;
     if(!local)return;
-    const video=local.video,duration=video.duration;
-    $('cache-seek').disabled=!Number.isFinite(duration) || duration<=0;
-    if(!$('cache-seek').disabled){$('cache-seek').max=duration;if(shadow.activeElement!==$('cache-seek'))$('cache-seek').value=video.currentTime;}
-    $('cache-time').textContent=`${Math.floor(video.currentTime/60)}:${String(Math.floor(video.currentTime%60)).padStart(2,'0')} / ${Number.isFinite(duration)?Math.floor(duration/60)+' 分钟':'载入中'} · ← / → 跳转 10 秒`;
+
   }
 
 
@@ -2754,12 +2784,12 @@ const ZY_SHARE_QR="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAATwAAAE8CAYAAAB
     const epoch=++cacheEpoch;streamStarting=true;
     try{
       const playback=await session.cache.play(video,{time,paused,rate:saved.rate,
-        onAttach:playback=>{if(streamSession!==session || epoch!==cacheEpoch)throw new Error('播放已取消');localPlayback={...saved,url:playback.url,stream:true,cleanup:playback.dispose};video.controls=true;},
+        onAttach:playback=>{if(streamSession!==session || epoch!==cacheEpoch)throw new Error('播放已取消');localPlayback={...saved,url:playback.url,stream:true,cleanup:playback.dispose};video.controls=false;},
         onStatus:message=>{if(streamSession===session)$('cache-source').textContent=message;},
         onError:error=>{if(streamSession===session)$('cache-status').textContent=error.message;}
       });
       if(streamSession!==session || mainVideo!==video || epoch!==cacheEpoch){playback.dispose();return;}
-      localPlayback={...saved,url:playback.url,stream:true,cleanup:playback.dispose};video.controls=true;updateCachePlaybackBadge();playerInteractions.update();
+      localPlayback={...saved,url:playback.url,stream:true,cleanup:playback.dispose};video.controls=false;updateCachePlaybackBadge();playerInteractions.update();
       $('cache-source').textContent='当前：磁盘分块播放（后续内容继续缓存）';
     }catch(error){if(epoch===cacheEpoch){if(localPlayback?.stream)restoreOnline();else{if(saved.src===null)video.removeAttribute('src');else video.setAttribute('src',saved.src);video.load();}$('cache-status').textContent='分段播放失败：'+error.message;}}
     finally{streamStarting=false;}
@@ -3115,6 +3145,7 @@ const ZY_SHARE_QR="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAATwAAAE8CAYAAAB
       prepareCourseReadGates();
       cacheAbort?.abort();restoreOnline();dropStream();autoChecked='';preferOnline=false;cancelAlignment?.(); closeSlides(); slideUrls=[];
       translator.reset(); stopTranslation('课程已切换，请按需重新开启翻译');
+      $('ppt-current-preview').hidden=true;$('ppt-current-preview').querySelector('img').removeAttribute('src');$('ppt-current-page').setAttribute('aria-expanded','false');slideThumbsObserver?.disconnect();slideThumbsEntries=null;$('slide-thumbs-list').replaceChildren();
       route = courseIdentity(location.hash);learning?.switchCourse(); collected.clear(); cues = []; dirty = true;
       releaseVideo(); loadOffset(); loadPptOffset(); loadTranslationPreferences();
       $('status').textContent = '课程已切换，等待读取字幕…';
@@ -3136,7 +3167,7 @@ const ZY_SHARE_QR="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAATwAAAE8CAYAAAB
       const height = Math.max(0, Math.min(rect.bottom, innerHeight) - Math.max(rect.top, 0));
       return { video, rect, area: style.visibility === 'hidden' || style.display === 'none' ? 0 : width * height };
     }).filter(v => v.area > 0).sort((a, b) => b.area - a.area);
-    const selected = candidates.find(v=>v.video===splitVideo) || candidates[0];
+    const selected = splitVideo?.isConnected ? {video:splitVideo,rect:splitVideo.getBoundingClientRect()} : candidates[0];
     layoutSlides(); syncSlide();
     $('focus-fullscreen').textContent=fs?'退出全屏':'课堂全屏';
     mainVideo=selected?.video ?? null;

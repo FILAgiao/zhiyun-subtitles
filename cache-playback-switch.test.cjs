@@ -30,11 +30,11 @@ const {chromium}=require('playwright');
     assert.equal(await ui.locator('#cache-details-toggle').textContent(),'🟢 使用缓存中');
     assert.equal(await ui.locator('#cache-play').isVisible(),false);assert.equal(await ui.locator('#cache-online').isVisible(),true);assert.equal(await ui.locator('#stream-play').isVisible(),false);
     await ui.locator('#cache-details-toggle').click();assert.equal(await ui.locator('#cache-details-toggle').textContent(),'🟢 使用缓存中');await ui.locator('#cache-details-toggle').click();
-    assert.equal(await page.locator('.video-player video').evaluate(v=>v.controls),true);assert.equal(await page.locator('.vjs-control-bar').evaluate(e=>getComputedStyle(e).display),'none');
+    assert.equal(await page.locator('.video-player video').evaluate(v=>v.controls),false);assert.equal(await page.locator('.vjs-control-bar').evaluate(e=>getComputedStyle(e).display),'none');
     await ui.locator('#cache-online').click();await page.waitForFunction(()=>{const v=document.querySelector('video');return v.currentSrc.startsWith('https:')&&v.readyState>=2&&v.currentTime>.1;},{},{timeout:7000}).catch(async e=>{console.error(await page.evaluate(()=>{const v=document.querySelector('video'),s=document.querySelector('#zy-subtitle-host').shadowRoot;return{src:v.src,current:v.currentSrc,time:v.currentTime,ready:v.readyState,error:v.error?.code,status:s.getElementById('cache-status').textContent};}));throw e;});
     const state=await page.locator('.video-player video').evaluate(v=>({time:v.currentTime,rate:v.playbackRate,paused:v.paused,width:v.videoWidth,controls:v.controls,error:v.error?.code}));
     assert.ok(state.time>.1);assert.equal(await ui.locator('#cache-play').isVisible(),true);assert.equal(await ui.locator('#cache-online').isVisible(),false);assert.equal(state.rate,1.5);assert.equal(state.paused,i!==1);if(i!==1)assert.ok(Math.abs(state.time-1)<.2);assert.ok(state.width>0);assert.equal(state.error,undefined);assert.equal(state.controls,false);
-    assert.notEqual(await page.locator('.vjs-control-bar').evaluate(e=>getComputedStyle(e).display),'none');assert.equal(await ui.locator('#cache-details-toggle').textContent(),'收起详情');
+    assert.equal(await page.locator('.vjs-control-bar').evaluate(e=>getComputedStyle(e).display),'none');assert.equal(await ui.locator('#cache-details-toggle').textContent(),'收起详情');
    }
    // currentSrc can still name the previous resource immediately after src changes.
    if(!childSource){

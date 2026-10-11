@@ -12,7 +12,7 @@ const fs=require('node:fs'),assert=require('node:assert/strict'),{chromium}=requ
  });
  await page.addScriptTag({content:fs.readFileSync('zhiyun-subtitles.user.js','utf8').replace(/const DEFAULT_ORIGIN=[^;]+;/,'const DEFAULT_ORIGIN="";')});await page.waitForTimeout(650);
 
- const ui=page.locator('#zy-subtitle-host');await ui.locator('#show-slides').click();await ui.locator('#slide-thumbs-toggle').click();
+ const ui=page.locator('#zy-subtitle-host');await ui.locator('#study-sync').evaluate(e=>e.open=true);await ui.locator('#ppt-sync-toggle').click();await ui.locator('#show-slides').click();await ui.locator('#slide-thumbs-toggle').click();
  assert.equal(await ui.locator('#ppt-offset').inputValue(),'0');assert.equal(await ui.locator('#slide-page').textContent(),'2 / 100');assert.match(await ui.locator('#original').textContent(),/second slide sentence/);
  const anchors=await page.evaluate(()=>JSON.stringify(values['subtitle-sync:'+JSON.stringify([null,null,null])]));
  // Changing subtitle calibration never moves PPT.
