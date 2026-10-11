@@ -287,3 +287,14 @@ test('foreign subtitles use automatic source detection rather than a fixed Engli
  }
  const {calls,request}=mockRequests();const translator=createTranslator(request);translator.start('auto','zh');translator.schedule(['已经是中文','これは勾配降下法です。']);assert.equal(calls.length,1);assert.equal(calls[0].text,'これは勾配降下法です。');translator.stop();
 });
+
+
+test('PPT independent clock and page calibration do not inherit speech anchors or playback rate',()=>{
+ const {pptPlaybackTime,pptOffsetForPage,slideAt,syncedSubtitleTime}=require('./zhiyun-subtitles.user.js');
+ const anchors=[{videoTime:0,offset:13.5},{videoTime:100,offset:13.5}];
+ assert.equal(syncedSubtitleTime(34,0,anchors),20.5);assert.equal(pptPlaybackTime(34),34);
+ assert.equal(pptPlaybackTime(34,30),4);assert.equal(pptPlaybackTime(34,-30),64);
+ assert.equal(slideAt([{time:0},{time:20},{time:40},{time:60}],pptPlaybackTime(34,-30)),3);
+ assert.equal(pptOffsetForPage(30,60),-30);assert.equal(pptOffsetForPage(90,60),30);
+ assert.equal(pptOffsetForPage(30,NaN),null);assert.equal(pptOffsetForPage(Infinity,60),null);assert.equal(pptOffsetForPage(4000,0),null);
+});

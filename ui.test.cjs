@@ -79,7 +79,7 @@ const {chromium}=require(process.env.PLAYWRIGHT_MODULE || 'playwright');
  assert.equal(await ui.locator('#mode').inputValue(),'both');
  await page.screenshot({path:'ui-preview.png'});
  await ui.locator('#focus-fullscreen').click();await page.waitForTimeout(200);
- // Close/reopen restores following; automatic pages use the same subtitle offset.
+ // Close/reopen restores following; PPT timing remains independent from speech offsets.
  await ui.locator('#slide-viewport').hover();await ui.locator('#slide-next').click();
  await ui.locator('#slide-viewport').hover();await ui.locator('#slide-close').click();await ui.locator('#show-slides').click();
  assert.equal(await ui.locator('#slide-page').textContent(),'1 / 2');
@@ -90,7 +90,7 @@ const {chromium}=require(process.env.PLAYWRIGHT_MODULE || 'playwright');
  assert.equal(await ui.locator('#slide-page').textContent(),'2 / 2');
  await openSettings('sync');
  await ui.locator('#offset').fill('10');await ui.locator('#offset').dispatchEvent('input');await page.waitForTimeout(150);
- assert.equal(await ui.locator('#slide-page').textContent(),'1 / 2');
+ assert.equal(await ui.locator('#slide-page').textContent(),'2 / 2');
  await ui.locator('#offset').fill('0');await ui.locator('#offset').dispatchEvent('input');
  await page.evaluate(()=>window.videoTime=12);await page.waitForTimeout(150);await ui.locator('#settings-close').evaluate(e=>e.click());
  // Put a fake speed control behind visible caption text; the real click must reach it.

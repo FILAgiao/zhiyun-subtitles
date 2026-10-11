@@ -12,7 +12,7 @@ const {chromium}=require(process.env.PLAYWRIGHT_MODULE||'playwright');
    const phrase='the financial market uses several different trading strategies';
    document.querySelector('#pane-voice').innerHTML=Array.from({length:20},(_,i)=>`<div class="trans-item"><div class="item-title">00:00:${String(i*2).padStart(2,'0')}</div><div class="trans-lan"><div>${i===5?phrase:'We study register example '+i}</div></div></div>`).join('');
    const identity=JSON.stringify([null,null,null]);
-   window.saved={'ark-api-key':'fake','speech-credentials':{apiKey:'fake'},['translation-domain:'+identity]:'CPU architecture',['translation-glossary:'+identity]:'register = 寄存器'};
+   window.saved={'gateway-guide-no-remind-v2':true,'ark-api-key':'fake','speech-credentials':{apiKey:'fake'},['translation-domain:'+identity]:'CPU architecture',['translation-glossary:'+identity]:'register = 寄存器'};
    window.GM_getValue=(k,d)=>saved[k]??d;window.GM_setValue=(k,v)=>saved[k]=v;window.GM_deleteValue=k=>delete saved[k];window.GM_registerMenuCommand=()=>{};
    window.requests=[];
    window.GM_xmlhttpRequest=options=>{
