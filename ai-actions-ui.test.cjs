@@ -19,8 +19,8 @@ const {chromium}=require('playwright');
   });
   const host=page.locator('#host');
   await page.evaluate(()=>{const range=document.createRange();range.selectNodeContents(document.querySelector('#text'));getSelection().removeAllRanges();getSelection().addRange(range);});
-  await page.locator('#text').click({button:'right'});assert.equal(await host.locator('#ai-selection-menu').isVisible(),true);assert.equal(await page.evaluate(()=>calls.length),0);
-  await host.getByRole('menuitem',{name:'问插件'}).click();await page.waitForFunction(()=>calls.length===1);assert.match(await page.evaluate(()=>calls[0].input.at(-1).content[0].text),/selected lesson text/);
+  await page.locator('#text').dispatchEvent('pointerup',{button:0,clientX:40,clientY:20});assert.equal(await host.locator('#ai-selection-menu').isVisible(),true);assert.equal(await host.locator('#ai-selection-menu').evaluate(n=>getComputedStyle(n).right),'18px');assert.equal(await page.evaluate(()=>calls.length),0);
+  await host.getByRole('button',{name:'爽问一下'}).click();await page.waitForFunction(()=>calls.length===1);assert.match(await page.evaluate(()=>calls[0].input.at(-1).content[0].text),/selected lesson text/);
   await host.locator('#ai-close').click();const before=await page.locator('#picture').boundingBox();
   // Holding middle-button starts the rectangle at that very point, without a second click.
   await page.mouse.move(120,100);await page.mouse.down({button:'middle'});await host.locator('#ai-crop').waitFor({state:'visible'});

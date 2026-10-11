@@ -1,0 +1,60 @@
+{
+  "version": "0.20.20",
+  "backup": "/opt/zhiyun-gateway/backend/.rollback-release-0.20.20-20261010T172435Z",
+  "database_backup": "/data/gateway-before-0.20.20-20261010T172435Z.sqlite3",
+  "changed": [
+    "server.py",
+    "admin_api.py",
+    "admin.html",
+    "admin.css",
+    "admin.js",
+    "privacy.html",
+    "install.user.js",
+    "install.meta.js",
+    "extension.zip"
+  ],
+  "public_files": {
+    "install.user.js": {
+      "bytes": 1367344,
+      "sha256": "313650b59b63a4439aa46aaec9e59e65bf670f7069906d6cf9e71f5a15e5a466"
+    },
+    "install.meta.js": {
+      "bytes": 1026,
+      "sha256": "ddaacd0268a2efbf5fd8df19f6cd11099976774c80b0cdb24c0243d83e124300"
+    },
+    "admin.html": {
+      "bytes": 7175,
+      "sha256": "0a8ebbd3e92427d92863af29aedab5fbf3e40b71a54d192cf349802638d5f2c1"
+    },
+    "admin.js": {
+      "bytes": 10921,
+      "sha256": "d8259de9fcd1e585c0dea1041936779bf0cce92c1522f4f2ded3b3551026cae9"
+    },
+    "admin.css": {
+      "bytes": 4262,
+      "sha256": "f727a89543209867dc0db83c2bc3bd028645da0cf33363c9d70cf25a2dcb0878"
+    },
+    "privacy.html": {
+      "bytes": 3391,
+      "sha256": "e6bc43cfb4eb2e502c6ed28b00bbcf525d29c6b6f47da5b7b376dd372e432634"
+    },
+    "extension.zip": {
+      "bytes": 565055,
+      "sha256": "ae3e97270ac8b7e0da321db20d026250fab7b9cde979952ee757f5324cd4b4b6"
+    }
+  },
+  "health": "ok",
+  "url": "https://47.77.182.216.sslip.io/gateway/install.user.js",
+  "extension_acceptance": {
+    "native_edge": "passed",
+    "live_doubao": "passed",
+    "metering": "increments_once",
+    "logout": "passed",
+    "browser_errors": 0
+  },
+  "store_upload": {
+    "chrome": "not_uploaded",
+    "edge": "not_uploaded",
+    "blocker": "Browser tool kernel fails with windows sandbox setup refresh errors"
+  }
+}

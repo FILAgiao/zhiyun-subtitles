@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         浙大上课爽
 // @namespace    zhiyunzimu.local
-// @version      0.20.18
+// @version      0.20.26
 // @description  网课不硬扛，浙大上课爽！智云课堂同步字幕、PPT 讲解与本机缓存。
 // @match        https://*/*
 // @match        http://*/*
@@ -198,7 +198,7 @@ function mount({shadow,mascot}){
  .mascot{background:#fff;border:1px solid #fff1b0;border-radius:14px;overflow:hidden;width:46px;height:46px}.mascot img{width:44px;height:44px;object-fit:contain}
  .subtitle{color:#5b7190;font-size:10px;white-space:nowrap}h3{color:#174d8c;font-size:18px;letter-spacing:.3px}.primary{background:#215da1;border-color:#215da1}.primary:hover{background:#174d8c}.section{border-color:#e0e9f4}p{color:#65778b;line-height:1.6}
  #settings-open,#collapse{padding:4px 5px;border:0;background:transparent;font-size:17px;min-width:26px}#settings-open{margin-left:auto}#collapse{margin-left:0}input[type=checkbox],progress{accent-color:#2969ad}
- #video-edit-box,#caption-edit-box{z-index:35}#compact{top:16px;min-width:110px;min-height:40px;padding:10px 16px;color:#215da1;background:#fff;border:1px solid #dce5ef;font:600 14px/20px "Segoe UI","Microsoft YaHei",sans-serif;white-space:nowrap;letter-spacing:normal}
+ #video-edit-box,#caption-edit-box{z-index:35}#compact{top:64px;min-width:110px;min-height:40px;padding:10px 16px;color:#215da1;background:#fff;border:1px solid #dce5ef;font:600 14px/20px "Segoe UI","Microsoft YaHei",sans-serif;white-space:nowrap;letter-spacing:normal}
  #panel-body{padding:2px 16px 7px}#study-caption{padding:9px 0 11px;border:0;display:grid;grid-template-columns:1fr auto;gap:0 10px;align-items:center}#study-caption>label{margin:0;justify-content:flex-start;gap:12px}#study-caption select{max-width:none;flex:1;background:#fff;border-color:#dce6f1;font-size:12px;padding:7px}#study-caption .study-switch{width:28px;justify-content:center}#enabled{width:17px;height:17px;margin:0}#translation-status{grid-column:1 / -1;font-size:10px;margin:5px 0 0;color:#667b92;line-height:1.45;max-height:29px;overflow:auto}#translation-status:empty{display:none}
  #study-actions{display:grid;grid-template-columns:1fr 92px;gap:8px}#study-actions button{padding:11px 9px;font-size:13px;font-weight:600;border-radius:12px}#ai-open{background:#215da1;color:#fff;border-color:#215da1;box-shadow:0 5px 13px #215da11c}#ai-open:hover{background:#164d8c}#ai-capture{background:#fff7db;border-color:#eee3bd;color:#6a5a2f}#study-tools{display:grid;grid-template-columns:1fr 1fr 1fr;gap:5px;margin:8px 0 5px}#study-tools button{background:transparent;border:0;padding:7px 2px;font-size:11px;white-space:nowrap;color:#4f6b89}#study-tools button:hover{background:#eef4fc}#study-cache{padding:8px 0 5px;border-top:1px solid #e3eaf1;border-bottom:0}#study-cache>summary{font-size:12px;color:#4f6b89;font-weight:500;padding:3px 0}#study-cache[open]>summary{margin-bottom:9px;color:#214f81}#cache-download{width:100%;background:#e9f2ff;border-color:#d2e3f8;font-weight:600}#study-cache p{font-size:11px}#settings-shortcut{margin-top:10px;width:100%;font-size:11px;background:transparent;border-style:dashed}#study-sync{border-top:1px solid #e3eaf1;padding:8px 0;font-size:12px}#study-sync summary{cursor:pointer;color:#214f81}#study-sync .section{border:0}#study-sync progress{width:100%}#study-sync input{width:80px}#study-sync p{font-size:11px}#study-tip{margin:0}#study-feedback{font-size:11px;line-height:1.5;color:#805f16;background:#fff5d6;padding:8px;border-radius:8px;margin:5px 0}
  #settings-dialog{z-index:90;pointer-events:auto;position:fixed;inset:0;display:grid;place-items:center;background:#0c254c65;padding:20px}
@@ -265,10 +265,11 @@ function mount({shadow,mascot}){
  cacheSection.insertAdjacentHTML('beforeend','<button id="settings-shortcut">缓存偏好与清单 →</button>');
  const cacheQuick=document.createElement('section');cacheQuick.id='study-cache-quick';cacheQuick.setAttribute('aria-label','视频缓存');
  const cacheRow=document.createElement('div');cacheRow.id='cache-primary-row';const cacheMore=document.createElement('button');cacheMore.id='cache-details-toggle';cacheMore.type='button';cacheMore.textContent='缓存详情';cacheMore.setAttribute('aria-label','展开缓存详情');cacheMore.setAttribute('aria-expanded','false');cacheMore.setAttribute('aria-controls','cache-quick-details');
- const cacheBody=document.createElement('div');cacheBody.id='cache-quick-details';cacheBody.hidden=true;$('cache-download').textContent='缓存当前视频';cacheRow.append($('cache-download'),cacheMore);cacheQuick.append(cacheRow,cacheBody);cacheMore.onclick=()=>{cacheBody.hidden=!cacheBody.hidden;cacheMore.textContent=cacheBody.hidden?'缓存详情':'收起详情';cacheMore.setAttribute('aria-expanded',String(!cacheBody.hidden));cacheMore.setAttribute('aria-label',cacheBody.hidden?'展开缓存详情':'收起缓存详情');};
+ const cacheBody=document.createElement('div');cacheBody.id='cache-quick-details';cacheBody.hidden=true;$('cache-download').textContent='缓存当前视频';cacheRow.append($('cache-download'),cacheMore);cacheQuick.append(cacheRow,cacheBody);cacheMore.onclick=()=>{cacheBody.hidden=!cacheBody.hidden;cacheMore.textContent=cacheMore.dataset.cacheActive==='true'?'🟢 使用缓存中':cacheBody.hidden?'缓存详情':'收起详情';cacheMore.setAttribute('aria-expanded',String(!cacheBody.hidden));cacheMore.setAttribute('aria-label',cacheBody.hidden?'展开缓存详情':'收起缓存详情');};
+ style.textContent+='#cache-details-toggle[data-cache-active="true"]{background:#e8f5ed;color:#247647;border-color:#c6e5d1}';
  const cacheOptions=document.createElement('div');cacheOptions.id='cache-quick-options';cacheOptions.append($('stream-minutes').closest('label'),$('stream-from').closest('label'));cacheBody.append(cacheOptions);cacheBody.querySelector('#stream-from').value='current';
- const cachePlayback=document.createElement('div');cachePlayback.className='cache-quick-playback';$('cache-play').textContent='▶ 播放缓存';$('cache-online').textContent='在线播放';cachePlayback.append($('cache-play'),$('cache-online'));cacheBody.append(cachePlayback,$('cache-progress-area'),$('stream-play'),$('stream-status'),$('cache-source'),$('cache-status'));cacheBody.querySelector('#cache-status').textContent='';cacheBody.append($('cache-transport'),$('batch-add'),$('cache-details'),$('settings-shortcut'));cacheBody.querySelector('#batch-add').textContent='加入缓存清单';
- style.textContent+=`#study-cache-quick{padding:0;margin:12px 0 0;background:transparent;border:0;display:grid;gap:0}#cache-primary-row{display:grid;grid-template-columns:2fr 1fr;gap:10px}#cache-primary-row #cache-download{width:100%;margin:0}#cache-details-toggle{height:42px;width:100%;border-radius:11px;padding:0;font-size:21px;background:#f3f5f7;border:1px solid #e9edf1;color:#405970}#cache-quick-details{display:grid;gap:10px;padding:12px;margin-top:8px;border:1px solid #e7edf4;border-radius:12px;background:#f3f6fa}#study-cache-quick>strong{font-size:13px;color:#38536f;font-weight:600}#cache-quick-options{display:grid;grid-template-columns:1fr 1fr;gap:12px}#cache-quick-options label{font-size:11px;margin:0;gap:6px;color:#718398}#cache-quick-options select{font-size:12px;padding:4px 2px;border:0;background:transparent;max-width:none;min-width:0}#study-cache-quick #cache-download{height:42px;font-size:13px;border-radius:11px;background:#215da1;color:#fff;border-color:#215da1}#cache-download:before{content:'↓';margin-right:7px}.cache-quick-playback{display:grid;grid-template-columns:1fr 1fr;gap:8px}.cache-quick-playback button{font-size:12px;height:32px;padding:0;border-radius:8px;background:#fff;color:#45627e;border:1px solid #e0e8f1}#study-cache-quick p{margin:0;font-size:11px;line-height:1.6}#study-cache-quick p:empty{display:none}#study-cache-quick #cache-progress-area{padding:0;background:transparent;margin:0}#study-cache-quick #stream-play{width:100%;font-size:12px;background:#e1edf9;color:#215da1}#study-capture-hint{padding-top:7px;margin-top:0;text-align:center}#panel-body{overflow:auto;min-height:0}#study-cache-quick #cache-source{color:#7a8ca0}`;
+ const cachePlayback=document.createElement('div');cachePlayback.className='cache-quick-playback';$('cache-play').textContent='▶ 播放缓存';$('cache-online').textContent='切回在线';$('cache-online').hidden=true;cachePlayback.append($('cache-play'),$('cache-online'));cacheBody.append(cachePlayback,$('cache-progress-area'),$('stream-play'),$('stream-status'),$('cache-source'),$('cache-status'));cacheBody.querySelector('#cache-status').textContent='';cacheBody.append($('cache-transport'),$('cache-details'),$('settings-shortcut'));
+ style.textContent+=`#study-cache-quick{padding:0;margin:12px 0 0;background:transparent;border:0;display:grid;gap:0}#cache-primary-row{display:grid;grid-template-columns:2fr 1fr;gap:10px}#cache-primary-row #cache-download{width:100%;margin:0}#cache-details-toggle{height:42px;width:100%;border-radius:11px;padding:0;font-size:12px;background:#f3f5f7;border:1px solid #e9edf1;color:#405970}#cache-quick-details{display:grid;gap:10px;padding:12px;margin-top:8px;border:1px solid #e7edf4;border-radius:12px;background:#f3f6fa}#study-cache-quick>strong{font-size:13px;color:#38536f;font-weight:600}#cache-quick-options{display:grid;grid-template-columns:1fr 1fr;gap:12px}#cache-quick-options label{font-size:11px;margin:0;gap:6px;color:#718398}#cache-quick-options select{font-size:12px;padding:4px 2px;border:0;background:transparent;max-width:none;min-width:0}#study-cache-quick #cache-download{height:42px;font-size:13px;border-radius:11px;background:#215da1;color:#fff;border-color:#215da1}#cache-download:before{content:'↓';margin-right:7px}.cache-quick-playback{display:grid;grid-template-columns:1fr;gap:8px}.cache-quick-playback button{font-size:12px;height:32px;padding:0;border-radius:8px;background:#fff;color:#45627e;border:1px solid #e0e8f1}#study-cache-quick p{margin:0;font-size:11px;line-height:1.6}#study-cache-quick p:empty{display:none}#study-cache-quick #cache-progress-area{padding:0;background:transparent;margin:0}#study-cache-quick #stream-play{width:100%;font-size:12px;background:#e1edf9;color:#215da1}#study-capture-hint{padding-top:7px;margin-top:0;text-align:center}#panel-body{overflow:auto;min-height:0}#study-cache-quick #cache-source{color:#7a8ca0}`;
  const feedbackEl=document.createElement('p');feedbackEl.id='study-feedback';feedbackEl.hidden=true;feedbackEl.setAttribute('role','status');
  const captureHint=document.createElement('p');captureHint.id='study-capture-hint';captureHint.textContent='按住鼠标中键拖动截图，AI 帮你解答。';layoutSection.remove();$('panel-body').replaceChildren(captionSection,actionRow,syncToggle,syncBox,cacheQuick,toolsRow,captureHint,feedbackEl);$('settings-storage').append(cacheSection);cacheSection.open=true;$('cache-batch').open=true;
  function feedback(text){feedbackEl.textContent=text||'';feedbackEl.hidden=!text;}
@@ -295,7 +296,43 @@ function mount({shadow,host,getVideo,getLocal,getCues,getCourse,getClock,getSeek
  video[data-zy-enhanced]::-webkit-media-controls-fullscreen-button{display:none!important}
  [data-zy-local-player] .vjs-control-bar,[data-zy-local-player] .prism-controlbar,[data-zy-local-player] .dplayer-controller,[data-zy-local-player] .xgplayer-controls,[data-zy-local-player] xg-controls,[data-zy-local-player] .jw-controlbar,[data-zy-local-player] .video-controls,[data-zy-local-player] .player-controls,[data-zy-local-player] .control-bar,[data-zy-local-player] .vjs-big-play-button,[data-zy-local-player] .prism-big-play-btn,[data-zy-local-player] .dplayer-controller-mask{display:none!important;pointer-events:none!important}
  `;document.head.append(style);
+ const captionStyle=document.createElement('style');captionStyle.textContent=`
+ #caption,#caption *{pointer-events:none!important}
+ #caption{transition:opacity .12s ease}
+ :host([data-zy-player-interacting]) #caption{opacity:0!important}
+ @media(prefers-reduced-motion:reduce){#caption{transition:none}}
+ `;shadow.append(captionStyle);
+ let pointer=null;
+ const controlSelector='.vjs-control-bar,.vjs-progress-control,.prism-controlbar,.prism-progress,.dplayer-controller,.dplayer-bar-wrap,.xgplayer-controls,xg-controls,xg-progress,.jw-controlbar,.jw-slider-time,.video-controls,.player-controls,.control-bar,.progress-bar,[role="slider"],input[type="range"]';
+ function controlRegions(video){
+  const r=video.getBoundingClientRect(),container=playerRoot(video),regions=[];
+  for(const el of container?.querySelectorAll(controlSelector)||[]) {
+   const b=el.getBoundingClientRect(),style=getComputedStyle(el);
+   if(b.width>0 && b.height>0 && style.display!=='none' && style.visibility!=='hidden' && Number(style.opacity)!==0)regions.push(b);
+  }
+  // Native video controls live inside the browser's shadow tree.
+  if(video.controls)regions.push({left:r.left,right:r.right,top:r.bottom-72,bottom:r.bottom});
+  return {r,container,regions};
+ }
+ function protectPlayerControls(){
+  const video=getVideo(),caption=$('caption');
+  if(!video || !caption || caption.hidden){host.removeAttribute('data-zy-player-interacting');return;}
+  const {r,container,regions}=controlRegions(video),b=caption.getBoundingClientRect();
+  const overlaps=regions.filter(c=>b.left<c.right && b.right>c.left && b.top<c.bottom+12 && b.bottom>c.top-12);
+  if(overlaps.length){const bottom=Math.min(...overlaps.map(c=>c.top))-12;caption.style.top=Math.max(b.height+8,bottom)+'px';}
+  const rootRect=container?.getBoundingClientRect()||r;
+  const near=pointer && (regions.some(c=>pointer.x>=c.left-8 && pointer.x<=c.right+8 && pointer.y>=c.top-20 && pointer.y<=c.bottom+8) ||
+   pointer.x>=rootRect.left && pointer.x<=rootRect.right && pointer.y>=rootRect.bottom-90 && pointer.y<=rootRect.bottom ||
+   video.controls && pointer.x>=r.left && pointer.x<=r.right && pointer.y>=r.bottom-(parseFloat(getComputedStyle(video).paddingBottom)||0)-90 && pointer.y<=r.bottom);
+  host.toggleAttribute('data-zy-player-interacting',!!near);
+ }
+ document.addEventListener('pointermove',event=>{pointer={x:event.clientX,y:event.clientY};protectPlayerControls();},true);
+ document.addEventListener('pointerup',event=>{if(event.pointerType!=='mouse'){pointer=null;host.removeAttribute('data-zy-player-interacting');}},true);
+ document.addEventListener('pointercancel',()=>{pointer=null;host.removeAttribute('data-zy-player-interacting');},true);
+ document.addEventListener('pointerleave',()=>{pointer=null;host.removeAttribute('data-zy-player-interacting');});
+ window.addEventListener('blur',()=>{pointer=null;host.removeAttribute('data-zy-player-interacting');});
  let current=null,controlRoot=null,method=null,ownMethod=null,nativeFsRecovery=false,signature='',following=true,lastCue=null;
+ const nativeOwners=new Map();
  function playerRoot(video){return video?.parentElement?.closest('.video-js,.prism-player,.dplayer,.xgplayer,.jwplayer,#player,.video-player,.player-container')||video?.parentElement;}
  async function enterFullscreen(){const video=getVideo();if(!video)throw Error('请先打开课程视频');const container=playerRoot(video);if(!container?.requestFullscreen)throw Error('浏览器不支持课堂全屏');await container.requestFullscreen();$('fullscreen-notice').hidden=true;}
  async function toggleFullscreen(){try{if(document.fullscreenElement)await document.exitFullscreen();else await enterFullscreen();}catch(e){$('slides-status').textContent='全屏未完成：'+e.message;}}
@@ -348,10 +385,14 @@ function mount({shadow,host,getVideo,getLocal,getCues,getCourse,getClock,getSeek
   if(video!==current){if(current){current.removeAttribute('data-zy-enhanced');if(current.requestFullscreen===method){if(ownMethod)Object.defineProperty(current,'requestFullscreen',ownMethod);else delete current.requestFullscreen;}}current=video;
    if(video){video.dataset.zyEnhanced='true';ownMethod=Object.getOwnPropertyDescriptor(video,'requestFullscreen');method=()=>enterFullscreen();try{video.requestFullscreen=method;}catch{}}
   }
-  const local=getLocal(),localVideo=local?.video;const next=localVideo?.isConnected?playerRoot(localVideo):null;if(controlRoot!==next){controlRoot?.removeAttribute('data-zy-local-player');controlRoot=next;controlRoot?.setAttribute('data-zy-local-player','true');}
-  if(localVideo?.isConnected)localVideo.controls=true;
+  const local=getLocal(),localVideo=local?.video;
+  const nativeVideo=localVideo?.isConnected?localVideo:video?.hasAttribute('data-zy-moved-video')?video:null;
+  const next=nativeVideo?playerRoot(nativeVideo):null;
+  if(controlRoot!==next){controlRoot?.removeAttribute('data-zy-local-player');controlRoot=next;controlRoot?.setAttribute('data-zy-local-player','true');}
+  for(const [owned,original] of nativeOwners){if(owned!==nativeVideo){if(!owned.hasAttribute('data-zy-moved-video'))owned.controls=original;nativeOwners.delete(owned);}}
+  if(nativeVideo){if(!nativeOwners.has(nativeVideo))nativeOwners.set(nativeVideo,local?.video===nativeVideo?local.controls??nativeVideo.controls:nativeVideo.getAttribute('data-zy-original-controls')==='true');nativeVideo.controls=true;}
   $('cache-transport').hidden=true;
-  updateTranscript();
+  protectPlayerControls();updateTranscript();
  }
  return{update,toggleFullscreen,enterFullscreen};
 }
@@ -853,7 +894,7 @@ globalThis.ZYCardRender=ZYCardRender;
       blocks.push({role:turn.role,lines,markdown,textHeight,image,imageWidth,imageHeight,y});
       y+=52+textHeight+(image?imageHeight+28:0)+44;
     }
-    const contentBottom=y+10,logicalHeight=Math.max(1040,contentBottom+300);
+    const contentBottom=y+10,logicalHeight=Math.max(1040,contentBottom+330);
     // Scale an unusually long conversation as one whole image rather than clipping it.
     const scale=Math.min(1,32760/logicalHeight),canvas=doc.createElement('canvas');
     canvas.width=Math.floor(1080*scale);canvas.height=Math.ceil(logicalHeight*scale);
@@ -890,10 +931,10 @@ globalThis.ZYCardRender=ZYCardRender;
     }
     const footer=contentBottom+60;
     ctx.fillStyle='#f6f9ff';ctx.font='bold 31px "Microsoft YaHei",sans-serif';ctx.fillText('上课轻松一点，理解深入一点。',76,footer+30);
-    ctx.fillStyle='#d2e2f5';ctx.font='24px "Microsoft YaHei",sans-serif';ctx.fillText('Edge 浏览器也能用 · 扫码查看安装说明',76,footer+83);
+    ctx.fillStyle='#d2e2f5';
     ctx.font='21px "Microsoft YaHei",sans-serif';ctx.fillText('同步字幕 / PPT 讲解 / 随时提问',76,footer+127);
     ctx.fillStyle='#aec7e3';ctx.font='18px "Microsoft YaHei",sans-serif';ctx.fillText('浙大上课爽 · 个人学习工具',76,footer+169);
-    if(qr){round(842,footer-4,174,174,14,'#fff');ctx.imageSmoothingEnabled=false;ctx.drawImage(qr,850,footer+4,158,158);ctx.imageSmoothingEnabled=true;ctx.font='18px "Microsoft YaHei",sans-serif';ctx.fillStyle='#d2e2f5';ctx.fillText('扫码安装',887,footer+197);}
+    if(qr){round(842,footer-4,174,174,14,'#fff');ctx.imageSmoothingEnabled=false;ctx.drawImage(qr,850,footer+4,158,158);ctx.imageSmoothingEnabled=true;ctx.font='16px "Microsoft YaHei",sans-serif';ctx.fillStyle='#d2e2f5';ctx.save();ctx.textAlign='center';['适配 Edge 和 Chrome','浏览器插件市场','均可下载'].forEach((line,i)=>ctx.fillText(line,929,footer+197+i*24));ctx.restore();}
     canvas.dataset.qrX=String(Math.round(842*scale));canvas.dataset.qrY=String(Math.round((footer-4)*scale));canvas.dataset.qrSize=String(Math.round(174*scale));
     return canvas;
   }
@@ -917,9 +958,9 @@ globalThis.ZYCardRender=ZYCardRender;
       ,'#ai-crop{padding:0;background:transparent;display:block}#ai-crop-stage{position:absolute;inset:0;max-width:none;max-height:none}#ai-crop-image{width:100vw;height:100dvh;max-width:none;max-height:none;object-fit:fill}#ai-crop-selection{box-shadow:0 0 0 9999px #07151970;background:transparent}#ai-crop .ai-crop-head{left:16px;right:16px;top:auto;bottom:16px;padding:12px;background:#173b43;border-radius:12px;z-index:1;line-height:1.5}#ai-crop-question{flex:1;min-width:150px;font:inherit;padding:8px}#ai-crop button{padding:8px;cursor:pointer}#ai-crop-send{background:#ffe781;color:#173b43}#ai-capture-session{position:fixed;right:18px;top:48px;z-index:110;pointer-events:auto;background:#173b43;color:#fff;border-radius:10px;padding:8px;font:12px sans-serif;display:flex;gap:8px;align-items:center}#ai-capture-session[hidden]{display:none!important}'
       ,'#ai-resume{position:fixed;right:18px;bottom:24px;z-index:75;pointer-events:auto;background:#1768ae;color:white;border:0;border-radius:18px;padding:12px 18px;box-shadow:0 5px 18px #122c3b30;font:14px sans-serif}#ai-resume[hidden]{display:none!important}.ai-markdown{white-space:normal;font-size:16px;line-height:1.75}.ai-markdown p{margin:0 0 9px;color:inherit}.ai-markdown h2,.ai-markdown h3,.ai-markdown h4{margin:14px 0 7px;color:#164e73;line-height:1.4}.ai-markdown h2{font-size:20px}.ai-markdown h3{font-size:18px}.ai-markdown ul,.ai-markdown ol{padding-left:22px;margin:7px 0 12px}.ai-markdown li{margin:4px 0}.ai-markdown pre{background:#153044;color:#edf5ff;padding:12px;border-radius:10px;overflow:auto;white-space:pre;font:12px/1.6 Consolas,monospace}.ai-markdown code{font-family:Consolas,monospace;background:#dce7eb;padding:2px 4px;border-radius:4px}.ai-markdown pre code{background:transparent;padding:0}.ai-markdown blockquote{margin:8px 0;border-left:3px solid #6b9eae;padding:5px 10px;color:#536f78}.ai-markdown a{color:#1768ae;text-decoration:underline}.ai-table{overflow:auto}.ai-markdown table{border-collapse:collapse;width:100%;margin:8px 0;font-size:14px}.ai-markdown th,.ai-markdown td{border:1px solid #c9d9df;padding:7px;text-align:left}.ai-markdown th{background:#dcebef}.ai-answer-note{white-space:normal;border-top:1px solid #cedddf;margin-top:12px;padding-top:10px;font-size:11px;color:#627973;display:grid;gap:6px}.ai-answer-note button{justify-self:start;font-size:12px!important}#ai-learning{width:480px}.ai-message[data-role=user]{font-size:15px}'
      ,`#ai-learning{background:#fff;font-size:14px;color:#24364b}.ai-message[data-role=assistant]{background:#fff;border:1px solid #e4eaf0;padding:18px;margin-right:0}.ai-message small{font-size:12px;color:#6b7b8e;opacity:1}.ai-markdown{display:block;font-size:16px;line-height:1.85;letter-spacing:.1px}.ai-markdown p{font-size:16px;line-height:1.85;margin:0 0 14px}.ai-markdown h2,.ai-markdown h3,.ai-markdown h4{font-size:18px;margin:20px 0 10px;font-weight:650}.ai-markdown h2{font-size:21px}.ai-markdown>:first-child{margin-top:0}.ai-math-block{overflow:auto;padding:14px 10px;background:#f5f8fc;border-radius:12px;margin:16px 0;font-size:19px}.ai-markdown .katex{font-size:1.15em}.ai-message img{display:block;width:100%;height:auto;max-height:none;object-fit:contain;cursor:zoom-in}#ai-image-viewer{position:fixed;inset:0;z-index:120;pointer-events:auto;background:#0b244ce8;overflow:auto;padding:70px 24px 24px;text-align:center}#ai-image-viewer button{position:fixed;right:24px;top:24px;padding:10px 18px;border-radius:10px;background:#fff;color:#23425f;border:0;cursor:pointer}#ai-image-viewer img{display:block;max-width:100%;height:auto;margin:auto}#ai-questions{position:fixed;right:18px;top:78px;bottom:24px;width:430px;max-width:calc(100vw - 28px);z-index:80;pointer-events:auto;background:#fff;border:1px solid #dde6ef;border-radius:18px;box-shadow:0 20px 70px #1234;display:flex;flex-direction:column;padding:16px;font:14px/1.6 'Segoe UI','Microsoft YaHei',sans-serif}#ai-questions[hidden]{display:none}#ai-questions header{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px}#ai-questions input{width:100%;max-width:none;padding:10px;border:1px solid #dce5ef;border-radius:8px}#ai-questions-list{overflow:auto;margin-top:12px}#ai-questions-list article{display:flex;border-bottom:1px solid #e5ebf2;align-items:center;gap:8px;padding:10px 0}.ai-question-record{flex:1;min-width:0;text-align:left;border:0;background:transparent}.ai-question-record strong{display:block;white-space:normal;overflow-wrap:anywhere}.ai-question-record small{display:block;color:#75869a;margin-top:6px}`
-    ].join('\n');style.textContent+='.ai-head{padding:6px 12px;min-height:38px}.ai-head strong{font-size:14px}#ai-learning .ai-head button{padding:3px 7px}.ai-toolbar{flex-wrap:nowrap;padding:5px 12px;gap:6px;min-height:36px}#ai-mode{min-width:0;width:120px;font-size:12px}#ai-learning .ai-toolbar button{padding:4px 8px;white-space:nowrap;font-size:12px}#ai-compose{padding:7px 12px}#ai-question{min-height:42px;height:42px;padding:6px 9px}#ai-compose .ai-actions{margin-top:5px}.ai-message .ai-card-select{display:inline-flex;gap:5px;align-items:center;font-size:11px;float:right;cursor:pointer}.ai-prompt-row{display:flex;gap:5px;align-items:center}.ai-prompt-row span{flex:1}.ai-card-row{flex-wrap:wrap;padding:0 12px 6px}#ai-learning .ai-sentence-toggle{float:right;font-size:11px;padding:2px 6px;margin-right:7px}.ai-sentence-list{clear:both;border-top:1px solid #dce3eb;margin-top:10px;padding-top:8px;display:grid;gap:6px}.ai-sentence-list[hidden]{display:none}#ai-learning .ai-sentence-choice{text-align:left;font-size:13px;line-height:1.65;white-space:pre-wrap;padding:7px 10px}#ai-learning .ai-sentence-choice[aria-pressed=true]{background:#e1eefb;border-color:#1768ae;color:#164e73}';shadow.append(style);
+    ].join('\n');style.textContent+='.ai-head{padding:6px 12px;min-height:38px}.ai-head strong{font-size:14px}#ai-learning .ai-head button{padding:3px 7px}.ai-toolbar{flex-wrap:nowrap;padding:5px 12px;gap:6px;min-height:36px}#ai-mode{min-width:0;width:120px;font-size:12px}#ai-learning .ai-toolbar button{padding:4px 8px;white-space:nowrap;font-size:12px}#ai-compose{padding:7px 12px}#ai-question{min-height:42px;height:42px;padding:6px 9px}#ai-compose .ai-actions{margin-top:5px}.ai-message .ai-card-select{display:inline-flex;gap:5px;align-items:center;font-size:11px;float:right;cursor:pointer}.ai-prompt-row{display:flex;gap:5px;align-items:center}.ai-prompt-row span{flex:1}.ai-card-row{flex-wrap:wrap;padding:0 12px 6px}#ai-learning .ai-sentence-toggle{float:right;font-size:11px;padding:2px 6px;margin-right:7px}.ai-sentence-list{clear:both;border-top:1px solid #dce3eb;margin-top:10px;padding-top:8px;display:grid;gap:6px}.ai-sentence-list[hidden]{display:none}#ai-learning .ai-sentence-choice{text-align:left;font-size:13px;line-height:1.65;white-space:pre-wrap;padding:7px 10px}#ai-learning .ai-sentence-choice[aria-pressed=true]{background:#e1eefb;border-color:#1768ae;color:#164e73}';style.textContent+='#ai-card-options[hidden]{display:none!important}#ai-card-options{display:flex;gap:6px;width:100%}#ai-learning:not(.ai-card-selecting) .ai-card-select,#ai-learning:not(.ai-card-sentences) .ai-sentence-toggle,#ai-learning:not(.ai-card-sentences) .ai-sentence-list{display:none!important}.ai-card-row label{font-size:12px;display:flex;align-items:center;gap:4px}';shadow.append(style);
     const panel=make('section',{id:'ai-learning',role:'dialog','aria-label':'AI 讲解'});panel.hidden=true;
-    panel.innerHTML='<div class="ai-head"><button id="ai-questions-back" type="button" aria-label="返回问题列表">← 问题列表</button><strong>✦ AI 讲解</strong><button id="ai-settings-open" title="AI 设置" aria-label="AI 设置">⚙</button><button id="ai-close" aria-label="收起 AI 讲解">×</button></div><div class="ai-toolbar"><select id="ai-mode" aria-label="讲解模式"></select><button id="ai-slide-action">讲解本页 PPT</button></div><div id="ai-log" role="log" aria-label="课程对话" aria-live="polite"></div><div id="ai-status" role="status"></div><div id="ai-context-badge"></div><div id="ai-card-row" class="ai-card-row" hidden><button id="ai-save-card" type="button" disabled title="生成本地 PNG；不会自动发布到任何平台">↓ 保存知识卡</button><span id="ai-card-hint" class="ai-hint">勾选问答或划选词句</span></div><form id="ai-compose"><div id="ai-attachment" hidden><img alt="待发送的课程截图"><span>截图已就位</span><button type="button" id="ai-remove-image" aria-label="移除截图">×</button></div><textarea id="ai-question" maxlength="4000" placeholder="卡在哪儿了？直接问，也可以粘贴截图。" aria-label="向 AI 提问"></textarea><div class="ai-actions"><button id="ai-clear" type="button" title="清空本课程的对话和图片上下文">新对话</button><button id="ai-stop" type="button" hidden>停止</button><span class="ai-hint">Enter 发送 · Shift 换行</span><button id="ai-send" type="submit">发送 ↗</button></div></form>';
+    panel.innerHTML='<div class="ai-head"><button id="ai-questions-back" type="button" aria-label="返回问题列表">← 问题列表</button><strong>✦ AI 讲解</strong><button id="ai-settings-open" title="AI 设置" aria-label="AI 设置">⚙</button><button id="ai-close" aria-label="收起 AI 讲解">×</button></div><div class="ai-toolbar"><select id="ai-mode" aria-label="讲解模式"></select><button id="ai-slide-action">讲解本页 PPT</button></div><div id="ai-log" role="log" aria-label="课程对话" aria-live="polite"></div><div id="ai-status" role="status"></div><div id="ai-context-badge"></div><div id="ai-card-row" class="ai-card-row" hidden><button id="ai-save-card" type="button" disabled title="生成本地 PNG；不会自动发布到任何平台">↓ 分享知识卡</button><label><input id="ai-card-select-mode" type="checkbox">选择语句</label><div id="ai-card-options" hidden><button id="ai-card-sentences" type="button">逐句分享</button><button id="ai-card-words" type="button">逐字分享</button></div><span id="ai-card-hint" class="ai-hint">勾选问答或划选词句</span></div><form id="ai-compose"><div id="ai-attachment" hidden><img alt="待发送的课程截图"><span>截图已就位</span><button type="button" id="ai-remove-image" aria-label="移除截图">×</button></div><textarea id="ai-question" maxlength="4000" placeholder="卡在哪儿了？直接问，也可以粘贴截图。" aria-label="向 AI 提问"></textarea><div class="ai-actions"><button id="ai-clear" type="button" title="清空本课程的对话和图片上下文">新对话</button><button id="ai-stop" type="button" hidden>停止</button><span class="ai-hint">Enter 发送 · Shift 换行</span><button id="ai-send" type="submit">发送 ↗</button></div></form>';
     style.textContent+=':host([data-ai-workspace]) #panel,:host([data-ai-workspace]) #compact{display:none!important}';
     style.textContent+=(globalThis.ZYWarmTheme?.css||'');shadow.append(panel);globalThis.ZYAppearance?.attach(shadow);const resume=make('button',{id:'ai-resume',text:'✦ 继续对话',type:'button'});resume.hidden=true;shadow.append(resume);const $=id=>panel.querySelector('#'+id);
     const dragHead=panel.querySelector('.ai-head');let drag=null;
@@ -953,7 +994,7 @@ globalThis.ZYCardRender=ZYCardRender;
     const sessionKey=()=> 'zhiyun-ai-tab-v1:'+sessionCourse;
     function persist(){archive();try{win.sessionStorage.setItem(sessionKey(),JSON.stringify({history,conversationId,conversationSource,conversationCourse,conversationOrigin,lastAnswer,draft:$('ai-question').value,open:!panel.hidden}));}catch(_){} }
     function restore(){try{const data=JSON.parse(win.sessionStorage.getItem(sessionKey())||'null');if(!data)return;history=(data.history||[]).filter(t=>['user','assistant'].includes(t.role)&&typeof t.text==='string');conversationId=data.conversationId||'';conversationSource=data.conversationSource||'文字提问';conversationCourse=data.conversationCourse||'';conversationOrigin=data.conversationOrigin||'';lastAnswer=data.lastAnswer||null;$('ai-save-card').disabled=!lastAnswer;$('ai-card-row').hidden=!lastAnswer;$('ai-log').replaceChildren();if(!history.length)greeting();for(const t of history)message(t.role,t.text,t.image);archive();$('ai-question').value=String(data.draft||'').slice(0,4000);panel.hidden=!data.open;resume.hidden=!!data.open;}catch(_){} }
-    function switchCourse(){selectedExcerpt='';persist();const wasOpen=!panel.hidden;stop();cleanupCapture?.();sessionCourse=String(getCourseId());conversationId='';conversationCourse='';conversationOrigin='';history=[];recentSlides=[];lastSlideKey='';slideContextEnabled=false;lastAnswer=null;$('ai-save-card').disabled=true;$('ai-card-row').hidden=true;$('ai-question').value='';$('ai-log').replaceChildren();attach(null);greeting();restore();updateCardSelection();panel.hidden=!wasOpen;resume.hidden=wasOpen;badge();status('已切换课程，对话按课程分别保留。');persist();}
+    function switchCourse(){resetCardChoices();selectedExcerpt='';persist();const wasOpen=!panel.hidden;stop();cleanupCapture?.();sessionCourse=String(getCourseId());conversationId='';conversationCourse='';conversationOrigin='';history=[];recentSlides=[];lastSlideKey='';slideContextEnabled=false;lastAnswer=null;$('ai-save-card').disabled=true;$('ai-card-row').hidden=true;$('ai-question').value='';$('ai-log').replaceChildren();attach(null);greeting();restore();updateCardSelection();panel.hidden=!wasOpen;resume.hidden=wasOpen;badge();status('已切换课程，对话按课程分别保留。');persist();}
     listen($('ai-question'),'input',persist);listen(win,'pagehide',persist);
     function stop(){if(controller)persist();requestSerial++;controller?.abort();controller=null;setBusy(false);}
     function setBusy(busy){$('ai-send').disabled=busy;$('ai-slide-action').disabled=busy;$('ai-stop').hidden=!busy;$('ai-save-card').disabled=busy||!lastAnswer;panel.setAttribute('aria-busy',String(busy));updateCardSelection();}
@@ -1016,7 +1057,7 @@ globalThis.ZYCardRender=ZYCardRender;
       finally{clearInterval(feedbackTimer);if(controller===ownController){controller=null;setBusy(false);}}
     }
     async function explainSlide(){const before=requestSerial;let slide=getSlide();if(!String(getApiKey()||'').trim()){onRequireLogin();return;}if(!slide){await prepareSlide();slide=getSlide();}if(destroyed||before!==requestSerial)return;slideContextEnabled=settings.followSlides;if(!slide){open();status('请先打开本课程的 PPT，再点击讲解本页。');return;}await send('请讲解当前这页 PPT，结合老师附近的字幕说明重点和我需要掌握的内容。',{slide:slide||{},image:null});}
-    function clear(){selectedExcerpt='';persist();stop();conversationId='';conversationSource='文字提问';conversationCourse='';conversationOrigin='';lastAnswer=null;$('ai-save-card').disabled=true;$('ai-card-row').hidden=true;cleanupCapture?.();panel.querySelector('#ai-question').value='';history=[];recentSlides=[];lastSlideKey='';slideContextEnabled=false;$('ai-log').replaceChildren();attach(null);greeting();badge();status('已开始新对话，旧截图与 PPT 上下文已清空。');persist();}
+    function clear(){resetCardChoices();selectedExcerpt='';persist();stop();conversationId='';conversationSource='文字提问';conversationCourse='';conversationOrigin='';lastAnswer=null;$('ai-save-card').disabled=true;$('ai-card-row').hidden=true;cleanupCapture?.();panel.querySelector('#ai-question').value='';history=[];recentSlides=[];lastSlideKey='';slideContextEnabled=false;$('ai-log').replaceChildren();attach(null);greeting();badge();status('已开始新对话，旧截图与 PPT 上下文已清空。');persist();}
     function captureActive(){return !!captureVideo&&captureStream?.getVideoTracks().some(t=>t.readyState==='live');}
     const captureNotice=make('div',{id:'ai-capture-session',role:'status'});captureNotice.hidden=true;captureNotice.innerHTML='<span>连续截图已开启 · 仅在本页本地取图</span><button type="button" id="ai-capture-session-stop">停止共享</button>';shadow.append(captureNotice);
     function stopCaptureSession(){const stream=captureStream;captureStream=null;const video=captureVideo;captureVideo=null;capturePersistent=false;video?.pause();if(video)video.srcObject=null;stream?.getTracks().forEach(t=>t.stop());captureNotice.hidden=true;}
@@ -1081,12 +1122,13 @@ globalThis.ZYCardRender=ZYCardRender;
       layer.querySelector('#ai-crop-cancel').onclick=cancel;use.onclick=()=>choose(false);submit.onclick=()=>choose(true);
     }
     let selectedExcerpt='';
+    function resetCardChoices(){$('ai-card-select-mode').checked=false;$('ai-card-options').hidden=true;panel.classList.remove('ai-card-selecting','ai-card-sentences');}
     function toggleCardPair(item,checked){selectedExcerpt='';for(const node of [item]){node.querySelector('.ai-card-select input').checked=checked;node._cardSentenceIds?.clear();node.querySelectorAll('.ai-sentence-choice').forEach(b=>b.setAttribute('aria-pressed','false'));}updateCardSelection();}
     function showCardSentences(item,button){if(controller)return;let list=item.querySelector('.ai-sentence-list');if(list){list.hidden=!list.hidden;button.setAttribute('aria-expanded',String(!list.hidden));return;}list=make('div',{class:'ai-sentence-list','aria-label':'选择要保存的句子'});item._cardSentences=selectionSentences(item._cardTurn.text);item._cardSentenceIds=new Set();item._cardSentences.forEach((text,index)=>{const choice=make('button',{type:'button',class:'ai-sentence-choice','aria-pressed':'false',text:cardText(text)||text});choice.onclick=()=>{selectedExcerpt='';item.querySelector('.ai-card-select input').checked=false;const selected=item._cardSentenceIds;if(selected.has(index))selected.delete(index);else selected.add(index);choice.setAttribute('aria-pressed',String(selected.has(index)));updateCardSelection();};list.append(choice);});item.append(list);button.setAttribute('aria-expanded','true');}
     function selectedTurns(){return [...$('ai-log').querySelectorAll('.ai-message')].flatMap(n=>n.querySelector('.ai-card-select input')?.checked?[{...n._cardTurn}]:n._cardSentenceIds?.size?[{role:n._cardTurn.role,text:n._cardSentences.filter((_,i)=>n._cardSentenceIds.has(i)).join('\n')}]:[]);}
-    function cardSelection(){return selectedExcerpt?[...selectedTurns().filter(t=>t.role==='user'),{role:'assistant',text:selectedExcerpt}]:selectedTurns();}
-    function updateCardSelection(){const count=cardSelection().length;$('ai-log').querySelectorAll('.ai-card-select input,.ai-sentence-toggle,.ai-sentence-choice').forEach(n=>n.disabled=!!controller);for(const id of ['ai-save-card'])$(id).disabled=!!controller||!lastAnswer||!count;$('ai-card-hint').textContent=selectedExcerpt?'已选词句 · 保留勾选的问题':count?'已选 '+count+' 条内容':'问题与回答可分别勾选或逐句选择';}
-    listen($('ai-log'),'mouseup',()=>{const selection=shadow.getSelection?.()||win.getSelection();if(!selection?.rangeCount)return;const range=selection.getRangeAt(0);if(!$('ai-log').contains(range.startContainer)||!$('ai-log').contains(range.endContainer))return;const text=String(selection).trim();if(text){selectedExcerpt=text.slice(0,20000);updateCardSelection();}});
+    function cardSelection(){const chosen=selectedExcerpt?[...selectedTurns().filter(t=>t.role==='user'),{role:'assistant',text:selectedExcerpt}]:selectedTurns();return $('ai-card-select-mode').checked&&chosen.length?chosen:history.map(t=>({...t}));}
+    function updateCardSelection(){for(const id of ['ai-card-select-mode','ai-card-sentences','ai-card-words'])$(id).disabled=!!controller;const count=cardSelection().length,chosen=$('ai-card-select-mode').checked&&(selectedExcerpt||selectedTurns().length);$('ai-log').querySelectorAll('.ai-card-select input,.ai-sentence-toggle,.ai-sentence-choice').forEach(n=>n.disabled=!!controller);for(const id of ['ai-save-card'])$(id).disabled=!!controller||!lastAnswer||!count;$('ai-card-hint').textContent=chosen?(selectedExcerpt?'已选词句 · 保留勾选的问题':'已选 '+count+' 条内容'):'未选择语句，将分享全部对话';}
+    listen($('ai-log'),'mouseup',()=>{const selection=shadow.getSelection?.()||win.getSelection();if(!$('ai-card-select-mode').checked||$('ai-card-options').hidden||!selection?.rangeCount)return;const range=selection.getRangeAt(0);if(!$('ai-log').contains(range.startContainer)||!$('ai-log').contains(range.endContainer))return;const text=String(selection).trim();if(text){selectedExcerpt=text.slice(0,20000);updateCardSelection();}});
     async function saveKnowledgeCard(){
       const turns=cardSelection();if(!lastAnswer||controller||!turns.length)return;
       const serial=requestSerial;for(const id of ['ai-save-card'])$(id).disabled=true;
@@ -1097,7 +1139,7 @@ globalThis.ZYCardRender=ZYCardRender;
         if(destroyed||serial!==requestSerial)return;
         const name='浙大上课爽-知识卡-'+new Date().toISOString().slice(0,10)+'.png';
         const url=win.URL.createObjectURL(blob),link=make('a',{href:url,download:name});link.style.display='none';shadow.append(link);link.click();link.remove();setTimeout(()=>win.URL.revokeObjectURL(url),10000);
-        status('已保存选中的内容，未包含其余对话。');
+        status($('ai-card-select-mode').checked&&(selectedExcerpt||selectedTurns().length)?'已保存选中的内容。':'已保存全部对话。');
       }catch(e){status('知识卡暂时未能保存，请重试。');}
       finally{if(!destroyed)updateCardSelection();}
     }
@@ -1118,14 +1160,14 @@ globalThis.ZYCardRender=ZYCardRender;
       const selection=win.getSelection(),text=String(selection||'').trim();if(!text||text.length>4000||!selection.rangeCount)return;
       const range=selection.getRangeAt(0);if(shadow.contains(range.startContainer)||shadow.contains(range.endContainer))return;
       selectionMenu=make('div',{id:'ai-selection-menu',role:'dialog','aria-label':'选中文字提问'});
-      selectionMenu.style.cssText='position:fixed;z-index:110;pointer-events:auto;padding:8px;border:1px solid #dce1e7;border-radius:12px;background:white;box-shadow:0 8px 30px #0002;left:'+Math.max(8,Math.min(e.clientX,win.innerWidth-210))+'px;top:'+Math.max(8,Math.min(e.clientY+12,win.innerHeight-70))+'px';
-      const ask=make('button',{text:'是否要进行 AI 提问？',type:'button'});ask.style.cssText='padding:8px 12px;cursor:pointer';
+      selectionMenu.style.cssText='position:fixed;z-index:110;pointer-events:auto;padding:8px;border:1px solid #dce1e7;border-radius:12px;background:white;box-shadow:0 8px 30px #0002;right:18px;max-width:calc(100vw - 36px);top:'+Math.max(8,Math.min(e.clientY+12,win.innerHeight-70))+'px';
+      const ask=make('button',{text:'爽问一下',type:'button'});ask.style.cssText='padding:6px 10px;font-size:12px;cursor:pointer';
       ask.onclick=()=>{closeSelection();if(controller)stop();send('请解释以下选中文字：\n'+text,{fresh:true,source:'选中文字'});};
       const dismiss=make('button',{text:'×',type:'button','aria-label':'关闭划词提问'});dismiss.onclick=closeSelection;
       selectionMenu.append(ask,dismiss);shadow.append(selectionMenu);
     },true);
     listen(resume,'click',open);listen($('ai-close'),'click',collapse);listen($('ai-settings-open'),'click',()=>{mountSettings();onOpenSettings('ai');});
-    listen($('ai-mode'),'change',()=>{settings.mode=$('ai-mode').value;save();});listen($('ai-stop'),'click',()=>{stop();status('已停止本次讲解。');});listen($('ai-clear'),'click',clear);listen($('ai-save-card'),'click',()=>saveKnowledgeCard());listen($('ai-remove-image'),'click',()=>attach(null));
+    listen($('ai-mode'),'change',()=>{settings.mode=$('ai-mode').value;save();});listen($('ai-stop'),'click',()=>{stop();status('已停止本次讲解。');});listen($('ai-clear'),'click',clear);listen($('ai-save-card'),'click',()=>{if($('ai-card-select-mode').checked&&$('ai-card-options').hidden){$('ai-card-options').hidden=false;panel.classList.add('ai-card-selecting');$('ai-card-hint').textContent='选择逐句分享，或逐字分享后划选文字；再点击分享知识卡';return;}saveKnowledgeCard();});listen($('ai-card-select-mode'),'change',()=>{selectedExcerpt='';$('ai-card-options').hidden=true;panel.classList.remove('ai-card-selecting','ai-card-sentences');updateCardSelection();});listen($('ai-card-sentences'),'click',()=>{panel.classList.add('ai-card-sentences');$('ai-card-hint').textContent='点击对话旁的逐句选择，再分享知识卡';});listen($('ai-card-words'),'click',()=>{panel.classList.remove('ai-card-sentences');$('ai-card-hint').textContent='在对话中划选文字，再分享知识卡';});listen($('ai-remove-image'),'click',()=>attach(null));
     listen($('ai-slide-action'),'click',explainSlide);listen(captureNotice.querySelector('button'),'click',()=>{stop();stopCaptureSession();cleanupCapture?.();});listen(win,'pagehide',stopCaptureSession);listen($('ai-compose'),'submit',e=>{e.preventDefault();send($('ai-question').value);});listen($('ai-question'),'paste',paste);
     listen($('ai-question'),'keydown',e=>{e.stopPropagation();if(e.key==='Enter'&&!e.shiftKey&&!e.isComposing){e.preventDefault();send(e.currentTarget.value);}});
     for(const [id,fn] of [['ai-open',explainSlide],['slide-explain',explainSlide],['ai-capture',startCapture]])listen(shadow.getElementById(id),'click',fn);
@@ -1157,7 +1199,7 @@ globalThis.ZYCardRender=ZYCardRender;
 (function(root,factory){const api=factory();if(typeof module==='object'&&module.exports)module.exports=api;else root.ZYGateway=api;})(globalThis,function(){
 'use strict';
 const DEFAULT_ORIGIN="https://47.77.182.216.sslip.io/gateway";
-const KEY='gateway-account-v1',APP='zhiyun-subtitles';
+const KEY='gateway-account-v1',APP='zhiyun-subtitles',CLIENT=globalThis.ZY_CLIENT_TYPE||'userscript';
 function baseURL(value){const u=new URL(String(value).trim());if(u.username||u.password||u.search||u.hash||!['/','/gateway','/gateway/'].includes(u.pathname)||(u.protocol!=='https:'&&!(u.protocol==='http:'&&['localhost','127.0.0.1'].includes(u.hostname))))throw Error('请填写 HTTPS 服务地址；本机调试可使用 http://127.0.0.1:8080');return u.origin+(u.pathname==='/'?'':'/gateway');}
 function create({request,getValue,setValue}){
  let refreshUI=null,changeListener=null;
@@ -1197,13 +1239,13 @@ function create({request,getValue,setValue}){
   if(!a.url||!path)return request(options);
   if(!a.token&&!path.startsWith('/v1/speech/')){queueMicrotask(()=>options.onload?.({status:401,responseText:'{}',responseHeaders:''}));return{abort(){}};}
   // Do not pass vendor credentials or arbitrary provider headers to the gateway.
-  const headers={...(a.token?{Authorization:'Bearer '+a.token}:{}),'Content-Type':'application/json','X-App-Id':APP,'X-Client-Type':'userscript'};
+  const headers={...(a.token?{Authorization:'Bearer '+a.token}:{}),'Content-Type':'application/json','X-App-Id':APP,'X-Client-Type':CLIENT};
   for(const [k,v] of Object.entries(options.headers||{}))if(k.toLowerCase()==='x-api-request-id')headers['X-Api-Request-Id']=v;
   if(path==='/v1/ark/responses'&&options.responseType==='stream')return incremental(options,a,headers);
   return request({...options,url:baseURL(a.url)+path,headers,anonymous:true,onload:r=>{if(r.status===401&&a.token&&a.token===credential()){setValue(KEY,{url:a.url,token:''});refreshUI?.();changeListener?.();}options.onload?.(r);}});
  }
  function call(path,body,token=account().token,url=account().url){return new Promise((resolve,reject)=>{
-  request({method:body===undefined?'GET':'POST',url:baseURL(url)+path,anonymous:true,timeout:15000,headers:{'Content-Type':'application/json','X-App-Id':APP,'X-Client-Type':'userscript',...(token?{Authorization:'Bearer '+token}:{})},...(body===undefined?{}:{data:JSON.stringify(body)}),onload:r=>{try{const data=JSON.parse(r.responseText);if(r.status<200||r.status>=300){if(r.status===401&&token&&token===credential()){setValue(KEY,{url:account().url,token:''});refreshUI?.();changeListener?.();}throw Error(data.error||'服务请求失败');}if(data.capabilities)setValue('gateway-capabilities-v1',data.capabilities);resolve(data);}catch(e){reject(e);}},onerror:()=>reject(Error('无法连接服务，请检查地址和域名授权')),ontimeout:()=>reject(Error('服务请求超时'))});
+  request({method:body===undefined?'GET':'POST',url:baseURL(url)+path,anonymous:true,timeout:15000,headers:{'Content-Type':'application/json','X-App-Id':APP,'X-Client-Type':CLIENT,...(token?{Authorization:'Bearer '+token}:{})},...(body===undefined?{}:{data:JSON.stringify(body)}),onload:r=>{try{const data=JSON.parse(r.responseText);if(r.status<200||r.status>=300){if(r.status===401&&token&&token===credential()){setValue(KEY,{url:account().url,token:''});refreshUI?.();changeListener?.();}throw Error(data.error||'服务请求失败');}if(data.capabilities)setValue('gateway-capabilities-v1',data.capabilities);resolve(data);}catch(e){reject(e);}},onerror:()=>reject(Error('无法连接服务，请检查地址和域名授权')),ontimeout:()=>reject(Error('服务请求超时'))});
  });}
  async function login(url,email,password){url=baseURL(DEFAULT_ORIGIN||url);const data=await call('/v1/auth/login',{email,password},null,url);if(typeof data.token!=='string'||!data.token)throw Error('登录响应异常');setValue(KEY,{url,token:data.token});return data;}
  async function logout(){try{if(credential())await call('/v1/auth/logout',{});}finally{setValue(KEY,{url:account().url||'',token:''});}}
@@ -1211,11 +1253,11 @@ function create({request,getValue,setValue}){
   changeListener=onChange;
   const target=shadow.getElementById('settings-connection');if(!target)return;
   const $=id=>shadow.getElementById(id),box=document.createElement('section');box.className='section';box.id='gateway-account';
-  box.innerHTML='<div class="account-head"><span id="gateway-avatar" aria-hidden="true">☺</span><div><h4 id="gateway-name">欢迎使用上课爽</h4><p id="gateway-state">游客模式</p></div></div><p>游客可使用原文字幕、语音同步和本机缓存。登录后解锁 AI 对话、PPT 讲解、截图问答与中外翻译。</p><form id="gateway-login-form"><label>账号<input id="gateway-email" autocomplete="username" placeholder="用户名或邮箱" required></label><label>密码<input id="gateway-password" type="password" autocomplete="current-password" required></label><button class="primary" id="gateway-login" type="submit">登录</button><p>暂未开放自助注册。没有账号请联系管理员人工开通，之后将开放注册。</p></form><div id="gateway-member" hidden><button id="gateway-usage">查看额度</button><button id="gateway-logout">退出登录</button></div><div class="quota-heading"><strong>我的套餐额度</strong><button id="gateway-recharge" type="button">充值 / 开通</button></div><div id="gateway-quota" aria-label="剩余额度"></div><div id="gateway-recharge-note" hidden role="status"><strong>充值 / 开通账号</strong><p>请在抖音联系「侃侃你的」博主。</p><button id="gateway-recharge-close" type="button">我知道了</button></div><p id="gateway-status" role="status" aria-live="polite"></p>';
+  box.innerHTML='<div class="account-head"><span id="gateway-avatar" aria-hidden="true">☺</span><div><h4 id="gateway-name">欢迎使用上课爽</h4><p id="gateway-state">游客模式</p></div></div><p>游客可使用原文字幕、语音同步和本机缓存。登录后解锁 AI 对话、PPT 讲解、截图问答与中外翻译。</p><form id="gateway-login-form"><label>账号<input id="gateway-email" autocomplete="username" placeholder="用户名或邮箱" required></label><label>密码<input id="gateway-password" type="password" autocomplete="current-password" required></label><button class="primary" id="gateway-login" type="submit">登录</button><p>目前还在测试，暂时没开放自助注册。还没账号？在抖音或小红书搜「侃侃你的」，私信我申请测试账号就好啦。</p></form><div id="gateway-member" hidden><button id="gateway-usage">查看额度</button><button id="gateway-logout">退出登录</button></div><div class="quota-heading"><strong>我的套餐额度</strong><button id="gateway-recharge" type="button">充值 / 开通</button></div><div id="gateway-quota" aria-label="剩余额度"></div><div id="gateway-recharge-note" hidden role="status"><strong>充值 / 开通账号</strong><p>抖音、小红书都是「侃侃你的」，私信我申请账号或调整额度就好啦。</p><button id="gateway-recharge-close" type="button">我知道了</button></div><p id="gateway-status" role="status" aria-live="polite"></p>';
   const style=document.createElement('style');style.textContent='.account-head{display:flex;gap:14px;align-items:center;margin-bottom:16px}#gateway-avatar{display:grid;place-items:center;width:56px;height:56px;border-radius:50%;background:#dfebff;color:#215da1;font-size:24px}#gateway-login-form{display:grid;gap:12px;max-width:380px}#gateway-login-form label{display:grid;gap:6px}#gateway-login-form input{box-sizing:border-box;width:100%!important;max-width:none!important;padding:12px;border-radius:10px}.account-title{display:grid;grid-template-columns:auto auto;column-gap:6px;align-items:center}.account-title h3{font-size:16px}.account-title .subtitle{grid-column:1/-1}.account-title #account-entry{grid-column:2;grid-row:1}#account-entry{display:flex;align-items:center;gap:5px;margin-left:auto;padding:0;white-space:nowrap;color:#d7e7f8}#account-entry #account-guide{color:inherit;font-size:10px}#account-entry button{font-size:10px;border:0;padding:4px 6px;background:#ffffff18;color:inherit}#gateway-quota{display:grid;gap:14px;margin-top:20px}.quota-row{background:#f0f5fc;border:1px solid #e0e8f3;border-radius:14px;padding:16px}.quota-row strong{display:block;font-size:22px;color:#215da1}.quota-row progress{display:block;width:100%;height:10px;margin:12px 0;accent-color:#27855b}.quota-row small{color:#6c7f95}#account-entry p{margin:0;font-size:11px;flex:1}#account-entry button{white-space:nowrap}button[data-login-required=true]{background:#edf0f4!important;color:#7b8797!important;border-color:#d9e0e8!important;box-shadow:none!important}';style.textContent+=`#gateway-member{display:flex;gap:8px;flex-wrap:wrap}.quota-heading{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:24px}.quota-heading strong{color:#304b68}.quota-heading button{font-size:12px;background:#edf4ff}#gateway-quota{grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-top:12px}.quota-row{display:flex;flex-direction:column;align-items:center;text-align:center;gap:10px;padding:16px 8px;background:#fff;min-width:0}.quota-row .quota-label{font-weight:600;font-size:12px;color:#435c76}.quota-row .quota-ring{display:grid;place-items:center;flex:none;width:100px;height:100px;border-radius:50%;background:conic-gradient(var(--quota-color) var(--quota-angle),#EEDCCD 0);position:relative}.quota-ring:before{content:'';position:absolute;inset:8px;border-radius:50%;background:#fff}.quota-ring strong{position:relative;display:grid;gap:2px;color:var(--quota-color);font-size:21px;line-height:1.2;font-variant-numeric:tabular-nums}.quota-ring strong span{font-size:10px;font-weight:400;color:#7a8b9e}.quota-row small{font-size:10px;line-height:1.6;overflow-wrap:anywhere}.quota-row[data-locked=true]{background:#f6f7f9}.quota-row[data-locked=true] .quota-ring:before{background:#f6f7f9}.quota-row .quota-action{font-size:11px;padding:5px 8px;margin-top:auto}#gateway-recharge-note{margin-top:12px;padding:16px;border:1px solid #d9e6f5;border-radius:12px;background:#edf4ff}#gateway-recharge-note p{margin:6px 0 12px}@media(max-width:420px){#gateway-quota{gap:6px}.quota-row{padding:12px 4px}.quota-row .quota-ring{width:78px;height:78px}.quota-ring strong{font-size:17px}.quota-row .quota-label{font-size:11px}}`;style.textContent+=(globalThis.ZYWarmTheme?.css||'');shadow.append(style);for(const child of target.children)child.hidden=true;target.prepend(box);
   const entry=document.createElement('div');entry.id='account-entry';entry.innerHTML='<p id="account-guide"></p><button id="account-open">去登录</button>';const heading=shadow.querySelector('#panel-head > div');if(heading){heading.classList.add('account-title');heading.append(entry);}else (shadow.getElementById('panel-head')||shadow.getElementById('panel-body')).append(entry);
-  const openAccount=()=>{shadow.getElementById('settings-tab-connection').click();shadow.getElementById('settings-dialog').hidden=false;(credential()?$('gateway-usage'):$('gateway-email')).focus();};$('account-open').onclick=openAccount;shadow.addEventListener('click',e=>{const button=e.composedPath().find(n=>n?.dataset?.loginRequired==='true');if(button){e.preventDefault();e.stopImmediatePropagation();openAccount();}},true);
-  let busy=false,profile='',usageData=null;
+  const openAccount=()=>{shadow.getElementById('settings-tab-connection').click();shadow.getElementById('settings-dialog').hidden=false;(credential()?$('gateway-usage'):$('gateway-email')).focus();};$('account-open').onclick=openAccount;shadow.addEventListener('click',e=>{const button=e.composedPath().find(n=>n?.dataset?.loginRequired==='true'||n?.dataset?.featureBlocked==='true');if(button){e.preventDefault();e.stopImmediatePropagation();openAccount();if(button.dataset.featureBlocked==='true')$('gateway-status').textContent='这个功能还没开通，联系管理员就好。';}},true);
+  let busy=false,profile='',usageData=null,permissions=null;
   $('gateway-recharge').onclick=()=>{$('gateway-recharge-note').hidden=false;$('gateway-recharge-close').focus();};
   $('gateway-recharge-close').onclick=()=>{$('gateway-recharge-note').hidden=true;$('gateway-recharge').focus();};
   const renderQuota=()=>{
@@ -1234,13 +1276,31 @@ function create({request,getValue,setValue}){
     quota.append(row);
    }
   };
-  const refresh=()=>{const signed=!!credential();if($('compact'))$('compact').textContent=signed?'🐥 上课爽':'🐥 上课爽 · 去登录';$('gateway-login-form').hidden=signed;$('gateway-member').hidden=!signed;$('gateway-name').textContent=signed?(profile||'我的学习账号'):'欢迎使用上课爽';$('gateway-state').textContent=signed?'已登录 · AI 功能已解锁':'游客模式 · AI 功能需登录';$('gateway-avatar').textContent=signed?(profile||'我').slice(0,1):'☺';$('account-guide').textContent=signed?'● 已登录':'○ 游客';$('account-open').textContent=signed?'账号':'登录';for(const id of ['ai-open','ai-capture','slide-explain','transcript-open','web-ask']){const b=$(id);if(b){b.dataset.loginRequired=String(!signed);b.title=signed?'':'登录后使用；点击查看账号';b.setAttribute('aria-disabled',String(!signed));}}if(!signed)usageData=null;renderQuota();const both=$('mode')?.querySelector('[value="both"]');if(both)both.textContent='中外对照';};refreshUI=refresh;
+  const refresh=()=>{const signed=!!credential();if($('compact'))$('compact').textContent=signed?'🐥 上课爽':'🐥 上课爽 · 去登录';$('gateway-login-form').hidden=signed;$('gateway-member').hidden=!signed;$('gateway-name').textContent=signed?(profile||'我的学习账号'):'欢迎使用上课爽';$('gateway-state').textContent=signed?'已登录 · 按账号权限使用':'游客模式 · AI 功能需登录';$('gateway-avatar').textContent=signed?(profile||'我').slice(0,1):'☺';$('account-guide').textContent=signed?'● 已登录':'○ 游客';$('account-open').textContent=signed?'账号':'登录';for(const id of ['ai-open','ai-capture','slide-explain','transcript-open','web-ask']){const b=$(id);if(b){b.dataset.loginRequired=String(!signed);b.title=signed?'':'登录后使用；点击查看账号';b.setAttribute('aria-disabled',String(!signed));}}if(!signed){usageData=null;permissions=null;}for(const id of ['ai-open','ai-capture','slide-explain','transcript-open','web-ask','sync-toggle']){const b=$(id),feature=id==='sync-toggle'?'speech':'learning';if(b){b.dataset.featureBlocked=String(signed&&permissions?.[feature]===false);if(b.dataset.featureBlocked==='true')b.title='这个功能还没开通，联系管理员就好';}}renderQuota();const both=$('mode')?.querySelector('[value="both"]');if(both){both.textContent=signed&&permissions?.translation===false?'中外对照（未开通）':'中外对照';both.disabled=signed&&permissions?.translation===false;}};refreshUI=refresh;
   const run=async(fn)=>{if(busy)return;busy=true;box.querySelectorAll('button').forEach(b=>b.disabled=true);try{await fn();}catch(e){$('gateway-status').textContent=e.message;}finally{busy=false;box.querySelectorAll('button').forEach(b=>b.disabled=false);refresh();}};
-  const usage=async()=>{const data=await call('/v1/me');profile=data.username||data.email||'我的学习账号';const u=data.usage;usageData=u; $('gateway-status').textContent=`${profile} · ${u.month}（UTC） · 调用 ${u.requests}/${u.request_limit} · Token ${u.total_tokens} · 音频 ${Math.ceil(u.audio_seconds)}/${u.audio_limit} 秒`;refresh();};
-  $('gateway-login-form').onsubmit=e=>{e.preventDefault();run(async()=>{if(!configured())throw Error('服务尚未配置，请联系管理员更新插件。');$('gateway-status').textContent='正在登录…';await login(account().url,$('gateway-email').value,$('gateway-password').value);$('gateway-password').value='';profile=$('gateway-email').value;$('gateway-status').textContent='登录成功，AI 功能已解锁';onChange();refresh();heartbeat();await usage();});};
-  $('gateway-usage').onclick=()=>run(usage);$('gateway-logout').onclick=()=>run(async()=>{try{await logout();}finally{profile='';usageData=null;$('gateway-password').value='';$('gateway-status').textContent='已退出登录，语音同步和缓存仍可使用。';onChange();}});
+  const usage=async()=>{const data=await call('/v1/me');permissions=data.permissions||null;profile=data.username||data.email||'我的学习账号';const u=data.usage;usageData=u; $('gateway-status').textContent=`${profile} · ${u.month}（UTC） · 调用 ${u.requests}/${u.request_limit} · Token ${u.total_tokens} · 音频 ${Math.ceil(u.audio_seconds)}/${u.audio_limit} 秒`;refresh();};
+  $('gateway-login-form').onsubmit=e=>{e.preventDefault();run(async()=>{if(!configured())throw Error('服务尚未配置，请联系管理员更新插件。');$('gateway-status').textContent='正在登录…';await login(account().url,$('gateway-email').value,$('gateway-password').value);$('gateway-password').value='';profile=$('gateway-email').value;$('gateway-status').textContent='登录成功，正在读取权限和额度';onChange();refresh();heartbeat();await usage();});};
+  $('gateway-usage').onclick=()=>run(usage);$('gateway-logout').onclick=()=>run(async()=>{try{await logout();}finally{profile='';usageData=null;permissions=null;$('gateway-password').value='';$('gateway-status').textContent='已退出登录，语音同步和缓存仍可使用。';onChange();}});
   const heartbeat=()=>{if(credential()&&document.visibilityState!=='hidden')call('/v1/activity',{}).catch(()=>{});};setInterval(heartbeat,60000);document.addEventListener('visibilitychange',heartbeat);heartbeat();refresh();
-  if(credential())usage().catch(()=>{});
+  if(credential())usage().catch(e=>{$('gateway-status').textContent=e.message;});
+
+  if($('sync-toggle')){
+   const GUIDE='gateway-guide-no-remind-v2',dialog=document.createElement('dialog');dialog.id='gateway-guide';dialog.setAttribute('aria-labelledby','guide-title');
+   dialog.innerHTML='<div class="guide-top"><span id="guide-step"></span><button type="button" id="guide-skip">先逛逛</button></div><h2 id="guide-title"></h2><p id="guide-copy"></p><div id="guide-picture"></div><p class="guide-note">按钮位置示意，具体以课堂界面为准</p><div class="guide-dots" id="guide-dots"></div><div class="guide-actions"><button type="button" id="guide-back">上一步</button><button type="button" id="guide-next" class="primary">下一步</button></div><button type="button" id="guide-login" class="primary" hidden>有账号？点这里登录</button><p id="guide-account-note" hidden>测试中还没开放自助注册。还没账号？在抖音或小红书搜「侃侃你的」，私信我申请测试账号就好啦。</p><label class="guide-reminder"><input type="checkbox" id="guide-no-remind"> 下次不提醒</label>';
+   const guideStyle=document.createElement('style');guideStyle.textContent='#gateway-guide{pointer-events:auto;width:min(440px,calc(100vw - 32px));box-sizing:border-box;max-height:calc(100dvh - 32px);overflow:auto;border:1px solid #e5cdbb;border-radius:24px;background:#fffaf4;color:#493529;padding:24px;box-shadow:0 24px 90px #25150f40;font:14px/1.6 "Microsoft YaHei",sans-serif}#gateway-guide::backdrop{background:#27190c75}#gateway-guide button{cursor:pointer;border:1px solid #e2cdbc;border-radius:12px;padding:10px 16px;background:#fff7ed;color:#694331;font:inherit}#gateway-guide button.primary{background:#c45221;color:white}#gateway-guide h2{font-size:25px;line-height:1.35;margin:18px 0 10px}#gateway-guide p{color:#795e4e}#gateway-guide svg{display:block;width:100%;height:auto}.guide-top,.guide-actions{display:flex;align-items:center;justify-content:space-between;gap:12px}.guide-note{font-size:11px;text-align:center}.guide-dots{text-align:center;letter-spacing:8px;color:#c45221;margin:12px 0}.guide-actions button{flex:1}#guide-login{width:100%;margin-top:12px}#guide-account-note{font-size:12px}.guide-reminder{display:flex;align-items:center;justify-content:flex-start;gap:8px;margin-top:16px;cursor:pointer}.guide-reminder input{width:18px;height:18px;accent-color:#c45221}#gateway-guide [hidden]{display:none!important}@media(max-width:400px){#gateway-guide{padding:18px}#gateway-guide h2{font-size:22px}}';shadow.append(guideStyle,dialog);
+   const pages=[
+    ['麦太炸？听不清？字幕不匹配？','别硬猜，试试「语音智能校准」，帮你把字幕跟声音对上。原录音已经爆音的话，校准也不一定能救回来。','↻ 字幕同步','语音智能校准'],
+    ['课程太难？外语听不懂？','开个「字幕翻译」，中外对照着看。还有哪里没懂，直接问 AI，陪你捋一捋。','中外对照 · AI 问答','字幕翻译 / AI 问答'],
+    ['视频很卡？先缓存一下！','点这里缓存，支持的视频可以提前存到本机，少等一会儿，看课轻松点。','↓ 缓存视频','缓存入口']
+   ];let step=0,previousFocus=null;
+   function paint(){const [title,copy,button,label]=pages[step];$('guide-title').textContent=title;$('guide-copy').textContent=copy;$('guide-step').textContent='上课轻松一点 · '+(step+1)+' / 3';$('guide-dots').textContent=pages.map((_,i)=>i===step?'●':'○').join(' ');$('guide-back').hidden=step===0;$('guide-next').textContent=step===2?'开始用，先逛逛':'下一步';$('guide-login').hidden=step!==2||!!credential();$('guide-account-note').hidden=step!==2||!!credential();$('guide-picture').innerHTML='<svg viewBox="0 0 380 208" role="img" aria-label="'+label+'位置示意"><rect x="1" y="1" width="378" height="206" rx="18" fill="#f3e5d7"/><rect x="18" y="18" width="210" height="155" rx="12" fill="#52463d"/><path d="M104 66l40 25-40 25z" fill="#fff8ed"/><rect x="36" y="142" width="174" height="16" rx="5" fill="#fff2df"/><rect x="244" y="18" width="118" height="155" rx="12" fill="#fffaf4"/><text x="303" y="46" text-anchor="middle" font-size="14" fill="#694331">上课爽</text><rect x="250" y="76" width="106" height="55" rx="10" fill="#c45221"/><text x="303" y="98" text-anchor="middle" font-size="12" fill="white">'+button+'</text><text x="303" y="118" text-anchor="middle" font-size="10" fill="white">'+label+'</text><path d="M174 185q80 0 118-43m-1 14 2-17-17 5" stroke="#c45221" stroke-width="4" fill="none" stroke-linecap="round"/></svg>';}
+   function finish(){setValue(GUIDE,$('guide-no-remind').checked);dialog.close();previousFocus?.focus();}
+   function show(){if(dialog.open)return;previousFocus=shadow.activeElement;step=0;$('guide-no-remind').checked=!!getValue(GUIDE,false);paint();dialog.showModal();$('guide-next').focus();}
+   $('guide-skip').onclick=finish;$('guide-back').onclick=()=>{step--;paint();$('guide-next').focus();};$('guide-next').onclick=()=>{if(step===2)finish();else{step++;paint();}};$('guide-login').onclick=()=>{finish();openAccount();};dialog.addEventListener('cancel',e=>{e.preventDefault();finish();});
+   const help=document.createElement('button');help.id='gateway-help';help.type='button';help.textContent='使用引导';help.onclick=show;box.prepend(help);
+   if(!getValue(GUIDE,false))show();
+  }
+
  }
 
  return{transport,configured,credential,login,logout,call,mount,features:()=>({webSearch:!configured()||getValue('gateway-capabilities-v1',{}).web_search===true})};
@@ -1554,6 +1614,13 @@ const ZY_SHARE_QR="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAATwAAAE8CAYAAAB
     slides.forEach((slide,i)=>{if(Number.isFinite(slide.time) && slide.time<=time && slide.time>=latest){latest=slide.time;index=i;}});
     return index;
   }
+  // PPT records have their own clock; speech recognition offsets must not move slides.
+  function pptPlaybackTime(videoTime, offset=0) { return videoTime-offset; }
+  function pptOffsetForPage(videoTime, slideTime) {
+    if(!Number.isFinite(videoTime)||!Number.isFinite(slideTime))return null;
+    const offset=videoTime-slideTime;
+    return Math.abs(offset)<=3600?offset:null;
+  }
   function subtitleTime(videoTime, offset) { return videoTime - offset; }
   function syncAnchorsValid(anchors) {
     const sorted = (Array.isArray(anchors) ? anchors : []).filter(point => Number.isFinite(point?.videoTime) && point.videoTime >= 0 && Number.isFinite(point.offset) && Math.abs(point.offset) <= 3600)
@@ -1617,7 +1684,7 @@ const ZY_SHARE_QR="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAATwAAAE8CAYAAAB
       maxHeight: below ? Math.max(24, band - 48) : rect.height * 0.55 };
   }
   if (typeof module !== 'undefined' && module.exports) {
-    module.exports = { parseTime, timeline, activeCue, stamp, srt, translationBody, contextualTranslationBody, translationJobs, translationResult, createTranslator, subtitleTime, syncAnchorsValid, addSyncAnchor, syncOffsetAt, syncedSubtitleTime, syncedVideoTime, createSyncSchedule, captionLayout, wavBytes, matchSpeech, speechResult, recognizeStandard, courseIdentity, slideTime, slideAt, isTargetLanguage, downloadVideo, downloadInChunks };
+    module.exports = { parseTime, timeline, activeCue, stamp, srt, translationBody, contextualTranslationBody, translationJobs, translationResult, createTranslator, subtitleTime, syncAnchorsValid, addSyncAnchor, syncOffsetAt, syncedSubtitleTime, syncedVideoTime, createSyncSchedule, captionLayout, wavBytes, matchSpeech, speechResult, recognizeStandard, courseIdentity, slideTime, slideAt, pptPlaybackTime, pptOffsetForPage, isTargetLanguage, downloadVideo, downloadInChunks };
     return;
   }
   ZYAppearance.configure(GM_getValue,GM_setValue);
@@ -1656,6 +1723,7 @@ const ZY_SHARE_QR="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAATwAAAE8CAYAAAB
     #slide-toolbar button{padding:5px 7px;background:transparent;color:#eee;border-color:#ffffff25;border-radius:7px} #slide-toolbar button:hover{background:#ffffff20} #slide-page{font-variant-numeric:tabular-nums}
     #slide-viewport{position:relative;width:100%;height:100%;overflow:hidden;touch-action:none;cursor:move}
     #slide-image{position:absolute;left:50%;transform:translateX(-50%);display:block;width:auto;max-width:none;height:100%;user-select:none;-webkit-user-drag:none}
+    #slides[data-fullscreen-aligned] #slide-image{left:0;transform:none;width:100%;height:100%;object-fit:contain}
     #slide-resize{position:absolute;right:0;bottom:0;width:24px;height:24px;padding:0;border:0;border-radius:6px 0 0 0;background:#141a18cc;color:#ddd;cursor:nwse-resize;touch-action:none;font-size:16px}
     .slide-edge{position:absolute;z-index:2;background:transparent;border:0;padding:0;border-radius:0;touch-action:none}
     .slide-edge:hover{background:#8ebaa455;box-shadow:none}
@@ -1664,6 +1732,25 @@ const ZY_SHARE_QR="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAATwAAAE8CAYAAAB
     .slide-edge[data-edge=top]{top:0;left:12px;right:12px;height:8px;cursor:ns-resize}
     .slide-edge[data-edge=bottom]{bottom:0;left:12px;right:26px;height:8px;cursor:ns-resize}
     #slide-resize{z-index:3}
+    #slide-thumbs-toggle{position:absolute;z-index:4;left:8px;top:50%;transform:translateY(-50%);padding:12px 7px;background:#141a18e8;color:#fff;border:1px solid #ffffff40;border-radius:8px;font-size:12px;writing-mode:vertical-rl}
+    #slide-thumbs{position:absolute;z-index:5;left:0;top:0;bottom:0;width:min(220px,65%);display:flex;flex-direction:column;background:#141a18f5;color:#eee;box-shadow:8px 0 24px #0005;cursor:default}
+    #slide-thumbs[hidden]{display:none}
+    #slide-thumbs header{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:10px;border-bottom:1px solid #ffffff25;font-size:12px}
+    #slide-thumbs-close{padding:5px 8px;background:transparent;color:#fff;border-color:#ffffff40}
+    #slide-ppt-sync{padding:8px 10px;border-bottom:1px solid #ffffff25;font-size:12px}
+    #slide-ppt-sync label{display:flex;flex-wrap:wrap;justify-content:space-between;gap:6px;margin:0}
+    #slide-ppt-sync input{width:76px;max-width:50%;background:#222b26;color:#fff;border-color:#ffffff40;padding:4px}
+    #slide-ppt-sync .actions{display:flex;flex-wrap:wrap;gap:4px;margin:6px 0}
+    #slide-ppt-sync button{padding:5px 6px;font-size:11px;background:transparent;color:#eee;border-color:#ffffff40}
+    #ppt-sync-hint{color:#d4e5d9;font-size:11px;line-height:1.5;margin:4px 0 0}
+    #slide-thumbs-list{flex:1;min-height:0;overflow-y:auto;overscroll-behavior:contain;padding:8px;touch-action:pan-y}
+    .slide-thumb{display:block;width:100%;margin:0 0 8px;padding:6px;border:2px solid transparent;border-radius:8px;background:#ffffff0d;color:#eee;text-align:left;cursor:pointer}
+    .slide-thumb:hover{background:#ffffff20}
+    .slide-thumb[aria-current=page]{border-color:#a8dbb9;background:#a8dbb920}
+    .slide-thumb:focus-visible{outline:2px solid #fff;outline-offset:-4px}
+    .slide-thumb img{display:block;width:100%;height:90px;object-fit:contain;background:#090b0b;pointer-events:none}
+    .slide-thumb span{display:block;margin-top:5px;font-size:12px;font-variant-numeric:tabular-nums}
+
     .layout-handle{position:fixed;z-index:15;pointer-events:auto;outline:2px dashed #9adbb8;border-radius:10px;cursor:move;touch-action:none;background:#65ac8710}
     .layout-handle span{position:absolute;left:4px;top:4px;padding:4px 8px;border-radius:7px;background:#234a3eeb;color:#fff;font-size:12px;pointer-events:none}
     .layout-handle button{position:absolute;right:0;bottom:0;margin:0;width:28px;height:28px;padding:0;cursor:nwse-resize;touch-action:none;background:#234a3e;color:white}
@@ -1680,6 +1767,8 @@ const ZY_SHARE_QR="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAATwAAAE8CAYAAAB
   <button id="compact" hidden aria-label="展开字幕设置">🌱 字幕</button>
   <section id="slides" hidden aria-label="课程幻灯片">
     <div id="slide-viewport" tabindex="0" aria-label="PPT 悬浮窗，拖动图片移动窗口"><img id="slide-image" draggable="false" alt="课程 PPT"></div>
+    <button id="slide-thumbs-toggle" aria-label="展开 PPT 缩略图" aria-expanded="false" aria-controls="slide-thumbs">▣ 选页 ›</button>
+    <aside id="slide-thumbs" hidden aria-label="PPT 缩略图"><header><strong>快速选页</strong><button id="slide-thumbs-close" aria-label="收起 PPT 缩略图">‹ 收起</button></header><div id="slide-ppt-sync"><label>PPT 偏移（秒）<input id="ppt-offset" type="number" min="-3600" max="3600" step="0.5" value="0"></label><div class="actions"><button id="ppt-earlier">提前 1 秒</button><button id="ppt-later">延后 1 秒</button><button id="ppt-reset">归零</button></div><button id="ppt-align-page" title="老师刚切到这页时，选中这页再点击；在页面中途点击会使校准不准确。">这页刚开始 · 校准</button><p id="ppt-sync-hint" role="status">PPT 与字幕分别校准，正数延后，负数提前。</p></div><div id="slide-thumbs-list" role="navigation" aria-label="选择 PPT 页面"></div></aside>
     <nav id="slide-toolbar" aria-label="PPT 翻页"><button id="slide-prev">← 上页</button><span id="slide-page"></span><button id="slide-next">下页 →</button><button id="slide-follow" aria-pressed="true">✓ 跟随老师</button><button id="slide-close">收起</button></nav><button id="slide-resize" aria-label="调整 PPT 窗口大小" title="拖拽缩放；方向键微调">◢</button>
     <button class="slide-edge" data-edge="left" aria-label="调整 PPT 左边缘"></button><button class="slide-edge" data-edge="right" aria-label="调整 PPT 右边缘"></button><button class="slide-edge" data-edge="top" aria-label="调整 PPT 上边缘"></button><button class="slide-edge" data-edge="bottom" aria-label="调整 PPT 下边缘"></button>
   </section>
@@ -1709,7 +1798,7 @@ const ZY_SHARE_QR="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAATwAAAE8CAYAAAB
     <div id="cache-transport" hidden><div class="actions"><button id="cache-back">← 后退 10 秒</button><button id="cache-forward">快进 10 秒 →</button></div><label>缓存进度<input id="cache-seek" aria-label="缓存播放进度" type="range" min="0" max="100" step="0.1"></label><p id="cache-time"></p></div>
     <details id="cache-batch"><summary>批量缓存 · 打开过的课</summary>
     <p>打开回放并加载视频后会记录在本机；也可手动加入。勾选后顺序下载，保留此任务页。刷新后需重新点击开始，未完成的一课会重新下载。</p>
-    <div class="actions"><button id="batch-add">加入当前课</button><button id="batch-refresh">刷新列表</button></div>
+    <div class="actions"><button id="batch-refresh">刷新列表</button></div>
     <div id="batch-list"></div><div class="actions"><button id="batch-start">缓存所选课程</button><button id="batch-stop" disabled>停止队列</button></div>
     <p id="batch-status" role="status">尚未开始批量缓存。</p></details>
     <details id="cache-details"><summary>缓存详情与诊断</summary>
@@ -1925,7 +2014,7 @@ const ZY_SHARE_QR="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAATwAAAE8CAYAAAB
       cancelAlignment=null; $('auto-align').textContent='匹配 12 秒'; $('align-feedback').hidden=true;
     }
   }
-  let splitControls=null;
+  let splitControls=null, fullscreenSplitStyles=null;
   let slideUrls=[], slideEntries=[], slideIndex=0, splitVideo=null, splitStyles=null, layoutMode='video', slideDragging=false, slideManuallyPlaced=false, slideFollowing=true, slideCourse=null;
   function saveSlideState() {
     GM_setValue('ppt-state:'+slideCourse,{index:slideIndex,url:slideEntries[slideIndex]?.url,time:slideEntries[slideIndex]?.time,follow:slideFollowing});
@@ -1934,24 +2023,92 @@ const ZY_SHARE_QR="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAATwAAAE8CAYAAAB
     $('slide-follow').textContent=slideFollowing?'✓ 跟随老师':'跟随老师';
     $('slide-follow').setAttribute('aria-pressed',String(slideFollowing));
   }
+  let pptOffset=0;
+  function pptOffsetKey() {return 'ppt-offset:'+courseIdentity(location.hash);}
+  function loadPptOffset() {
+    const saved=GM_getValue(pptOffsetKey(),0);pptOffset=Number.isFinite(saved)?Math.max(-3600,Math.min(3600,saved)):0;
+    updatePptSyncHint();
+  }
+  function updatePptSyncHint(message='') {
+    $('ppt-offset').value=Number(pptOffset.toFixed(2));
+    $('ppt-sync-hint').textContent=message||('PPT 独立偏移 '+(pptOffset>0?'+':'')+Number(pptOffset.toFixed(2))+' 秒。正数延后，负数提前；字幕不受影响。');
+    $('ppt-align-page').disabled=!splitVideo||!Number.isFinite(slideEntries[slideIndex]?.time);
+  }
+  function setPptOffset(offset,message='') {
+    if(!Number.isFinite(offset))return;
+    pptOffset=Math.max(-3600,Math.min(3600,offset));GM_setValue(pptOffsetKey(),pptOffset);updatePptSyncHint(message);syncSlide();
+  }
+  $('ppt-offset').addEventListener('input',()=>{if($('ppt-offset').value.trim()!=='')setPptOffset(Number($('ppt-offset').value));});
+  $('ppt-earlier').onclick=()=>setPptOffset(pptOffset-1);
+  $('ppt-later').onclick=()=>setPptOffset(pptOffset+1);
+  $('ppt-reset').onclick=()=>setPptOffset(0);
+  $('ppt-align-page').onclick=()=>{
+    if(!splitVideo||!coursePptReady())return;
+    const offset=pptOffsetForPage(splitVideo.currentTime,slideEntries[slideIndex]?.time);
+    if(offset===null){updatePptSyncHint('这页没有有效时间或校准超出一小时，未修改偏移。');return;}
+    slideFollowing=true;updateFollowButton();setPptOffset(offset,'已按这页开始时刻校准，偏移 '+Number(offset.toFixed(2))+' 秒，已恢复跟随老师。');saveSlideState();
+  };
   function syncSlide() {
     if(!slideFollowing || !splitVideo || $('slides').hidden) return;
-    const index=slideAt(slideEntries,currentSubtitleTime(splitVideo.currentTime));
-    if(index>=0 && index!==slideIndex) {slideIndex=index;renderSlide();}
+    const index=slideAt(slideEntries,pptPlaybackTime(splitVideo.currentTime,pptOffset));
+    const target=index>=0?index:0;
+    if(target!==slideIndex && slideEntries.some(slide=>Number.isFinite(slide.time))) {slideIndex=target;renderSlide();}
   }
   function closeSlides() {
+    setSlideThumbsOpen(false);
+    slideFollowing=true;updateFollowButton();
+    if(slideCourse!==null)saveSlideState();
     $('slides').hidden=true;
+    fullscreenSplitStyles=null; videoManuallyPlaced=false; $('slides').removeAttribute('data-fullscreen-aligned');
     editingLayout=false;updateEditHandles();$('layout-editor').hidden=true;$('edit-layout').textContent='调整字幕';
     if(splitVideo && splitStyles) for(const [key,saved] of Object.entries(splitStyles)) {
       if(saved.value) splitVideo.style.setProperty(key,saved.value,saved.priority); else splitVideo.style.removeProperty(key);
     }
-    if(splitVideo && splitControls!==null){splitVideo.controls=splitControls;splitVideo.removeAttribute('data-zy-moved-video');}splitControls=null;
+    if(splitVideo && splitControls!==null){splitVideo.controls=splitControls;splitVideo.removeAttribute('data-zy-moved-video');splitVideo.removeAttribute('data-zy-original-controls');}splitControls=null;
     splitStyles=null; splitVideo=null;layoutMode='video';$('caption-custom').checked=false;$('show-slides').textContent='看 PPT';
   }
+  let slideThumbsSignature='', slideThumbsActive=-1;
+  function updateSlideThumbs() {
+    if($('slide-thumbs').hidden)return;
+    const list=$('slide-thumbs-list'),signature=JSON.stringify([slideCourse,slideEntries]);
+    if(signature!==slideThumbsSignature) {
+      const fragment=document.createDocumentFragment();
+      slideEntries.forEach((slide,index)=>{
+        const button=document.createElement('button'),image=document.createElement('img'),label=document.createElement('span');
+        button.className='slide-thumb';button.type='button';button.dataset.index=index;
+        const time=Number.isFinite(slide.time)?' · '+stamp(slide.time).split(',')[0]:'';
+        label.textContent='第 '+(index+1)+' 页'+time;
+        button.setAttribute('aria-label',label.textContent);image.alt='第 '+(index+1)+' 页 PPT';image.loading='lazy';image.decoding='async';image.draggable=false;image.src=slide.url;
+        button.append(image,label);fragment.append(button);
+      });
+      list.replaceChildren(fragment);slideThumbsSignature=signature;slideThumbsActive=-1;
+    }
+    if(slideThumbsActive===slideIndex)return;
+    list.children[slideThumbsActive]?.removeAttribute('aria-current');
+    const selected=list.children[slideIndex];selected?.setAttribute('aria-current','page');slideThumbsActive=slideIndex;
+    if(selected) {
+      const top=selected.offsetTop-list.offsetTop,bottom=top+selected.offsetHeight;
+      if(top<list.scrollTop)list.scrollTop=top;
+      else if(bottom>list.scrollTop+list.clientHeight)list.scrollTop=bottom-list.clientHeight;
+    }
+  }
+  function setSlideThumbsOpen(open) {
+    $('slide-thumbs').hidden=!open;$('slide-thumbs-toggle').setAttribute('aria-expanded',String(open));
+    if(open){slideThumbsActive=-1;updateSlideThumbs();}
+  }
+  $('slide-thumbs-toggle').onclick=()=>setSlideThumbsOpen($('slide-thumbs').hidden);
+  $('slide-thumbs-close').onclick=()=>{setSlideThumbsOpen(false);$('slide-thumbs-toggle').focus();};
+  $('slide-thumbs-list').onclick=event=>{
+    const button=event.target.closest('.slide-thumb');if(!button)return;
+    slideFollowing=false;slideIndex=Number(button.dataset.index);renderSlide();
+  };
+  $('slide-thumbs').addEventListener('keydown',event=>{
+    if(event.key==='Escape'){event.preventDefault();event.stopPropagation();$('slide-thumbs-close').click();}
+  });
   function renderSlide() {
     $('slide-image').src=slideUrls[slideIndex]; $('slide-page').textContent=`${slideIndex+1} / ${slideUrls.length}`;
     $('slide-prev').disabled=slideIndex===0; $('slide-next').disabled=slideIndex>=slideUrls.length-1;
-    $('slide-viewport').scrollTo(0,0); saveSlideState(); updateFollowButton();learning?.notifySlide();
+    $('slide-viewport').scrollTo(0,0); updateSlideThumbs(); updatePptSyncHint(); saveSlideState(); updateFollowButton();learning?.notifySlide();
   }
   function showSlides() {
     if (!coursePptReady()) { $('slides-status').textContent = '课程已切换，等待新课程 PPT 加载；暂不展示上一课图片。'; studyUI.feedback?.($('slides-status').textContent); return false; }
@@ -1960,6 +2117,7 @@ const ZY_SHARE_QR="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAATwAAAE8CAYAAAB
     slideEntries=images.map(img=>({url:img.currentSrc || img.src,time:slideTime(img.closest('.tab-ppt')?.querySelector('.time')?.textContent || '')})).filter(slide=>/^https?:/.test(slide.url));
     slideUrls=slideEntries.map(slide=>slide.url);
     const course=courseIdentity(location.hash);
+    loadPptOffset();
     const saved=GM_getValue('ppt-state:'+course,null);
     if(slideCourse!==course) {slideManuallyPlaced=false;slideIndex=0;slideFollowing=true;slideCourse=course;}
     if(saved) {
@@ -1971,17 +2129,19 @@ const ZY_SHARE_QR="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAATwAAAE8CAYAAAB
     studyUI.feedback?.('');
     if(!splitVideo) {
       splitVideo=mainVideo;layoutMode='split';$('show-slides').textContent='放大 PPT';
-      splitStyles=Object.fromEntries(['width','height','margin-left','position','left','top','right','bottom','z-index'].map(key=>[key,{value:splitVideo.style.getPropertyValue(key),priority:splitVideo.style.getPropertyPriority(key)}]));
+      splitStyles=Object.fromEntries(['width','height','margin-left','position','left','top','right','bottom','z-index','object-fit'].map(key=>[key,{value:splitVideo.style.getPropertyValue(key),priority:splitVideo.style.getPropertyPriority(key)}]));
       splitVideo.style.setProperty('width','50%','important');
       splitVideo.style.setProperty('margin-left','50%','important');
       restoreSlideGeometry();
     }
     slideIndex=Math.min(slideIndex,slideUrls.length-1); renderSlide(); $('slides').hidden=false; syncSlide();
-    $('slides-status').textContent=slideEntries.some(s=>Number.isFinite(s.time))?'PPT 按视频时间自动翻页，沿用字幕偏移。手动翻页可暂停跟随。':'本页未读取到 PPT 时间，保留手动翻页和页码记忆。'; return true;
+    $('slides-status').textContent=slideEntries.some(s=>Number.isFinite(s.time))?'PPT 按视频进度自动翻页，与字幕分别校准。左侧“选页”可调整 PPT 偏移；手动翻页暂停跟随。':'本页未读取到 PPT 时间，保留手动翻页和页码记忆。'; return true;
   }
   $('show-slides').onclick=()=>{
     if(layoutMode==='video') {showSlides();return;}
     if(layoutMode==='split') {
+      if(fullscreenSplitStyles) {for(const [key,saved] of Object.entries(fullscreenSplitStyles)) {if(saved.value) splitVideo.style.setProperty(key,saved.value,saved.priority);else splitVideo.style.removeProperty(key);}fullscreenSplitStyles=null;}
+      $('slides').removeAttribute('data-fullscreen-aligned');
       layoutMode='focus';videoManuallyPlaced=false;$('show-slides').textContent='收起 PPT';
       positionFocusVideo();
       GM_deleteValue('ppt-free-window-v2');restoreSlideGeometry();return;
@@ -1994,6 +2154,27 @@ const ZY_SHARE_QR="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAATwAAAE8CAYAAAB
     const left=Math.max(0,r.left),top=Math.max(0,r.top);
     return {left,top,width:Math.max(160,Math.min(innerWidth,r.right)-left),height:Math.max(100,Math.min(innerHeight,r.bottom)-top)};
   }
+  function fullscreenSplitBounds() {
+    const ratio=splitVideo.videoWidth/splitVideo.videoHeight || 16/9;
+    const width=innerWidth/2,height=Math.min(width/ratio,Math.max(100,innerHeight-120));
+    return {left:0,top:Math.max(0,(innerHeight-height-80)/2),width,height};
+  }
+  function positionSplitVideo() {
+    if(layoutMode!=='split' || !splitVideo) return;
+    const active=!!document.fullscreenElement && !videoManuallyPlaced;
+    const keys=['position','left','top','right','bottom','width','height','margin-left','z-index','object-fit'];
+    if(active) {
+      if(!fullscreenSplitStyles) fullscreenSplitStyles=Object.fromEntries(keys.map(key=>[key,{value:splitVideo.style.getPropertyValue(key),priority:splitVideo.style.getPropertyPriority(key)}]));
+      const r=fullscreenSplitBounds();
+      for(const [key,value] of Object.entries({position:'fixed',left:r.width+'px',top:r.top+'px',right:'auto',bottom:'auto',width:r.width+'px',height:r.height+'px','margin-left':'0','z-index':'20','object-fit':'contain'})) splitVideo.style.setProperty(key,value,'important');
+    } else if(fullscreenSplitStyles) {
+      if(!videoManuallyPlaced) for(const [key,saved] of Object.entries(fullscreenSplitStyles)) {
+        if(saved.value) splitVideo.style.setProperty(key,saved.value,saved.priority);else splitVideo.style.removeProperty(key);
+      }
+      fullscreenSplitStyles=null;
+    }
+    $('slides').toggleAttribute('data-fullscreen-aligned',active && !slideManuallyPlaced);
+  }
   function positionFocusVideo() {
     if(layoutMode!=='focus' || videoManuallyPlaced || !splitVideo) return;
     const r=focusBounds(),ratio=splitVideo.videoWidth/ splitVideo.videoHeight || 16/9;
@@ -2001,7 +2182,7 @@ const ZY_SHARE_QR="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAATwAAAE8CAYAAAB
     setVideoBox({left:r.left+r.width-width-16,top:Math.max(r.top,r.top+r.height-height-64),width,height});
   }
   function setVideoBox(r) {
-    if(splitControls===null)splitControls=splitVideo.controls;
+    if(splitControls===null){splitControls=localPlayback?.video===splitVideo?localPlayback.controls:splitVideo.controls;splitVideo.setAttribute('data-zy-original-controls',String(splitControls));}
     splitVideo.controls=true;splitVideo.setAttribute('data-zy-moved-video','true');
     for(const [k,v] of Object.entries({position:'fixed',left:r.left+'px',top:r.top+'px',right:'auto',bottom:'auto',width:r.width+'px',height:r.height+'px','margin-left':'0','z-index':'20'})) splitVideo.style.setProperty(k,v,'important');
   }
@@ -2009,7 +2190,7 @@ const ZY_SHARE_QR="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAATwAAAE8CAYAAAB
     if(splitVideo) return true;
     if(!mainVideo) {$('slides-status').textContent='请先打开课程视频';return false;}
     splitVideo=mainVideo;
-    splitStyles=Object.fromEntries(['width','height','margin-left','position','left','top','right','bottom','z-index'].map(key=>[key,{value:splitVideo.style.getPropertyValue(key),priority:splitVideo.style.getPropertyPriority(key)}]));
+    splitStyles=Object.fromEntries(['width','height','margin-left','position','left','top','right','bottom','z-index','object-fit'].map(key=>[key,{value:splitVideo.style.getPropertyValue(key),priority:splitVideo.style.getPropertyPriority(key)}]));
     return true;
   }
   function updateEditHandles() {
@@ -2073,10 +2254,11 @@ const ZY_SHARE_QR="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAATwAAAE8CAYAAAB
   function layoutSlides() {
     if(!splitVideo || $('slides').hidden) return;
     if(!splitVideo.isConnected) { closeSlides(); return; }
-    positionFocusVideo();
+    positionSplitVideo();positionFocusVideo();
     if(!slideDragging && !resizing) restoreSlideGeometry();
   }
   function slideBounds() {
+    if(layoutMode==='split' && document.fullscreenElement && !videoManuallyPlaced) return fullscreenSplitBounds();
     if(layoutMode==='focus') {const r=focusBounds();return {left:Math.max(0,r.left),top:Math.max(0,r.top),width:r.width*.7,height:Math.max(100,r.height-150)};}
     const r=splitVideo.getBoundingClientRect();
     const left=Math.max(0,r.left-r.width),top=Math.max(0,r.top);
@@ -2148,10 +2330,13 @@ const ZY_SHARE_QR="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAATwAAAE8CAYAAAB
     cacheAbort=controller;$('cache-download').textContent=label;return controller;
   }
   function finishCacheTask(controller,label='视频缓存') {
-    if(cacheAbort===controller){cacheAbort=null;$('cache-download').textContent=label;}controller.finish();
+    if(cacheAbort===controller){cacheAbort=null;$('cache-download').textContent=label;$('cache-progress-area').hidden=true;}controller.finish();
   }
   function cacheProgress(phase,bytes=0,total=0,detail='') {
-    const progress=$('cache-progress'),label=$('cache-stage'),now=performance.now();if($('cache-progress-area'))$('cache-progress-area').hidden=false;
+    const progress=$('cache-progress'),label=$('cache-stage'),now=performance.now();
+    const active=cacheAbort?.key===courseIdentity(location.hash) && !cacheAbort.signal.aborted && ['index','prepare','ready','download','full'].includes(phase);
+    $('cache-progress-area').hidden=!active;
+    if(!active){if(label)label.textContent='';return;}
     if(cacheMeter.phase!==phase || bytes<cacheMeter.bytes)cacheMeter={phase,bytes,at:now,rate:0};
     const elapsed=(now-cacheMeter.at)/1000;
     if(elapsed>=.5 && bytes>cacheMeter.bytes){const rate=(bytes-cacheMeter.bytes)/elapsed;cacheMeter.rate=cacheMeter.rate?cacheMeter.rate*.65+rate*.35:rate;cacheMeter.bytes=bytes;cacheMeter.at=now;}
@@ -2275,16 +2460,20 @@ const ZY_SHARE_QR="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAATwAAAE8CAYAAAB
   }
   function releaseLocalPlayback(local) {
     if(!local)return;local.cleanup?.();pendingResume.get(local.video)?.();
-    local.video.controls=local.controls;URL.revokeObjectURL(local.url);
+    local.video.controls=local.video.hasAttribute('data-zy-moved-video') || local.controls;URL.revokeObjectURL(local.url);
     $('cache-transport').hidden=true;
   }
   function restoreOnline() {
     const epoch=++cacheEpoch;
     if(!localPlayback) return;
     const local=localPlayback,{video,src,url}=local;localPlayback=null;
-    releaseLocalPlayback(local);
-    if(video.getAttribute('src')!==url)return;
+    const ownsSource=video.getAttribute('src')===url;
     const state={time:video.currentTime,rate:video.playbackRate,paused:video.paused};
+    // Snapshot before disposing MediaSource; disposal may reset the media clock.
+    if(ownsSource)video.pause();
+    releaseLocalPlayback(local);
+    updateCachePlaybackBadge();playerInteractions.update();
+    if(!ownsSource)return;
     resumeState(video,state,()=>cacheEpoch===epoch && !localPlayback);
     video.pause();if(src===null) video.removeAttribute('src');else video.setAttribute('src',src);
     video.load();
@@ -2294,7 +2483,7 @@ const ZY_SHARE_QR="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAATwAAAE8CAYAAAB
     if(batchRunning){$('cache-status').textContent='批量缓存正在运行，请先停止队列';return;}
     if(cacheAbort){cacheAbort.abort();return;}
     if(cacheDeleting.has(courseIdentity(location.hash))){$('cache-status').textContent='正在释放缓存文件，请稍候';return;}
-    const downloadVideoElement=mainVideo,key=courseIdentity(location.hash),src=localPlayback?.src || mainVideo?.currentSrc || mainVideo?.src || '';
+    const downloadVideoElement=mainVideo,key=courseIdentity(location.hash),src=localPlayback?.src || mainVideo?.src || mainVideo?.currentSrc || '';
     if($('cache-progressive').checked && /\.mp4(?:[?#]|$)/i.test(src)) {await startStreamDownload(key,src);return;}
     if(!/^https?:/i.test(src) || !/\.(mp4|webm)(?:[?#]|$)/i.test(src)) {
       $('cache-status').textContent='当前不是可直接缓存的 MP4/WebM 地址（可能是分片流或 blob 地址）。请查看缓存诊断，需进一步适配此来源。';return;
@@ -2334,7 +2523,7 @@ const ZY_SHARE_QR="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAATwAAAE8CAYAAAB
       const streamRecord=typeof ZYProgressive!=='undefined'?await cacheStore('readonly',s=>s.get('stream:'+key)):null;
       if(streamRecord && !await cacheStore('readonly',s=>s.get(key))){
         if(quiet && !streamRecord.complete)return;
-        const source=localPlayback?.src || video.currentSrc || video.src || '';
+        const source=localPlayback?.src || video.src || video.currentSrc || '';
         // Retire an obsolete session here so its own source restoration is part of
         // this intent; later epoch changes belong to newer user actions.
         let wantedEpoch=epoch;
@@ -2354,11 +2543,11 @@ const ZY_SHARE_QR="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAATwAAAE8CAYAAAB
       if(localPlayback) {releaseLocalPlayback(localPlayback);localPlayback=null;}
       cancelAlignment?.();
       const state={time:video.currentTime,rate:video.playbackRate,paused:video.paused};
-      const url=URL.createObjectURL(blob);localPlayback={video,src:video.getAttribute('src'),url,controls:video.controls};
+      const url=URL.createObjectURL(blob);localPlayback={video,src:video.getAttribute('src'),url,controls:video===splitVideo && splitControls!==null?splitControls:video.controls};
       resumeState(video,state,()=>localPlayback?.url===url);
       const onError=()=>{if(localPlayback?.url===url){restoreOnline();$('cache-status').textContent='缓存播放失败，已恢复在线来源。';}};
       video.addEventListener('error',onError,{once:true});localPlayback.cleanup=()=>video.removeEventListener('error',onError);video.controls=true;
-      video.src=url;video.load();$('cache-source').textContent='当前：本机缓存';$('cache-status').textContent='缓存完成，已接续当前进度使用本机视频。';
+      video.src=url;video.load();updateCachePlaybackBadge();playerInteractions.update();$('cache-source').textContent='当前：本机缓存';$('cache-status').textContent='缓存完成，已接续当前进度使用本机视频。';
     }catch(error){$('cache-status').textContent=error.message;}
   };
   $('cache-play').onclick=()=>{preferOnline=false;playCached();};
@@ -2404,10 +2593,20 @@ const ZY_SHARE_QR="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAATwAAAE8CAYAAAB
   $('cache-forward').onclick=()=>seekCached((localPlayback?.video.currentTime || 0)+10);
   $('cache-seek').oninput=()=>seekCached(Number($('cache-seek').value));
 
+  function updateCachePlaybackBadge() {
+    const button=$('cache-details-toggle');if(!button)return;
+    const active=!!localPlayback && localPlayback.video.isConnected && localPlayback.video.getAttribute('src')===localPlayback.url;
+    $('cache-play').hidden=active;$('cache-online').hidden=!active;$('stream-play').hidden=true;
+    if(!cacheAbort || cacheAbort.key!==courseIdentity(location.hash))$('cache-progress-area').hidden=true;
+    button.dataset.cacheActive=String(active);
+    button.textContent=active?'🟢 使用缓存中':$('cache-quick-details').hidden?'缓存详情':'收起详情';
+    button.title=active?'正在使用本机缓存播放，点击查看详情或切回在线来源':'';
+  }
   function updateCacheTransport() {
+    updateCachePlaybackBadge();
     const local=localPlayback;
     if(local && (!local.video.isConnected || local.video.getAttribute('src')!==local.url)) {
-      releaseLocalPlayback(local);localPlayback=null;$('cache-source').textContent='当前：在线视频';return;
+      releaseLocalPlayback(local);localPlayback=null;updateCachePlaybackBadge();$('cache-source').textContent='当前：在线视频';return;
     }
     $('cache-transport').hidden=true;
     if(!local)return;
@@ -2456,7 +2655,7 @@ const ZY_SHARE_QR="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAATwAAAE8CAYAAAB
               const range=state.ranges.find(r=>r[0]<=streamTarget+.1 && r[1]>streamTarget);
               const end=Math.min(state.duration,streamTarget+Number($('stream-minutes').value));
               const ready=state.duration>0 && !!range && range[1]>=end-.05;
-              $('stream-play').hidden=!ready;
+              $('stream-play').hidden=true;
               $('stream-play').textContent='✓ '+clockTime(streamTarget)+'–'+clockTime(end)+' 已就绪 · 开始观看';
               const label=state.ranges.map(r=>clockTime(r[0])+'–'+clockTime(r[1])).join('，') || '正在读取音视频时间索引';
               $('stream-status').textContent='已保存范围：'+label+(ready?' ✓':'')+(range?'；按当前倍速可看约 '+Math.floor((range[1]-streamTarget)/Math.max(.25,mainVideo?.playbackRate||1)/60)+' 分钟':'');
@@ -2502,18 +2701,19 @@ const ZY_SHARE_QR="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAATwAAAE8CAYAAAB
     const session=streamSession,video=mainVideo;if(!session || !video || streamStarting)return;
     if(localPlayback?.stream && localPlayback.video===video){video.currentTime=time;if(!paused)video.play().catch(()=>{});return;}
     if(localPlayback)restoreOnline();cancelAlignment?.();
-    const saved={video,src:video.getAttribute('src'),controls:video.controls,rate:video.playbackRate};
+    const saved={video,src:video.getAttribute('src'),controls:video===splitVideo && splitControls!==null?splitControls:video.controls,rate:video.playbackRate};
+    pendingResume.get(video)?.();
     const epoch=++cacheEpoch;streamStarting=true;
     try{
       const playback=await session.cache.play(video,{time,paused,rate:saved.rate,
-        onAttach:playback=>{if(streamSession!==session || epoch!==cacheEpoch)throw new Error('播放已取消');localPlayback={...saved,url:playback.url,stream:true,cleanup:playback.dispose};},
+        onAttach:playback=>{if(streamSession!==session || epoch!==cacheEpoch)throw new Error('播放已取消');localPlayback={...saved,url:playback.url,stream:true,cleanup:playback.dispose};video.controls=true;},
         onStatus:message=>{if(streamSession===session)$('cache-source').textContent=message;},
         onError:error=>{if(streamSession===session)$('cache-status').textContent=error.message;}
       });
       if(streamSession!==session || mainVideo!==video || epoch!==cacheEpoch){playback.dispose();return;}
-      localPlayback={...saved,url:playback.url,stream:true,cleanup:playback.dispose};video.controls=true;
+      localPlayback={...saved,url:playback.url,stream:true,cleanup:playback.dispose};video.controls=true;updateCachePlaybackBadge();playerInteractions.update();
       $('cache-source').textContent='当前：磁盘分块播放（后续内容继续缓存）';
-    }catch(error){if(epoch===cacheEpoch){if(localPlayback?.stream)restoreOnline();else{video.src=saved.src||'';video.load();}$('cache-status').textContent='分段播放失败：'+error.message;}}
+    }catch(error){if(epoch===cacheEpoch){if(localPlayback?.stream)restoreOnline();else{if(saved.src===null)video.removeAttribute('src');else video.setAttribute('src',saved.src);video.load();}$('cache-status').textContent='分段播放失败：'+error.message;}}
     finally{streamStarting=false;}
   }
   $('stream-play').onclick=()=>{preferOnline=false;playStream();};
@@ -2550,7 +2750,7 @@ const ZY_SHARE_QR="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAATwAAAE8CAYAAAB
   async function renderBatch() {
     const entries=(await cacheStore('readonly',s=>s.getAll(IDBKeyRange.bound('seen:','seen:\uffff')))).filter(e=>e?.key && e?.source && e?.visited).sort((a,b)=>b.visited-a.visited);
     const list=$('batch-list');list.replaceChildren();
-    if(!entries.length){const p=document.createElement('p');p.textContent='暂无记录。先打开一节回放，或点击「加入当前课」。';list.append(p);}
+    if(!entries.length){const p=document.createElement('p');p.textContent='暂无记录。打开并加载课程回放后会自动记录；缓存需要在此浏览器中进行。';list.append(p);}
     for(const entry of entries) {
       const label=document.createElement('label'),check=document.createElement('input'),text=document.createElement('span');
       check.type='checkbox';check.checked=batchSelection.has(entry.key);check.disabled=batchRunning;
@@ -2574,7 +2774,7 @@ const ZY_SHARE_QR="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAATwAAAE8CAYAAAB
       suppressedCourses.add(key);batchSelection.delete(key);
       await cacheStore('readwrite',s=>s.delete('seen:'+key));
     }
-    await renderBatch();$('batch-status').textContent=erase?'视频缓存已删除，磁盘空间已释放，课程记录保留。':'已移出清单，完整缓存保留；可手动加入当前课。';
+    await renderBatch();$('batch-status').textContent=erase?'视频缓存已删除，磁盘空间已释放，课程记录保留。':'已移出清单，完整缓存保留。';
   }
 
   async function batchState(key,state) {
@@ -2582,11 +2782,6 @@ const ZY_SHARE_QR="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAATwAAAE8CAYAAAB
     if(entry)await cacheStore('readwrite',s=>s.put({...entry,state},id));
     await renderBatch();
   }
-  $('batch-add').onclick=async()=>{
-    try {const entry=currentCacheCourse();if(!entry)throw new Error('请先打开具体课次并加载可缓存的 MP4/WebM 视频');
-      suppressedCourses.delete(entry.key);await rememberCacheCourse(entry);batchSelection.add(entry.key);await renderBatch();$('batch-status').textContent='已加入当前课，可继续打开其他课次；最后回到此处勾选缓存。';
-    }catch(error){$('batch-status').textContent=error.message;}
-  };
   $('batch-refresh').onclick=()=>renderBatch().catch(error=>{$('batch-status').textContent=error.message;});
   $('cache-batch').addEventListener('toggle',()=>{if($('cache-batch').open)$('batch-refresh').click();});
   $('batch-stop').onclick=()=>{batchController?.abort();$('batch-status').textContent='正在停止队列，已完成的缓存会保留…';};
@@ -2765,8 +2960,8 @@ const ZY_SHARE_QR="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAATwAAAE8CAYAAAB
   function setSyncStatus(text) { if ($('sync-status')) $('sync-status').textContent = text; }
   function updateOffset(save = true) {
     const offset = value('offset', 0, -3600, 3600);
-    $('offset-hint').textContent = offset === 0 ? '字幕 / PPT：同步偏移 0 秒' :
-      `字幕 / PPT ${offset > 0 ? '延后' : '提前'} ${Math.abs(offset).toFixed(2).replace(/\.?0+$/, '')} 秒`;
+    $('offset-hint').textContent = offset === 0 ? '字幕：同步偏移 0 秒（PPT 单独校准）' :
+      `字幕 ${offset > 0 ? '延后' : '提前'} ${Math.abs(offset).toFixed(2).replace(/\.?0+$/, '')} 秒`;
     if (save) GM_setValue(offsetKey(), offset);
   }
   function manualOffset(reset = false) {
@@ -2785,7 +2980,7 @@ const ZY_SHARE_QR="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAATwAAAE8CAYAAAB
     const saved = GM_getValue(syncKey(), {}); syncAnchors = syncAnchorsValid(saved?.anchors); syncManual = !!saved?.manual;refreshSyncBadge();
     syncSchedule.stop(); if ($('auto-sync')) $('auto-sync').checked = false;
     updateOffset(false);
-    setSyncStatus(syncManual ? '手动模式 · 定时校准保持关闭，需主动重新开启。' : '定时校准默认关闭；已保存的同步点仍用于字幕和 PPT。');
+    setSyncStatus(syncManual ? '手动模式 · 定时校准保持关闭，需主动重新开启。' : '定时校准默认关闭；已保存的同步点仍用于字幕；PPT 单独校准。');
   }
   loadOffset();
   $('offset').addEventListener('input', () => manualOffset());
@@ -2873,7 +3068,7 @@ const ZY_SHARE_QR="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAATwAAAE8CAYAAAB
       cacheAbort?.abort();restoreOnline();dropStream();autoChecked='';preferOnline=false;cancelAlignment?.(); closeSlides(); slideUrls=[];
       translator.reset(); stopTranslation('课程已切换，请按需重新开启翻译');
       route = courseIdentity(location.hash);learning?.switchCourse(); collected.clear(); cues = []; dirty = true;
-      releaseVideo(); loadOffset(); loadTranslationPreferences();
+      releaseVideo(); loadOffset(); loadPptOffset(); loadTranslationPreferences();
       $('status').textContent = '课程已切换，等待读取字幕…';
     }
     const currentPane = document.querySelector('#pane-voice');

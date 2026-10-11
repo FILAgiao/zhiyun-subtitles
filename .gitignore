@@ -27,3 +27,7 @@ backend/.test-account.json
 # Generated direct-server installer and update metadata
 backend/install.user.js
 backend/install.meta.js
+
+dist/
+
+backend/.store-review-account.json

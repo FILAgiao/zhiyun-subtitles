@@ -16,6 +16,7 @@ try{
   },10);return{abort(){clearTimeout(timer);o.onabort?.();}};};
   window.videoTime=12;const v=document.querySelector('video');Object.defineProperties(v,{currentTime:{get:()=>videoTime,set(t){window.videoTime=t;}},duration:{get:()=>3600},paused:{get:()=>!window.playing},readyState:{get:()=>1}});
  });
+ await page.evaluate(()=>GM_setValue('gateway-guide-no-remind-v2',true));
  await page.addScriptTag({path:'zhiyun-subtitles.user.js'});const ui=page.locator('#zy-subtitle-host');
  await ui.locator('#transcript-open').waitFor();assert.equal(await ui.locator('#transcript-open').getAttribute('data-login-required'),'true');assert.equal(await ui.locator('#ai-open').getAttribute('aria-disabled'),'true');await ui.locator('#transcript-open').evaluate(n=>n.click());assert.equal(await ui.locator('#settings-dialog').isVisible(),true);assert.equal(await ui.locator('#ai-questions').isVisible(),false);await ui.locator('#settings-close').click();
 
@@ -39,7 +40,7 @@ try{
  assert.equal(await ui.locator('#gateway-quota .quota-ring').count(),3);
  assert.equal(await ui.locator('.quota-row[data-locked=true]').count(),2);
  assert.match(await ui.locator('#gateway-quota').textContent(),/无限量/);
- await ui.locator('#gateway-recharge').click();assert.match(await ui.locator('#gateway-recharge-note').textContent(),/抖音联系「侃侃你的」/);await ui.locator('#gateway-recharge-close').click();assert.ok(await ui.locator('#gateway-recharge-note').isHidden());
+ await ui.locator('#gateway-recharge').click();assert.match(await ui.locator('#gateway-recharge-note').textContent(),/抖音、小红书都是「侃侃你的」/);await ui.locator('#gateway-recharge-close').click();assert.ok(await ui.locator('#gateway-recharge-note').isHidden());
  assert.equal(await ui.locator('#gateway-url').count(),0);assert.match(await ui.locator('#account-guide').textContent(),/游客/);assert.equal(await ui.locator('#ai-open').getAttribute('data-login-required'),'true');await ui.locator('#gateway-email').fill('a@test');await ui.locator('#gateway-password').fill('long-password');
  await ui.locator('#gateway-login').click();await page.waitForFunction(()=>saved['gateway-account-v1']?.token==='user-session');assert.equal(await ui.locator('#gateway-password').inputValue(),'');assert.equal(await ui.locator('#ai-open').getAttribute('data-login-required'),'false');assert.equal(await ui.locator('#gateway-login-form').isVisible(),false);
  await ui.getByRole('button',{name:'查看额度',exact:true}).click();await page.waitForFunction(()=>document.getElementById('zy-subtitle-host').shadowRoot.getElementById('gateway-status').textContent.includes('Token 30'));

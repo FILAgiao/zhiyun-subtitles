@@ -1,4 +1,4 @@
-import argparse, copy, base64, getpass, ipaddress, threading, hashlib, hmac, io, json, os, secrets, sqlite3, time, urllib.request, urllib.error, uuid, wave
+import argparse, re, copy, base64, getpass, ipaddress, threading, hashlib, hmac, io, json, os, secrets, sqlite3, time, urllib.request, urllib.error, uuid, wave
 from pathlib import Path
 from contextlib import contextmanager
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -60,6 +60,7 @@ def official_stream(url,headers,body):
         raise Fault(502,'官方接口请求未完成，请稍后重试') from None
 
 class Gateway(AdminMixin):
+    hash_password=staticmethod(password_hash)
     def __init__(self,path,upstream=official,upstream_stream=official_stream):
         self.path,self.upstream,self.upstream_stream=str(path),upstream,upstream_stream
         self.learning_jobs={};self.learning_lock=threading.Lock();self.learning_slots=threading.BoundedSemaphore(8)
@@ -73,14 +74,16 @@ class Gateway(AdminMixin):
         try:
             with db: yield db
         finally: db.close()
-    def add_user(self,email,password,app,requests=1000,audio=3600,username=None,admin=False):
+    def add_user(self,email,password,app,requests=1000,audio=3600,username=None,admin=False,permissions=None):
         if not 12<=len(password)<=256: raise ValueError('密码为 12–256 个字符')
         salt=secrets.token_hex(16)
         with self.db() as db:
             row=db.execute('SELECT id,username,is_admin FROM users WHERE email=?',(email.strip().lower(),)).fetchone()
             user=row['id'] if row else db.execute('INSERT INTO users(email,salt,password) VALUES(?,?,?)',(email.strip().lower(),salt,password_hash(password,salt))).lastrowid
-            db.execute('INSERT INTO grants VALUES(?,?,?,?) ON CONFLICT(user,app) DO UPDATE SET requests=excluded.requests,audio=excluded.audio',(user,app,requests,audio))
+            db.execute('INSERT INTO grants(user,app,requests,audio) VALUES(?,?,?,?) ON CONFLICT(user,app) DO UPDATE SET requests=excluded.requests,audio=excluded.audio',(user,app,requests,audio))
             db.execute('UPDATE users SET username=?,is_admin=? WHERE id=?',(username or (row['username'] if row else email.strip().lower()),1 if admin else row['is_admin'] if row else 0,user))
+            if permissions is not None:
+                db.execute('UPDATE grants SET enabled=?,learning=?,translation=?,speech=?,expires=? WHERE user=? AND app=?',(*(permissions[k] for k in ('enabled','learning','translation','speech','expires')),user,app))
         return user
     def throttle(self,key,limit,window=60):
         now=int(time.time())
@@ -96,7 +99,7 @@ class Gateway(AdminMixin):
         with self.db() as db:
             row=db.execute('SELECT users.id,users.email,users.username,users.is_admin FROM sessions JOIN users ON users.id=sessions.user WHERE hash=? AND expires>?',(digest(token),int(time.time()))).fetchone()
             if not row: raise Fault(401,'请登录或重新登录')
-            if not db.execute('SELECT 1 FROM grants WHERE user=? AND app=?',(row['id'],app)).fetchone(): raise Fault(403,'账号未开通此 APP')
+            self.check_grant(db,row['id'],app)
             result=dict(row)
         self.touch_activity(digest(token))
         return result
@@ -105,11 +108,11 @@ class Gateway(AdminMixin):
             totals=dict(db.execute("SELECT COUNT(*) AS requests,COALESCE(SUM(total_tokens),0) AS total_tokens,COALESCE(SUM(input_tokens),0) AS input_tokens,COALESCE(SUM(output_tokens),0) AS output_tokens,COALESCE(SUM(web_search),0) AS web_search,COALESCE(SUM(seconds),0) AS audio_seconds,COALESCE(SUM(CASE WHEN state IN ('reserved','unknown') THEN 1 ELSE 0 END),0) AS uncertain FROM calls WHERE user=? AND app=? AND month=?",(user,app,month())).fetchone())
             limits=dict(db.execute('SELECT requests AS request_limit,audio AS audio_limit FROM grants WHERE user=? AND app=?',(user,app)).fetchone())
         return {'month':month(),**totals,**limits}
-    def reserve(self,user,app,kind,seconds=0):
+    def reserve(self,user,app,kind,seconds=0,feature=None):
         call=str(uuid.uuid4())
         with self.db() as db:
             db.execute('BEGIN IMMEDIATE')
-            limits=db.execute('SELECT * FROM grants WHERE user=? AND app=?',(user,app)).fetchone()
+            limits=self.check_grant(db,user,app,feature)
             used=db.execute('SELECT COUNT(*),COALESCE(SUM(seconds),0) FROM calls WHERE user=? AND app=? AND month=?',(user,app,month())).fetchone()
             if used[0]>=limits['requests'] or used[1]+seconds>limits['audio']: raise Fault(429,'本月额度已用完')
             active=db.execute("SELECT COUNT(*) FROM calls WHERE user=? AND state='reserved' AND created>?",(user,int(time.time())-180)).fetchone()[0]
@@ -132,7 +135,7 @@ class Gateway(AdminMixin):
                 row=db.execute('SELECT * FROM users WHERE email=? OR username=?',(email.strip().lower(),email.strip())).fetchone()
                 valid=hmac.compare_digest(password_hash(password,row['salt'] if row else '00'*16),row['password'] if row else '00'*32)
                 if not row or not valid: raise Fault(401,'邮箱或密码错误')
-                if not db.execute('SELECT 1 FROM grants WHERE user=? AND app=?',(row['id'],app)).fetchone(): raise Fault(403,'账号未开通此 APP')
+                self.check_grant(db,row['id'],app)
                 token=secrets.token_urlsafe(32)
                 db.execute('DELETE FROM sessions WHERE expires<?',(int(time.time()),))
                 db.execute('INSERT INTO sessions VALUES(?,?,?)',(digest(token),row['id'],int(time.time())+604800))
@@ -145,7 +148,7 @@ class Gateway(AdminMixin):
             self.throttle('guest:'+str(guest),90)
             if path.endswith('/submit'): self.throttle('guest-submit:'+str(guest),6,900)
             with self.db() as db:
-                db.execute('INSERT OR IGNORE INTO grants VALUES(?,?,?,?)',(guest,app,int(os.environ.get('GUEST_SPEECH_REQUESTS','120')),int(os.environ.get('GUEST_SPEECH_SECONDS','1440'))))
+                db.execute('INSERT OR IGNORE INTO grants(user,app,requests,audio) VALUES(?,?,?,?)',(guest,app,int(os.environ.get('GUEST_SPEECH_REQUESTS','120')),int(os.environ.get('GUEST_SPEECH_SECONDS','1440'))))
             return self.speech(guest,app,path,headers,body)
         user=self.auth(token,app)
         if method=='POST' and path in ('/v1/learning/jobs/poll','/v1/learning/jobs/cancel'):
@@ -155,7 +158,7 @@ class Gateway(AdminMixin):
             with self.db() as db: db.execute('DELETE FROM sessions WHERE hash=?',(digest(token),))
             self.close_activity(digest(token))
             return 200,{}, {'ok':True}
-        if method=='GET' and path=='/v1/me': return 200,{}, {**user,'app':app,'usage':self.usage(user['id'],app),'capabilities':{'web_search':os.environ.get('ALLOW_WEB_SEARCH')=='1'}}
+        if method=='GET' and path=='/v1/me': return 200,{}, {**user,'app':app,'usage':self.usage(user['id'],app),'capabilities':{'web_search':os.environ.get('ALLOW_WEB_SEARCH')=='1'},'permissions':self.permissions(user['id'],app)}
         if method=='POST' and path=='/v1/activity': return 200,{}, {'ok':True,'server_time':int(time.time())}
         if method=='GET' and path=='/v1/history': return 200,{},self.history(user['id'])
         if path.startswith('/v1/admin/'): return self.admin_request(method,path,user,body,month())
@@ -265,9 +268,9 @@ class Gateway(AdminMixin):
                     if content.get('type')=='output_text':
                         content['text']=notice+content.get('text','');result['warnings']=[notice.strip()];return result
             return result
-        call=self.reserve(user,app,'ark')
         feature='translation' if body['model']=='doubao-seed-translation-250915' else 'learning'
         if any(isinstance(i.get('content'),str) and '字幕译者' in i['content'] for i in inputs): feature='translation_context'
+        call=self.reserve(user,app,'ark',feature='translation' if body['model']=='doubao-seed-translation-250915' else 'learning')
         self.record_call_meta(call,body['model'],feature,images)
         try:
             if streaming:
@@ -309,7 +312,7 @@ class Gateway(AdminMixin):
             except (KeyError,TypeError,ValueError,wave.Error,EOFError): raise Fault(400,'只接受 30 秒以内的 16kHz 单声道 PCM WAV') from None
             with self.db() as db:
                 if db.execute('SELECT 1 FROM jobs WHERE id=?',(task,)).fetchone(): raise Fault(409,'任务已提交，请查询原任务')
-            call=self.reserve(user,app,'speech',seconds)
+            call=self.reserve(user,app,'speech',seconds,feature='speech')
             self.record_call_meta(call,'volc.seedasr.auc','alignment',0)
             with self.db() as db:
                 try: db.execute('INSERT INTO jobs(id,user,app,call,created) VALUES(?,?,?,?,?)',(task,user,app,call,int(time.time())))
@@ -342,17 +345,17 @@ def make_server(gateway,host='127.0.0.1',port=8080):
             try:
                 self.connection.settimeout(15)
                 if origin:
-                    if origin not in os.environ.get('ALLOWED_ORIGINS','').split(',')+[os.environ.get('PUBLIC_ORIGIN','')]: raise Fault(403,'来源未开通')
+                    if not (os.environ.get('ALLOW_EXTENSION_ORIGINS')=='1' and re.fullmatch(r'chrome-extension://[a-p]{32}',origin)) and origin not in os.environ.get('ALLOWED_ORIGINS','').split(',')+[os.environ.get('PUBLIC_ORIGIN','')]: raise Fault(403,'来源未开通')
                     extra={'Access-Control-Allow-Origin':origin,'Vary':'Origin','Access-Control-Expose-Headers':'X-Api-Status-Code'}
                 self.stream_headers=extra
                 if self.command=='OPTIONS': status,more,result=204,{'Access-Control-Allow-Methods':'GET,POST,OPTIONS','Access-Control-Allow-Headers':'Authorization,Content-Type,X-App-Id,X-Api-Request-Id,X-Client-Type'},None
                 else:
-                    if self.command=='GET' and self.path in ('/admin','/admin/','/admin.js','/admin.css','/install.user.js','/install.meta.js'):
+                    if self.command=='GET' and self.path in ('/admin','/admin/','/admin.js','/admin.css','/install.user.js','/install.meta.js','/privacy','/privacy.html','/extension.zip'):
                         if self.path=='/admin/':
                             status,more,result=302,{'Location':'../admin'},None
                         else:
-                            name='admin.html' if self.path=='/admin' else self.path[1:]
-                            mime='text/html; charset=utf-8' if name.endswith('.html') else 'text/javascript; charset=utf-8' if name.endswith('.js') else 'text/css; charset=utf-8'
+                            name='admin.html' if self.path=='/admin' else 'privacy.html' if self.path=='/privacy' else self.path[1:]
+                            mime='text/html; charset=utf-8' if name.endswith('.html') else 'text/javascript; charset=utf-8' if name.endswith('.js') else 'application/zip' if name.endswith('.zip') else 'text/css; charset=utf-8'
                             result=(Path(__file__).parent/name).read_bytes();status,more=200,{'Content-Type':mime,'Content-Security-Policy':"default-src 'self'; script-src 'self'; style-src 'self'; connect-src 'self'; img-src 'self' data:; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",'X-Frame-Options':'DENY'}
                     else:
                         status,more,result=self.api_request(gateway)

@@ -120,6 +120,23 @@ class Tests(unittest.TestCase):
             with self.assertRaises(urllib.error.HTTPError) as ctx: urllib.request.urlopen(req)
             self.assertNotIn('secret',ctx.exception.read().decode()); ctx.exception.close()
         finally: server.shutdown(); server.server_close(); thread.join()
+    def test_extension_origin_requires_opt_in_and_valid_id(self):
+        server=make_server(self.gateway,port=0);thread=threading.Thread(target=server.serve_forever,daemon=True);thread.start()
+        base='http://127.0.0.1:'+str(server.server_port)
+        origin='chrome-extension://'+'a'*32
+        def invoke(value,auth=True):
+            return urllib.request.urlopen(urllib.request.Request(base+'/v1/me',headers={**(self.headers if auth else {'X-App-Id':'zhiyun-subtitles'}),'Origin':value}))
+        try:
+            with patch.dict(os.environ,{'ALLOW_EXTENSION_ORIGINS':'0'}):
+                with self.assertRaises(urllib.error.HTTPError) as ctx:invoke(origin)
+                self.assertEqual(ctx.exception.code,403);ctx.exception.close()
+            with patch.dict(os.environ,{'ALLOW_EXTENSION_ORIGINS':'1'}):
+                with invoke(origin) as r:self.assertEqual(r.headers['Access-Control-Allow-Origin'],origin)
+                for value,auth,code in [('chrome-extension://'+'z'*32,True,403),(origin,False,401)]:
+                    with self.assertRaises(urllib.error.HTTPError) as ctx:invoke(value,auth)
+                    self.assertEqual(ctx.exception.code,code);ctx.exception.close()
+        finally:server.shutdown();server.server_close();thread.join()
+
     def test_admin_role_creation_quota_and_private_history(self):
         self.fails(403,lambda:self.call('/v1/admin/overview',method='GET'))
         self.gateway.add_user('owner@example.test','long-admin-password','zhiyun-subtitles',admin=True,username='owner')

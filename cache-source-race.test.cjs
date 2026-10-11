@@ -8,7 +8,7 @@ const {chromium}=require(process.env.PLAYWRIGHT_MODULE||'playwright');
   await page.route('https://vod.cmc.zju.edu.cn/**',route=>route.abort());
   await page.goto('https://interactivemeta.cmc.zju.edu.cn/#/replay?course_id=race&sub_id=1');
   await page.evaluate(async()=>{
-   window.GM_getValue=(key,fallback)=>key==='cache-auto'?false:fallback;window.GM_setValue=()=>{};window.GM_deleteValue=()=>{};window.GM_registerMenuCommand=()=>{};window.GM_xmlhttpRequest=()=>({abort(){}});
+   window.GM_getValue=(key,fallback)=>key==='gateway-guide-no-remind-v2'?true:key==='cache-auto'?false:fallback;window.GM_setValue=()=>{};window.GM_deleteValue=()=>{};window.GM_registerMenuCommand=()=>{};window.GM_xmlhttpRequest=()=>({abort(){}});
    const video=document.querySelector('video');Object.defineProperty(video,'readyState',{get:()=>1});video.load=()=>{};
    await new Promise((resolve,reject)=>{const request=indexedDB.open('zhiyun-video-cache',2);request.onupgradeneeded=()=>{for(const name of ['videos','videos-v2','cache-meta'])request.result.createObjectStore(name);};request.onsuccess=()=>{const db=request.result,tx=db.transaction('videos-v2','readwrite');tx.objectStore('videos-v2').put({kind:'stream-v1',complete:true,parts:{}},'stream:'+JSON.stringify(['race','1',null]));tx.oncomplete=()=>{db.close();resolve();};tx.onerror=reject;};});
   });
@@ -19,8 +19,8 @@ const {chromium}=require(process.env.PLAYWRIGHT_MODULE||'playwright');
     async play(video,{onAttach}){window.plays++;const playback={url:'blob:https://interactivemeta.cmc.zju.edu.cn/cached-'+plays,dispose(){}};onAttach(playback);video.setAttribute('src',playback.url);return playback;},close(){window.closes++;},pause(){}
    };}};
   });
-  const ui=page.locator('#zy-subtitle-host');
-  const click=async id=>{await ui.locator('#settings-close').evaluate(e=>e.click());if(await ui.locator('#cache-quick-details').isHidden())await ui.locator('#cache-details-toggle').click();await ui.locator('#'+id).click();};
+  const ui=page.locator('#zy-subtitle-host');if(await ui.locator('#guide-skip').isVisible())await ui.locator('#guide-skip').click();
+  const click=async id=>{await ui.locator('#settings-close').evaluate(e=>e.click());if(await ui.locator('#cache-quick-details').isHidden())await ui.locator('#cache-details-toggle').click();if(id==='cache-online'&&await ui.locator('#'+id).isHidden())await ui.locator('#'+id).evaluate(e=>e.click());else if(id==='cache-online'&&await ui.locator('#'+id).isHidden())await ui.locator('#'+id).evaluate(e=>e.click());else await ui.locator('#'+id).click();};
   const release=()=>page.evaluate(()=>openGates.shift()());
   await page.waitForTimeout(200);await click('cache-play');await page.waitForFunction(()=>opens===1);
   await click('cache-online');await release();await page.waitForTimeout(150);

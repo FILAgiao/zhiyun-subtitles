@@ -9,7 +9,7 @@ test('production build pins gateway domain and cannot use vendor key while logge
  const fs=require('node:fs'),path=require('node:path'),os=require('node:os'),vm=require('node:vm'),{execFileSync}=require('node:child_process');
  const dir=fs.mkdtempSync(path.join(os.tmpdir(),'gateway-build-'));
  try{
-  for(const f of ['build-userscript.cjs','zhiyun-subtitles.user.js','progressive-cache.bundle.js','cache-storage.js','study-ui.js','player-interactions.js','math-render.bundle.js','ai-learning.js','gateway-client.js','web-assistant.js'])fs.copyFileSync(f,path.join(dir,f));
+  for(const f of ['build-userscript.cjs','zhiyun-subtitles.user.js','progressive-cache.bundle.js','cache-storage.js','study-ui.js','warm-theme.js','appearance-theme.js','card-render.bundle.js','player-interactions.js','math-render.bundle.js','ai-learning.js','gateway-client.js','web-assistant.js'])fs.copyFileSync(f,path.join(dir,f));
   fs.mkdirSync(path.join(dir,'assets'));for(const asset of ['study-eagle.png','qiushi-eagle.svg','share-qr.png'])fs.copyFileSync('assets/'+asset,path.join(dir,'assets',asset));
   execFileSync(process.execPath,['build-userscript.cjs'],{cwd:dir,env:{...process.env,GATEWAY_ORIGIN:'https://api.production.test'},stdio:'pipe'});
   const script=fs.readFileSync(path.join(dir,'zhiyun-subtitles.user.js'),'utf8');assert.match(script,/\/\/ @connect\s+api\.production\.test/);assert.ok(!script.includes('const DEFAULT_ORIGIN=\'\';'));

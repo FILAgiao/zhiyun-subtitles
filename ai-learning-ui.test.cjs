@@ -55,13 +55,13 @@ const {chromium}=require(process.env.PLAYWRIGHT_MODULE||'playwright');
 
 
  // A real browser download yields a complete single PNG without a network request.
- assert.equal(await host.locator('#ai-save-card').isEnabled(),false);for(const checkbox of await host.locator('.ai-card-select input').all())await checkbox.check();assert.equal(await host.locator('#ai-save-card').isEnabled(),true);assert.equal(await host.locator('#ai-card-row').isVisible(),true);
+ assert.equal(await host.locator('#ai-save-card').isEnabled(),true);assert.equal(await host.locator('#ai-save-card').isEnabled(),true);assert.equal(await host.locator('#ai-card-row').isVisible(),true);
  const requestsBeforeCard=await page.evaluate(()=>calls.length);
  const downloadEvent=page.waitForEvent('download');await host.locator('#ai-save-card').click();
  const download=await downloadEvent;assert.match(download.suggestedFilename(),/^浙大上课爽-知识卡-.*\.png$/);assert.equal(await download.failure(),null);
  await download.saveAs('knowledge-card-preview.png');
  const png=fs.readFileSync('knowledge-card-preview.png');assert.equal(png.subarray(1,4).toString(),'PNG');assert.equal(png.readUInt32BE(16),1080);assert.ok(png.readUInt32BE(20)>=1040);
- assert.equal(await page.evaluate(()=>calls.length),requestsBeforeCard);assert.match(await host.locator('#ai-status').textContent(),/已保存选中的内容/);
+ assert.equal(await page.evaluate(()=>calls.length),requestsBeforeCard);assert.match(await host.locator('#ai-status').textContent(),/已保存全部对话/);
 
  await page.screenshot({path:'ai-learning-preview.png'});
  const beforeMissingSlide=await page.evaluate(()=>calls.length);await page.evaluate(()=>{assistant.resetCourse();assistant.close();slide=null;});await host.locator('#ai-open').click();assert.match(await host.locator('#ai-status').textContent(),/请先打开.*PPT/);assert.equal(await page.evaluate(()=>calls.length),beforeMissingSlide,'missing PPT does not trigger a paid model request');

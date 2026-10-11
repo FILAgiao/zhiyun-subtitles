@@ -16,13 +16,13 @@ const {chromium}=require(process.env.PLAYWRIGHT_MODULE||'playwright');
   });
   await page.goto('https://interactivemeta.cmc.zju.edu.cn/#/replay?course_id=deletion&sub_id=1');
   await page.evaluate(()=>{
-   const values={};window.GM_getValue=(key,fallback)=>values[key]??fallback;window.GM_setValue=(key,value)=>{values[key]=value;};window.GM_deleteValue=key=>{delete values[key];};window.GM_registerMenuCommand=()=>{};
+   const values={'gateway-guide-no-remind-v2':true};window.GM_getValue=(key,fallback)=>values[key]??fallback;window.GM_setValue=(key,value)=>{values[key]=value;};window.GM_deleteValue=key=>{delete values[key];};window.GM_registerMenuCommand=()=>{};
    window.GM_xmlhttpRequest=options=>{const controller=new AbortController();fetch('https://interactivemeta.cmc.zju.edu.cn/part',{headers:options.headers,signal:controller.signal}).then(async response=>options.onload({status:response.status,response:await response.blob(),responseHeaders:'Content-Range: '+response.headers.get('content-range')+'\nETag: '+response.headers.get('etag')})).catch(error=>error.name==='AbortError'?options.onabort?.():options.onerror?.());return{abort(){controller.abort();}};};
   });
   await page.addScriptTag({path:'progressive-cache.bundle.js'});await page.addScriptTag({path:'zhiyun-subtitles.user.js'});
-  const ui=page.locator('#zy-subtitle-host');
+  const ui=page.locator('#zy-subtitle-host');if(await ui.locator('#guide-skip').isVisible())await ui.locator('#guide-skip').click();
   const click=async id=>{
-   if(['cache-download','cache-play','cache-online','stream-play','cache-clear','batch-add','cache-details summary'].includes(id)){await ui.locator('#settings-close').evaluate(e=>e.click());if(id!=='cache-download'&&await ui.locator('#cache-quick-details').isHidden())await ui.locator('#cache-details-toggle').click();if(id==='cache-clear'&&!await ui.locator('#cache-details').evaluate(e=>e.open))await ui.locator('#cache-details > summary').click();await ui.locator('#'+id).click();return;}
+   if(['cache-download','cache-play','cache-online','stream-play','cache-clear','batch-add','cache-details summary'].includes(id)){await ui.locator('#settings-close').evaluate(e=>e.click());if(id!=='cache-download'&&await ui.locator('#cache-quick-details').isHidden())await ui.locator('#cache-details-toggle').click();if(id==='cache-clear'&&!await ui.locator('#cache-details').evaluate(e=>e.open))await ui.locator('#cache-details > summary').click();if(id==='cache-online'&&await ui.locator('#'+id).isHidden())await ui.locator('#'+id).evaluate(e=>e.click());else await ui.locator('#'+id).click();return;}
    if(id==='cache-auto'){await ui.locator('#settings-open').click();await ui.locator('#settings-tab-storage').click();await ui.locator('#'+id).click();await ui.locator('#settings-close').click();return;}
    if(await ui.locator('#settings-dialog').isHidden())await ui.locator('#settings-open').click();await ui.locator('#settings-tab-storage').click();
    const group=id.startsWith('batch-')?'cache-batch':['cache-play','cache-online','cache-clear'].includes(id)?'cache-details':null;
@@ -31,27 +31,27 @@ const {chromium}=require(process.env.PLAYWRIGHT_MODULE||'playwright');
   };
   const text=id=>page.evaluate(id=>document.querySelector('#zy-subtitle-host').shadowRoot.getElementById(id).textContent,id);
   const ready=()=>page.waitForFunction(()=>document.querySelector('#zy-subtitle-host').shadowRoot.getElementById('cache-stage').textContent.includes('3 / 3'),{},{timeout:20000});
-  const clear=async()=>{await click('cache-clear');await page.waitForFunction(()=>document.querySelector('#zy-subtitle-host').shadowRoot.getElementById('cache-status').textContent.includes('已清除'),{},{timeout:15000});await emptyDisk();};
+  const clear=async()=>{await click('cache-clear');await page.waitForFunction(()=>document.querySelector('#zy-subtitle-host').shadowRoot.getElementById('cache-status').textContent.includes('已清除'),{},{timeout:15000});await emptyDisk();assert.equal(await ui.locator('#cache-progress-area').isVisible(),false);assert.equal(await text('cache-stage'),'');};
   const emptyDisk=async()=>{
    const state=await page.evaluate(async()=>{const dir=await(await navigator.storage.getDirectory()).getDirectoryHandle('zhiyun-videos');let files=0;for await(const f of dir.values())if(f.name.endsWith('.part')||f.name.endsWith('.video'))files++;const record=await new Promise(resolve=>{const request=indexedDB.open('zhiyun-video-cache',2);request.onsuccess=()=>{const db=request.result,tx=db.transaction('videos-v2'),read=tx.objectStore('videos-v2').get('stream:'+JSON.stringify(['deletion','1',null]));read.onsuccess=()=>resolve(read.result);tx.oncomplete=()=>db.close();};});return{files,exists:!!record,locks:(await navigator.locks.query()).held.map(lock=>lock.name)};});
    assert.equal(state.files,0,'delete must reclaim real OPFS blocks');assert.equal(state.exists,false,'delete removes manifest');assert.ok(!state.locks.some(name=>name.startsWith('zhiyun-cache:')),'delete must release its own stream lock');
   };
-  await page.waitForTimeout(250);await click('cache-download');
+  await page.waitForTimeout(250);assert.equal(await ui.locator('#batch-add').count(),0);await click('cache-download');
   await page.waitForFunction(()=>document.querySelector('#zy-subtitle-host').shadowRoot.getElementById('cache-stage').textContent.includes('2 / 3'),{},{timeout:20000});
-  assert.match(await text('cache-stage'),/10 分钟/);
+  assert.match(await text('cache-stage'),/10 分钟/);assert.equal(await ui.locator('#cache-progress-area').evaluate(e=>e.hidden),false);
   const progress=await page.evaluate(()=>document.querySelector('#zy-subtitle-host').shadowRoot.getElementById('cache-progress').value);assert.ok(progress>=0&&progress<100,'prepare shows actual incomplete target progress');
   holdPrefix=false;releasePrefix();await ready();
   assert.ok(await page.evaluate(()=>document.querySelector('video').src.startsWith('blob:')),'ready prefix automatically becomes the playback source');
   assert.equal(await page.evaluate(()=>document.querySelector('video').paused),true,'automatic switch preserves paused state');
-  await clear();await new Promise(resolve=>setTimeout(resolve,100));await emptyDisk();
+  await page.waitForTimeout(1500);await clear();await new Promise(resolve=>setTimeout(resolve,100));await emptyDisk();
   // Auto disabled remains online. The list action can delete while a background task still owns the cache.
   await click('cache-auto');await click('cache-download');await ready();
   assert.ok(await page.evaluate(()=>document.querySelector('video').src.startsWith('https:')),'disabled auto setting is respected');
-  await click('batch-add');await page.waitForFunction(()=>[...document.querySelector('#zy-subtitle-host').shadowRoot.querySelectorAll('#batch-list button')].some(button=>button.textContent==='删除缓存'));await ui.locator('#settings-open').click();await ui.locator('#settings-tab-storage').click();await ui.locator('#batch-list').getByRole('button',{name:'删除缓存',exact:true}).click();await ui.locator('#settings-close').click();
+  await page.evaluate(async()=>{await new Promise((resolve,reject)=>{const request=indexedDB.open('zhiyun-video-cache',2);request.onsuccess=()=>{const db=request.result,tx=db.transaction('videos-v2','readwrite'),key=JSON.stringify(['deletion','1',null]);tx.objectStore('videos-v2').put({key,source:'https://vod.cmc.zju.edu.cn/lecture.mp4',title:'缓存回归课堂',visited:Date.now()},'seen:'+key);tx.oncomplete=()=>{db.close();resolve();};tx.onerror=reject;};});});await click('batch-refresh');await page.waitForFunction(()=>[...document.querySelector('#zy-subtitle-host').shadowRoot.querySelectorAll('#batch-list button')].some(button=>button.textContent==='删除缓存'));await ui.locator('#settings-open').click();await ui.locator('#settings-tab-storage').click();await ui.locator('#batch-list').getByRole('button',{name:'删除缓存',exact:true}).click();await ui.locator('#settings-close').click();
   await page.waitForFunction(()=>document.querySelector('#zy-subtitle-host').shadowRoot.getElementById('batch-status').textContent.includes('磁盘空间已释放'),{},{timeout:15000});await emptyDisk();
   // An explicit online choice during preparation wins over automatic source switching.
   await click('cache-auto');holdPrefix=true;prefix=prefixGate();await click('cache-download');
-  await page.waitForFunction(()=>document.querySelector('#zy-subtitle-host').shadowRoot.getElementById('cache-stage').textContent.includes('2 / 3'),{},{timeout:20000});await click('cache-online');holdPrefix=false;releasePrefix();await ready();
+  await page.waitForFunction(()=>document.querySelector('#zy-subtitle-host').shadowRoot.getElementById('cache-stage').textContent.includes('2 / 3'),{},{timeout:20000});await click('cache-auto');holdPrefix=false;releasePrefix();await ready();
   assert.ok(await page.evaluate(()=>document.querySelector('video').src.startsWith('https:')),'explicit online selection is respected');await clear();
   // Full-file caches and abandoned pending imports use the same one-click cleanup path.
   await page.evaluate(async()=>{
