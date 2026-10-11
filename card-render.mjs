@@ -11,3 +11,12 @@ export async function render(doc,build){
   return {canvas,height};
  }finally{frame.remove();}
 }
+
+// Read the visible DOM locally; no continuous browser display-capture session.
+export async function captureViewport(doc,{overlays=[]}={}){
+ const win=doc.defaultView;
+ const canvas=await html2canvas(doc.documentElement,{logging:false,scale:Math.min(2,win.devicePixelRatio||1),width:win.innerWidth,height:win.innerHeight,x:win.scrollX,y:win.scrollY,windowWidth:win.innerWidth,windowHeight:win.innerHeight,scrollX:win.scrollX,scrollY:win.scrollY,useCORS:true,allowTaint:false,imageTimeout:3000,ignoreElements:el=>el.id==='zy-subtitle-host'});
+ const ctx=canvas.getContext('2d'),scale=canvas.width/win.innerWidth;
+ for(const image of overlays){const r=image.getBoundingClientRect();if(!r.width||!r.height||!image.naturalWidth)continue;const parent=image.parentElement.getBoundingClientRect();ctx.save();ctx.beginPath();ctx.rect(parent.left*scale,parent.top*scale,parent.width*scale,parent.height*scale);ctx.clip();let x=r.left,y=r.top,w=r.width,h=r.height;if(win.getComputedStyle(image).objectFit==='contain'){const ratio=Math.min(w/image.naturalWidth,h/image.naturalHeight);const nw=image.naturalWidth*ratio,nh=image.naturalHeight*ratio;x+=(w-nw)/2;y+=(h-nh)/2;w=nw;h=nh;}ctx.drawImage(image,x*scale,y*scale,w*scale,h*scale);ctx.restore();}
+ return canvas;
+}

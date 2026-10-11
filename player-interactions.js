@@ -8,41 +8,6 @@ function mount({shadow,host,getVideo,getLocal,getCues,getCourse,getClock,getSeek
  video[data-zy-enhanced]::-webkit-media-controls-fullscreen-button{display:none!important}
  [data-zy-local-player] .vjs-control-bar,[data-zy-local-player] .prism-controlbar,[data-zy-local-player] .dplayer-controller,[data-zy-local-player] .xgplayer-controls,[data-zy-local-player] xg-controls,[data-zy-local-player] .jw-controlbar,[data-zy-local-player] .video-controls,[data-zy-local-player] .player-controls,[data-zy-local-player] .control-bar,[data-zy-local-player] .vjs-big-play-button,[data-zy-local-player] .prism-big-play-btn,[data-zy-local-player] .dplayer-controller-mask{display:none!important;pointer-events:none!important}
  `;document.head.append(style);
- const captionStyle=document.createElement('style');captionStyle.textContent=`
- #caption,#caption *{pointer-events:none!important}
- #caption{transition:opacity .12s ease}
- :host([data-zy-player-interacting]) #caption{opacity:0!important}
- @media(prefers-reduced-motion:reduce){#caption{transition:none}}
- `;shadow.append(captionStyle);
- let pointer=null;
- const controlSelector='.vjs-control-bar,.vjs-progress-control,.prism-controlbar,.prism-progress,.dplayer-controller,.dplayer-bar-wrap,.xgplayer-controls,xg-controls,xg-progress,.jw-controlbar,.jw-slider-time,.video-controls,.player-controls,.control-bar,.progress-bar,[role="slider"],input[type="range"]';
- function controlRegions(video){
-  const r=video.getBoundingClientRect(),container=playerRoot(video),regions=[];
-  for(const el of container?.querySelectorAll(controlSelector)||[]) {
-   const b=el.getBoundingClientRect(),style=getComputedStyle(el);
-   if(b.width>0 && b.height>0 && style.display!=='none' && style.visibility!=='hidden' && Number(style.opacity)!==0)regions.push(b);
-  }
-  // Native video controls live inside the browser's shadow tree.
-  if(video.controls)regions.push({left:r.left,right:r.right,top:r.bottom-72,bottom:r.bottom});
-  return {r,container,regions};
- }
- function protectPlayerControls(){
-  const video=getVideo(),caption=$('caption');
-  if(!video || !caption || caption.hidden){host.removeAttribute('data-zy-player-interacting');return;}
-  const {r,container,regions}=controlRegions(video),b=caption.getBoundingClientRect();
-  const overlaps=regions.filter(c=>b.left<c.right && b.right>c.left && b.top<c.bottom+12 && b.bottom>c.top-12);
-  if(overlaps.length){const bottom=Math.min(...overlaps.map(c=>c.top))-12;caption.style.top=Math.max(b.height+8,bottom)+'px';}
-  const rootRect=container?.getBoundingClientRect()||r;
-  const near=pointer && (regions.some(c=>pointer.x>=c.left-8 && pointer.x<=c.right+8 && pointer.y>=c.top-20 && pointer.y<=c.bottom+8) ||
-   pointer.x>=rootRect.left && pointer.x<=rootRect.right && pointer.y>=rootRect.bottom-90 && pointer.y<=rootRect.bottom ||
-   video.controls && pointer.x>=r.left && pointer.x<=r.right && pointer.y>=r.bottom-(parseFloat(getComputedStyle(video).paddingBottom)||0)-90 && pointer.y<=r.bottom);
-  host.toggleAttribute('data-zy-player-interacting',!!near);
- }
- document.addEventListener('pointermove',event=>{pointer={x:event.clientX,y:event.clientY};protectPlayerControls();},true);
- document.addEventListener('pointerup',event=>{if(event.pointerType!=='mouse'){pointer=null;host.removeAttribute('data-zy-player-interacting');}},true);
- document.addEventListener('pointercancel',()=>{pointer=null;host.removeAttribute('data-zy-player-interacting');},true);
- document.addEventListener('pointerleave',()=>{pointer=null;host.removeAttribute('data-zy-player-interacting');});
- window.addEventListener('blur',()=>{pointer=null;host.removeAttribute('data-zy-player-interacting');});
  let current=null,controlRoot=null,method=null,ownMethod=null,nativeFsRecovery=false,signature='',following=true,lastCue=null;
  const nativeOwners=new Map();
  function playerRoot(video){return video?.parentElement?.closest('.video-js,.prism-player,.dplayer,.xgplayer,.jwplayer,#player,.video-player,.player-container')||video?.parentElement;}
@@ -104,7 +69,7 @@ function mount({shadow,host,getVideo,getLocal,getCues,getCourse,getClock,getSeek
   for(const [owned,original] of nativeOwners){if(owned!==nativeVideo){if(!owned.hasAttribute('data-zy-moved-video'))owned.controls=original;nativeOwners.delete(owned);}}
   if(nativeVideo){if(!nativeOwners.has(nativeVideo))nativeOwners.set(nativeVideo,local?.video===nativeVideo?local.controls??nativeVideo.controls:nativeVideo.getAttribute('data-zy-original-controls')==='true');nativeVideo.controls=true;}
   $('cache-transport').hidden=true;
-  protectPlayerControls();updateTranscript();
+  updateTranscript();
  }
  return{update,toggleFullscreen,enterFullscreen};
 }

@@ -235,7 +235,7 @@
     const {shadow,request,getApiKey=()=>'',getCapabilities=()=>({webSearch:true}),getCourseId=()=>'',onOpenAccount=()=>onOpenSettings('connection'),prepareSlide=()=>{},getSlide=()=>null,getContext=()=>'',getCourseTitle=()=>'',getCaptureTarget=()=>null,getValue=(_,d)=>d,setValue=()=>{},onRequireLogin=()=>{},onOpenSettings=()=>{}}=options;
     if(!shadow || typeof request!=='function')throw new Error('AI 助手缺少 shadow 或 request');
     const doc=shadow.ownerDocument,win=doc.defaultView;
-    let settings=settingsOf(getValue(STORAGE_KEY,DEFAULTS)),history=[],lastAnswer=null,recentSlides=[],lastSlideKey='',pendingImage=null,controller=null,destroyed=false,cleanupCapture=null,requestSerial=0,slideContextEnabled=settings.followSlides,captureStream=null,captureVideo=null,capturePersistent=false;
+    let settings=settingsOf(getValue(STORAGE_KEY,DEFAULTS)),history=[],lastAnswer=null,recentSlides=[],lastSlideKey='',pendingImage=null,controller=null,destroyed=false,cleanupCapture=null,requestSerial=0,slideContextEnabled=settings.followSlides,captureStream=null,captureVideo=null;
     const cleanups=[];if(globalThis.ZYMath)cleanups.push(globalThis.ZYMath.install(shadow));
     function listen(el,event,fn,opts){el?.addEventListener(event,fn,opts);cleanups.push(()=>el?.removeEventListener(event,fn,opts));}
     function make(tag,props={}){const el=doc.createElement(tag);for(const [k,v] of Object.entries(props)){if(k==='text')el.textContent=v;else if(k==='class')el.className=v;else el.setAttribute(k,v);}return el;}
@@ -257,7 +257,14 @@
     listen(dragHead,'pointerdown',e=>{if(e.button!==0||e.target.closest('button,select'))return;const box=panel.getBoundingClientRect();drag={x:e.clientX,y:e.clientY,left:box.left,top:box.top};dragHead.setPointerCapture(e.pointerId);e.preventDefault();});
     listen(dragHead,'pointermove',e=>{if(!drag)return;panel.style.left=Math.max(8,Math.min(drag.left+e.clientX-drag.x,win.innerWidth-panel.offsetWidth-8))+'px';panel.style.top=Math.max(8,Math.min(drag.top+e.clientY-drag.y,win.innerHeight-panel.offsetHeight-8))+'px';panel.style.right='auto';});
     listen(dragHead,'pointerup',()=>{drag=null;});listen(dragHead,'pointercancel',()=>{drag=null;});
-    listen(win,'resize',()=>{const box=panel.getBoundingClientRect();panel.style.left=Math.max(8,Math.min(box.left,win.innerWidth-panel.offsetWidth-8))+'px';panel.style.top=Math.max(8,Math.min(box.top,win.innerHeight-panel.offsetHeight-8))+'px';panel.style.right='auto';});
+    function clampFloating(element){
+      if(element.hidden)return;
+      const box=element.getBoundingClientRect();
+      if(element.style.left)element.style.left=Math.max(8,Math.min(box.left,win.innerWidth-box.width-8))+'px';
+      if(element.style.top || box.bottom>win.innerHeight-8)element.style.top=Math.max(8,Math.min(box.top,win.innerHeight-box.height-8))+'px';
+    }
+    listen(win,'resize',()=>{clampFloating(panel);clampFloating(questions);});
+    listen(doc,'fullscreenchange',()=>{clampFloating(panel);clampFloating(questions);});
     const modeInfo=id=>MODES[id]||settings.prompts.find(p=>p.id===id);
     function refreshModes(){$('ai-mode').replaceChildren();for(const id of settings.modeOrder)$('ai-mode').append(make('option',{value:id,text:modeInfo(id).label}));$('ai-mode').value=settings.mode;}
     refreshModes();
@@ -266,7 +273,7 @@
     function message(role,text,image){const item=make('div',{class:'ai-message','data-role':role});item.append(make('small',{text:role==='user'?'我':'AI 讲解'}),doc.createTextNode(text));if(role==='assistant'){const content=make('div');renderMarkdown(doc,content,text);item.lastChild.remove();item.append(content);}if(image){const picture=make('img',{src:image,alt:'本次问题附图'});picture.tabIndex=0;picture.setAttribute('aria-label','放大本次问题附图');const preview=()=>{const layer=make('div',{id:'ai-image-viewer',role:'dialog','aria-label':'问题附图原图'}),close=make('button',{text:'关闭',type:'button'}),full=make('img',{src:image,alt:'完整问题附图'});layer.append(close,full);const dismiss=()=>{layer.remove();doc.removeEventListener('keydown',key);picture.focus();};const key=e=>{if(e.key==='Escape'){e.stopPropagation();dismiss();}};close.onclick=dismiss;layer.onclick=e=>{if(e.target===layer)dismiss();};doc.addEventListener('keydown',key);cleanups.push(dismiss);shadow.append(layer);close.focus();};picture.onclick=preview;picture.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();preview();}};item.append(picture);}const select=make('label',{class:'ai-card-select'}),check=make('input',{type:'checkbox','aria-label':'选择此'+(role==='user'?'问题':'回答')+'保存知识卡'});select.append(check,doc.createTextNode('选此条'));item.prepend(select);check.onchange=()=>toggleCardPair(item,check.checked);item._cardTurn={role,text,image};const sentenceButton=make('button',{type:'button',class:'ai-sentence-toggle',text:'逐句选择','aria-expanded':'false'});sentenceButton.onclick=()=>showCardSentences(item,sentenceButton);select.after(sentenceButton);$('ai-log').append(item);$('ai-log').scrollTop=$('ai-log').scrollHeight;return item;}
     function greeting(){}
     function save(){setValue(STORAGE_KEY,{...settings});$('ai-mode').value=settings.mode;badge();}
-    function open(){questions.hidden=true;panel.hidden=false;resume.hidden=true;badge();$('ai-question').focus();persist();}
+    function open(){questions.hidden=true;panel.hidden=false;resume.hidden=true;clampFloating(panel);badge();$('ai-question').focus();persist();}
     function collapse(){panel.hidden=true;resume.hidden=false;persist();}
     let sessionCourse=String(getCourseId()),conversationId='',conversationSource='文字提问',conversationCourse='',conversationOrigin='';
     const INDEX_KEY='ai-question-index-v1';
@@ -277,7 +284,7 @@
     const workspaceObserver=new win.MutationObserver(syncWorkspace);workspaceObserver.observe(panel,{attributes:true,attributeFilter:['hidden']});workspaceObserver.observe(questions,{attributes:true,attributeFilter:['hidden']});cleanups.push(()=>{workspaceObserver.disconnect();shadow.host?.removeAttribute('data-ai-workspace');});syncWorkspace();
     function renderQuestions(){const list=questions.querySelector('#ai-questions-list');list.replaceChildren();const query=questions.querySelector('input').value.trim().toLowerCase();const items=records().filter(r=>[r.title,r.questions,r.course,r.source].join(' ').toLowerCase().includes(query));if(!items.length)list.append(make('p',{text:'还没有问题。截图、选中文字或直接提问后会保存在这里。'}));for(const record of items){const row=make('article');const button=make('button',{type:'button',class:'ai-question-record'});button.append(make('strong',{text:record.title.slice(0,140)}),make('small',{text:record.course+' · '+record.source+' · '+(record.questionCount||1)+' 个问题 · '+new Date(record.updated).toLocaleString()}));button.onclick=()=>loadConversation(record.id);row.append(button);const remove=make('button',{text:'删除',type:'button','aria-label':'删除问题：'+record.title});remove.onclick=()=>{setValue(INDEX_KEY,records().filter(r=>r.id!==record.id));setValue(conversationKey(record.id),null);if(conversationId===record.id)conversationId='';renderQuestions();};row.append(remove);list.append(row);}}
     function loadConversation(id){selectedExcerpt='';const saved=getValue(conversationKey(id),null);if(!saved)return;persist();clear();conversationId=id;conversationSource=saved.source||'文字提问';conversationCourse=saved.course||'';conversationOrigin=saved.origin||'';history=saved.history||[];$('ai-log').replaceChildren();for(const turn of history)message(turn.role,turn.text,turn.image);lastAnswer=saved.lastAnswer||null;$('ai-save-card').disabled=!lastAnswer;$('ai-card-row').hidden=!lastAnswer;questions.hidden=true;open();updateCardSelection();status('已打开历史问题，继续提问会接着这段对话。');}
-    function showQuestions(){if(!String(getApiKey()||'').trim()){onRequireLogin();return;}persist();panel.hidden=true;resume.hidden=true;renderQuestions();questions.hidden=false;questions.querySelector('input').focus();}
+    function showQuestions(){if(!String(getApiKey()||'').trim()){onRequireLogin();return;}persist();panel.hidden=true;resume.hidden=true;renderQuestions();questions.hidden=false;clampFloating(questions);questions.querySelector('input').focus();}
     listen($('ai-questions-back'),'click',showQuestions);
     listen(questions.querySelector('#ai-questions-close'),'click',()=>{questions.hidden=true;});listen(questions.querySelector('input'),'input',renderQuestions);listen(shadow.getElementById('transcript-open'),'click',()=>{if(questions.hidden)showQuestions();else questions.hidden=true;});
     function archive(){if(!history.some(t=>t.role==='user'))return;if(!conversationId)conversationId=win.crypto.randomUUID?.()||Date.now().toString(36)+'-'+Math.random().toString(36).slice(2);if(!conversationCourse)conversationCourse=String(getCourseTitle()||doc.title||'网页提问');if(!conversationOrigin)conversationOrigin=String(getCourseId());const saved={history,lastAnswer,source:conversationSource,course:conversationCourse,origin:conversationOrigin};setValue(conversationKey(conversationId),saved);const index=records().filter(r=>r.id!==conversationId);index.unshift({id:conversationId,title:history.find(t=>t.role==='user').text,course:conversationCourse,origin:conversationOrigin,source:conversationSource,questions:history.filter(t=>t.role==='user').map(t=>t.text).join('\n'),questionCount:history.filter(t=>t.role==='user').length,updated:Date.now()});setValue(INDEX_KEY,index);if(!questions.hidden)renderQuestions();}
@@ -350,7 +357,7 @@
     function clear(){resetCardChoices();selectedExcerpt='';persist();stop();conversationId='';conversationSource='文字提问';conversationCourse='';conversationOrigin='';lastAnswer=null;$('ai-save-card').disabled=true;$('ai-card-row').hidden=true;cleanupCapture?.();panel.querySelector('#ai-question').value='';history=[];recentSlides=[];lastSlideKey='';slideContextEnabled=false;$('ai-log').replaceChildren();attach(null);greeting();badge();status('已开始新对话，旧截图与 PPT 上下文已清空。');persist();}
     function captureActive(){return !!captureVideo&&captureStream?.getVideoTracks().some(t=>t.readyState==='live');}
     const captureNotice=make('div',{id:'ai-capture-session',role:'status'});captureNotice.hidden=true;captureNotice.innerHTML='<span>连续截图已开启 · 仅在本页本地取图</span><button type="button" id="ai-capture-session-stop">停止共享</button>';shadow.append(captureNotice);
-    function stopCaptureSession(){const stream=captureStream;captureStream=null;const video=captureVideo;captureVideo=null;capturePersistent=false;video?.pause();if(video)video.srcObject=null;stream?.getTracks().forEach(t=>t.stop());captureNotice.hidden=true;}
+    function stopCaptureSession(){const stream=captureStream;captureStream=null;const video=captureVideo;captureVideo=null;video?.pause();if(video)video.srcObject=null;stream?.getTracks().forEach(t=>t.stop());captureNotice.hidden=true;}
     async function captureSource(signal){
       if(captureActive())return captureVideo;
       stopCaptureSession();
@@ -363,7 +370,29 @@
       track?.addEventListener('ended',()=>{stopCaptureSession();cleanupCapture?.();status('截图共享已停止，再次截图需要重新选择当前标签页。');},{once:true});
       await captureVideo.play();
       if(!captureVideo.videoWidth)await new Promise((resolve,reject)=>{const timer=setTimeout(()=>reject(Error('截图画面未就绪，请重试。')),10000);const done=()=>{clearTimeout(timer);signal?.removeEventListener('abort',abort);resolve();};const abort=()=>{clearTimeout(timer);reject(abortError());};captureVideo.onloadeddata=done;signal?.addEventListener('abort',abort,{once:true});});
-      if(signal?.aborted)throw abortError();capturePersistent=true;return captureVideo;
+      if(signal?.aborted)throw abortError();return captureVideo;
+    }
+    function localCaptureAvailable(){
+      if(!globalThis.ZYCardRender?.captureViewport || doc.fullscreenElement)return false;
+      if([...doc.querySelectorAll('embed,object,iframe:not([aria-hidden="true"])')].some(el=>{const r=el.getBoundingClientRect();return r.width>0&&r.height>0&&r.right>0&&r.bottom>0&&r.left<win.innerWidth&&r.top<win.innerHeight;}))return false;
+      try{
+        const sample=make('canvas');sample.width=sample.height=1;
+        for(const element of [...doc.querySelectorAll('video,canvas'),...shadow.querySelectorAll('#slide-image')]){
+          const r=element.getBoundingClientRect();if(!r.width||!r.height||r.right<=0||r.bottom<=0||r.left>=win.innerWidth||r.top>=win.innerHeight)continue;
+          if(element.tagName==='VIDEO' && element.readyState<2)return false;
+          sample.getContext('2d').drawImage(element,0,0,1,1);sample.toDataURL();
+        }
+        return true;
+      }catch{return false;}
+    }
+    async function captureSnapshot(signal){
+      if(localCaptureAvailable()){
+        const overlays=[...shadow.querySelectorAll('#slide-image')].filter(el=>!el.closest('[hidden]'));
+        const canvas=await globalThis.ZYCardRender.captureViewport(doc,{overlays});
+        if(signal?.aborted)throw abortError();return imageData('',canvas,signal);
+      }
+      const source=await captureSource(signal);
+      try{return await imageData('',source,signal);}finally{stopCaptureSession();}
     }
     async function startCapture(event){
       if(controller)stop();if(!String(getApiKey()||'').trim()){open();status('请先登录账号，解锁截图问答。');onRequireLogin();return;}cleanupCapture?.();
@@ -373,12 +402,12 @@
       doc.addEventListener('mousemove',trackMove,true);doc.addEventListener('mouseup',trackUp,true);
       const own=new AbortController();controller=own;const serial=++requestSerial;setBusy(true);
       try{
-        const video=await captureSource(own.signal);const src=await imageData('',video,own.signal);
+        const src=await captureSnapshot(own.signal);stopCaptureSession();
         if(serial!==requestSerial||destroyed)return;showCrop(src,gesture);
       }catch(e){if(serial===requestSerial&&e.name!=='NotAllowedError'&&e.name!=='AbortError'){open();status(e.message||'截图失败，请重试。');}}
-      finally{doc.removeEventListener('mousemove',trackMove,true);doc.removeEventListener('mouseup',trackUp,true);if(!capturePersistent)stopCaptureSession();if(controller===own){controller=null;setBusy(false);}}
+      finally{doc.removeEventListener('mousemove',trackMove,true);doc.removeEventListener('mouseup',trackUp,true);stopCaptureSession();if(controller===own){controller=null;setBusy(false);}}
     }
-    function showCrop(src,gesture=null){
+    function showCrop(src,gesture=null,centered=false){
       const serial=requestSerial,viewport={w:win.innerWidth,h:win.innerHeight};
       const layer=make('section',{id:'ai-crop',role:'dialog','aria-label':'截图与批注'});
       layer.innerHTML='<div id="ai-crop-stage"><img id="ai-crop-image" alt="当前标签页本地截图"><div id="ai-crop-selection"></div></div><div class="ai-crop-head"><strong>拖框选择 · Esc 取消</strong><div id="ai-crop-tools" hidden><button id="ai-crop-pen" aria-pressed="true">画笔</button><button id="ai-crop-circle" aria-pressed="false">圈选</button><button id="ai-crop-undo" disabled>撤销</button><button id="ai-crop-reset">清除批注</button></div><div class="ai-crop-actions"><button id="ai-crop-use" disabled>添加到对话</button><button id="ai-crop-send" disabled>提问</button><button id="ai-crop-cancel">取消</button></div></div>';
@@ -392,16 +421,25 @@
       const ready=()=>{
         if(canvas||start||!rect||rect.w<8||rect.h<8||!img.complete||!img.naturalWidth)return;
         const sx=img.naturalWidth/viewport.w,sy=img.naturalHeight/viewport.h;
-        canvas=make('canvas',{id:'ai-crop-preview','aria-label':'截图批注画布'});canvas.width=Math.max(1,Math.round(rect.w*sx));canvas.height=Math.max(1,Math.round(rect.h*sy));
-        base=make('canvas');base.width=canvas.width;base.height=canvas.height;base.getContext('2d').drawImage(img,rect.x*sx,rect.y*sy,rect.w*sx,rect.h*sy,0,0,canvas.width,canvas.height);
-        stage.replaceChildren(canvas);layer.classList.add('ai-crop-preview');layer.querySelector('strong').textContent='截图预览 · 可圈画批注';layer.querySelector('#ai-crop-tools').hidden=false;use.disabled=submit.disabled=false;redraw();
+        canvas=make('canvas',{id:'ai-crop-preview','aria-label':'截图批注画布'});canvas.width=Math.max(1,Math.round(centered?img.naturalWidth:rect.w*sx));canvas.height=Math.max(1,Math.round(centered?img.naturalHeight:rect.h*sy));
+        base=make('canvas');base.width=canvas.width;base.height=canvas.height;base.getContext('2d').drawImage(img,centered?0:rect.x*sx,centered?0:rect.y*sy,centered?img.naturalWidth:rect.w*sx,centered?img.naturalHeight:rect.h*sy,0,0,canvas.width,canvas.height);
+        stage.append(canvas);selection.style.display='none';layer.classList.add('ai-crop-preview');
+        Object.assign(canvas.style,{position:'absolute',left:rect.x+'px',top:rect.y+'px',width:rect.w+'px',height:rect.h+'px'});
+        layer.querySelector('strong').textContent='截图预览 · 可圈画批注';layer.querySelector('#ai-crop-tools').hidden=false;use.disabled=submit.disabled=false;
+        const toolbar=layer.querySelector('.ai-crop-head');
+        toolbar.style.width=Math.min(480,viewport.w-16)+'px';
+        const toolbarHeight=toolbar.getBoundingClientRect().height;
+        Object.assign(toolbar.style,{left:Math.max(8,Math.min(rect.x,viewport.w-toolbar.offsetWidth-8))+'px',top:(rect.y+rect.h+toolbarHeight+16<=viewport.h?rect.y+rect.h+8:Math.max(8,rect.y-toolbarHeight-8))+'px'});redraw();
         const canvasPoint=e=>{const r=canvas.getBoundingClientRect();return{x:(e.clientX-r.left)*canvas.width/r.width,y:(e.clientY-r.top)*canvas.height/r.height};};
         canvas.onpointerdown=e=>{if(e.button!==0)return;e.preventDefault();active={tool,points:[canvasPoint(e)]};canvas.setPointerCapture(e.pointerId);redraw();};
         canvas.onpointermove=e=>{if(active){active.points.push(canvasPoint(e));redraw();}};
         canvas.onpointerup=e=>{if(!active)return;active.points.push(canvasPoint(e));strokes.push(active);active=null;redraw();};
         canvas.onpointercancel=()=>{active=null;redraw();};
       };
-      img.onload=ready;img.src=src;
+      img.onload=()=>{
+        if(centered){const ratio=Math.min(1,(viewport.w-48)/img.naturalWidth,Math.max(80,viewport.h-200)/img.naturalHeight);rect={w:img.naturalWidth*ratio,h:img.naturalHeight*ratio};rect.x=(viewport.w-rect.w)/2;rect.y=(viewport.h-rect.h)/2;img.style.visibility='hidden';layer.style.background='#071519b3';}
+        ready();
+      };img.src=src;
       stage.onpointerdown=e=>{if(canvas||e.button!==0&&e.button!==1)return;e.preventDefault();if(!start)start=point(e);rect=null;stage.setPointerCapture?.(e.pointerId);};
       stage.onpointermove=e=>{if(!canvas&&start)update(point(e));};
       stage.onpointerup=e=>{if(canvas||e.button!==0&&e.button!==1)return;if(start)update(point(e));start=null;ready();};stage.onpointercancel=()=>{start=null;};
@@ -434,7 +472,7 @@
       finally{if(!destroyed)updateCardSelection();}
     }
 
-    async function paste(event){const serial=requestSerial;const file=[...(event.clipboardData?.items||[])].find(i=>i.type.startsWith('image/'))?.getAsFile();if(!file)return;event.preventDefault();try{const data=await blobToData(file);if(destroyed||serial!==requestSerial)return;clear();conversationSource='截图提问';attach(data);open();status('新对话：截图已添加。直接发送，或补一句你想问的。');}catch(e){status(e.message);}}
+    async function paste(event){const serial=requestSerial;const file=[...(event.clipboardData?.items||[])].find(i=>i.type.startsWith('image/'))?.getAsFile();if(!file)return;event.preventDefault();try{const data=await blobToData(file);if(destroyed||serial!==requestSerial)return;clear();conversationSource='截图提问';showCrop(data,null,true);status('截图已居中，可先圈画，再添加到对话。');}catch(e){status(e.message);}}
     const modified=e=>e.ctrlKey||e.metaKey||e.altKey||e.shiftKey;
     const middleAllowed=e=>{const target=e.composedPath?.()[0]||e.target;return e.button===1&&settings.middleClick&&!modified(e)&&!target?.closest?.('a,input,textarea,select,[contenteditable],#ai-crop');};
     const middle=e=>{if(!middleAllowed(e))return;e.preventDefault();e.stopPropagation();startCapture(e);};
@@ -450,11 +488,16 @@
       const selection=win.getSelection(),text=String(selection||'').trim();if(!text||text.length>4000||!selection.rangeCount)return;
       const range=selection.getRangeAt(0);if(shadow.contains(range.startContainer)||shadow.contains(range.endContainer))return;
       selectionMenu=make('div',{id:'ai-selection-menu',role:'dialog','aria-label':'选中文字提问'});
-      selectionMenu.style.cssText='position:fixed;z-index:110;pointer-events:auto;padding:8px;border:1px solid #dce1e7;border-radius:12px;background:white;box-shadow:0 8px 30px #0002;right:18px;max-width:calc(100vw - 36px);top:'+Math.max(8,Math.min(e.clientY+12,win.innerHeight-70))+'px';
+      selectionMenu.style.cssText='position:fixed;z-index:110;pointer-events:auto;padding:8px;border:1px solid #dce1e7;border-radius:12px;background:white;box-shadow:0 8px 30px #0002;max-width:calc(100vw - 16px);';
       const ask=make('button',{text:'爽问一下',type:'button'});ask.style.cssText='padding:6px 10px;font-size:12px;cursor:pointer';
       ask.onclick=()=>{closeSelection();if(controller)stop();send('请解释以下选中文字：\n'+text,{fresh:true,source:'选中文字'});};
       const dismiss=make('button',{text:'×',type:'button','aria-label':'关闭划词提问'});dismiss.onclick=closeSelection;
       selectionMenu.append(ask,dismiss);shadow.append(selectionMenu);
+      const anchor=range.getBoundingClientRect(),menuBox=selectionMenu.getBoundingClientRect();
+      const x=e.clientX||anchor.right,y=e.clientY||anchor.bottom;
+      const left=Math.max(8,Math.min(x+10,win.innerWidth-menuBox.width-8));
+      const top=y+12+menuBox.height<=win.innerHeight-8?y+12:Math.max(8,y-menuBox.height-12);
+      Object.assign(selectionMenu.style,{left:left+'px',top:top+'px',right:'auto'});
     },true);
     listen(resume,'click',open);listen($('ai-close'),'click',collapse);listen($('ai-settings-open'),'click',()=>{mountSettings();onOpenSettings('ai');});
     listen($('ai-mode'),'change',()=>{settings.mode=$('ai-mode').value;save();});listen($('ai-stop'),'click',()=>{stop();status('已停止本次讲解。');});listen($('ai-clear'),'click',clear);listen($('ai-save-card'),'click',()=>{if($('ai-card-select-mode').checked&&$('ai-card-options').hidden){$('ai-card-options').hidden=false;panel.classList.add('ai-card-selecting');$('ai-card-hint').textContent='选择逐句分享，或逐字分享后划选文字；再点击分享知识卡';return;}saveKnowledgeCard();});listen($('ai-card-select-mode'),'change',()=>{selectedExcerpt='';$('ai-card-options').hidden=true;panel.classList.remove('ai-card-selecting','ai-card-sentences');updateCardSelection();});listen($('ai-card-sentences'),'click',()=>{panel.classList.add('ai-card-sentences');$('ai-card-hint').textContent='点击对话旁的逐句选择，再分享知识卡';});listen($('ai-card-words'),'click',()=>{panel.classList.remove('ai-card-sentences');$('ai-card-hint').textContent='在对话中划选文字，再分享知识卡';});listen($('ai-remove-image'),'click',()=>attach(null));
