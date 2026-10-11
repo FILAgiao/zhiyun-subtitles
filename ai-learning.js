@@ -7,7 +7,7 @@
   'use strict';
   const ENDPOINT = 'https://ark.cn-beijing.volces.com/api/v3/responses';
   const STORAGE_KEY = 'ai-learning-settings-v1';
-  const DEFAULTS = Object.freeze({model:'doubao-seed-2-1-lite-260915',mode:'feynman',middleClick:true,followSlides:false,webSearch:false,customPrompt:''});
+  const DEFAULTS = Object.freeze({model:'doubao-seed-2-1-lite-260915',mode:'feynman',middleClick:true,followSlides:false,browserCapture:false,webSearch:false,customPrompt:''});
   const MODES = Object.freeze({
     feynman:{label:'费曼 · 大白话',prompt:'先用一句大白话直接回答问题（尽量不超过40字），再给一个最小例子（不超过两句）。默认总共不超过150字，不写开场白、总结或重复结论，不强行类比，不主动出自测题。只有用户明确要求详细讲解、推导或练习时才展开。必要术语用括号补充；公式只保留理解本题必需的一条。用户仍不懂时换一个更简单的例子；用户要求检查理解时，请他用自己的话解释一句，再指出一个关键遗漏。' },
     technical:{label:'专业 · 把原理讲透',prompt:'给出准确术语及中英对应、必要的前置知识、原理或推导步骤、适用条件与易错点。优先结合本课程语境，区分事实、推测与图片中无法看清的内容。'},
@@ -23,7 +23,7 @@
     const ids=[...Object.keys(MODES),...s.prompts.map(p=>p.id)];
     s.modeOrder=[...new Set([...(Array.isArray(s.modeOrder)?s.modeOrder:[]).filter(id=>ids.includes(id)),...ids])];
     s.mode=ids.includes(s.mode)?s.mode:DEFAULTS.mode;
-    for(const k of ['middleClick','followSlides'])s[k]=s[k]===true;
+    for(const k of ['middleClick','followSlides','browserCapture'])s[k]=s[k]===true;
     s.webSearch=false; // Reserved for future development; old saved switches cannot enable it.
     s.customPrompt=String(s.customPrompt||'').slice(0,1800);
     return s;
@@ -235,7 +235,7 @@
     const {shadow,request,getApiKey=()=>'',getCapabilities=()=>({webSearch:true}),getCourseId=()=>'',onOpenAccount=()=>onOpenSettings('connection'),prepareSlide=()=>{},getSlide=()=>null,getContext=()=>'',getCourseTitle=()=>'',getCaptureTarget=()=>null,getValue=(_,d)=>d,setValue=()=>{},onRequireLogin=()=>{},onOpenSettings=()=>{}}=options;
     if(!shadow || typeof request!=='function')throw new Error('AI 助手缺少 shadow 或 request');
     const doc=shadow.ownerDocument,win=doc.defaultView;
-    let settings=settingsOf(getValue(STORAGE_KEY,DEFAULTS)),history=[],lastAnswer=null,recentSlides=[],lastSlideKey='',pendingImage=null,controller=null,destroyed=false,cleanupCapture=null,requestSerial=0,slideContextEnabled=settings.followSlides,captureStream=null,captureVideo=null;
+    let settings=settingsOf(getValue(STORAGE_KEY,DEFAULTS)),history=[],lastAnswer=null,recentSlides=[],lastSlideKey='',pendingImage=null,controller=null,destroyed=false,cleanupCapture=null,requestSerial=0,slideContextEnabled=settings.followSlides,captureStream=null,captureVideo=null,capturePending=false;
     const cleanups=[];if(globalThis.ZYMath)cleanups.push(globalThis.ZYMath.install(shadow));
     function listen(el,event,fn,opts){el?.addEventListener(event,fn,opts);cleanups.push(()=>el?.removeEventListener(event,fn,opts));}
     function make(tag,props={}){const el=doc.createElement(tag);for(const [k,v] of Object.entries(props)){if(k==='text')el.textContent=v;else if(k==='class')el.className=v;else el.setAttribute(k,v);}return el;}
@@ -245,12 +245,12 @@
       '.ai-head{display:flex;align-items:center;gap:8px;padding:15px;background:linear-gradient(120deg,#edf4ff,#fff5ce)}.ai-head strong{font-size:16px;flex:1}.ai-toolbar{display:flex;flex-wrap:wrap;gap:7px;padding:10px 14px;border-bottom:1px solid #e2e9e3}#ai-mode{max-width:none;flex:1;min-width:140px}#ai-log{padding:14px;overflow:auto;flex:1;min-height:80px;user-select:text}.ai-message{white-space:pre-wrap;overflow-wrap:anywhere;padding:10px 12px;border-radius:14px;background:#ecf2f0;margin:0 0 10px}.ai-message[data-role=user]{margin-left:26px;background:#daeef0}.ai-message[data-role=assistant]{margin-right:10px}.ai-message small{display:block;font-size:10px;opacity:.6;margin-bottom:5px}.ai-message img{max-width:100%;max-height:120px;object-fit:contain;border-radius:8px;margin-top:8px}',
       '.ai-card-row{padding:0 14px 9px;display:flex;align-items:center;gap:8px}#ai-status{font-size:12px;color:#527067;padding:4px 14px;min-height:26px}#ai-context-badge{font-size:11px;color:#627973;padding:0 14px 8px}#ai-compose{padding:10px 14px 14px;border-top:1px solid #e2e9e3}#ai-question{display:block;width:100%;max-width:none;min-height:66px;max-height:140px;resize:vertical;border:1px solid #ceded8;border-radius:12px;padding:9px;background:white;color:#213e43;font:inherit}#ai-compose .ai-actions{display:flex;gap:6px;margin-top:8px;align-items:center}#ai-send{background:var(--zy-accent,#C45221);color:white;margin-left:auto}#ai-attachment{display:flex;align-items:center;gap:8px;margin-bottom:8px}#ai-attachment img{height:54px;max-width:130px;object-fit:contain;border:1px solid #cbd9d2;border-radius:6px}#ai-attachment[hidden]{display:none!important}',
       '.ai-settings{display:grid;gap:12px}.ai-settings label{display:flex;gap:8px;align-items:center}.ai-settings label.ai-stack{display:grid;gap:5px}.ai-settings input[type=text],.ai-settings textarea{width:100%;max-width:none;font:inherit;padding:8px;border:1px solid #d1dfd7;border-radius:8px}.ai-settings textarea{min-height:90px;resize:vertical}.ai-settings p{margin:0;color:#55716b;font-size:12px}#ai-crop{position:fixed;inset:0;background:#071519ed;z-index:100;pointer-events:auto;display:flex;align-items:center;justify-content:center;flex-direction:column;padding:70px 20px 35px;color:#fff}#ai-crop .ai-crop-head{position:absolute;left:20px;right:20px;top:16px;display:flex;align-items:center;gap:10px;flex-wrap:wrap}#ai-crop .ai-crop-head strong{flex:1}#ai-crop-stage{position:relative;max-width:100%;max-height:100%;line-height:0;touch-action:none;cursor:crosshair}#ai-crop-image{display:block;max-width:calc(100vw - 40px);max-height:calc(100dvh - 120px);object-fit:contain}#ai-crop-selection{position:absolute;border:2px solid #ffe781;background:#ffe78125;pointer-events:none;display:none}.ai-hint{font-size:11px;color:#6e817a}#ai-learning :focus-visible{outline:3px solid #79abb6;outline-offset:2px}@media(max-width:600px){#ai-learning{right:10px;top:48px;height:calc(100dvh - 66px)}}'
-      ,'#ai-crop{padding:0;background:transparent;display:block}#ai-crop-stage{position:absolute;inset:0;max-width:none;max-height:none}#ai-crop-image{width:100vw;height:100dvh;max-width:none;max-height:none;object-fit:fill}#ai-crop-selection{box-shadow:0 0 0 9999px #07151970;background:transparent}#ai-crop .ai-crop-head{left:16px;right:16px;top:auto;bottom:16px;padding:12px;background:#173b43;border-radius:12px;z-index:1;line-height:1.5}#ai-crop-question{flex:1;min-width:150px;font:inherit;padding:8px}#ai-crop button{padding:8px;cursor:pointer}#ai-crop-send{background:#ffe781;color:#173b43}#ai-capture-session{position:fixed;right:18px;top:48px;z-index:110;pointer-events:auto;background:#173b43;color:#fff;border-radius:10px;padding:8px;font:12px sans-serif;display:flex;gap:8px;align-items:center}#ai-capture-session[hidden]{display:none!important}'
+      ,'#ai-crop{padding:0;background:transparent;display:block}#ai-crop-stage{position:absolute;inset:0;max-width:none;max-height:none}#ai-crop-image{width:100vw;height:100dvh;max-width:none;max-height:none;object-fit:fill}#ai-crop-selection{box-shadow:0 0 0 9999px #07151970;background:transparent}#ai-crop .ai-crop-head{left:16px;right:16px;top:auto;bottom:16px;padding:12px;background:#173b43;border-radius:12px;z-index:1;line-height:1.5}#ai-crop-question{flex:1;min-width:150px;font:inherit;padding:8px}#ai-crop button{padding:8px;cursor:pointer}#ai-crop .ai-crop-actions{display:flex;flex-wrap:wrap;gap:6px}#ai-crop-conversation{max-width:100%;font:inherit;padding:6px;border-radius:6px}#ai-crop-send{background:#ffe781;color:#173b43}#ai-capture-session{position:fixed;right:18px;top:48px;z-index:110;pointer-events:auto;background:#173b43;color:#fff;border-radius:10px;padding:8px;font:12px sans-serif;display:flex;gap:8px;align-items:center}#ai-capture-session[hidden]{display:none!important}'
       ,'#ai-resume{position:fixed;right:18px;bottom:24px;z-index:75;pointer-events:auto;background:#1768ae;color:white;border:0;border-radius:18px;padding:12px 18px;box-shadow:0 5px 18px #122c3b30;font:14px sans-serif}#ai-resume[hidden]{display:none!important}.ai-markdown{white-space:normal;font-size:16px;line-height:1.75}.ai-markdown p{margin:0 0 9px;color:inherit}.ai-markdown h2,.ai-markdown h3,.ai-markdown h4{margin:14px 0 7px;color:#164e73;line-height:1.4}.ai-markdown h2{font-size:20px}.ai-markdown h3{font-size:18px}.ai-markdown ul,.ai-markdown ol{padding-left:22px;margin:7px 0 12px}.ai-markdown li{margin:4px 0}.ai-markdown pre{background:#153044;color:#edf5ff;padding:12px;border-radius:10px;overflow:auto;white-space:pre;font:12px/1.6 Consolas,monospace}.ai-markdown code{font-family:Consolas,monospace;background:#dce7eb;padding:2px 4px;border-radius:4px}.ai-markdown pre code{background:transparent;padding:0}.ai-markdown blockquote{margin:8px 0;border-left:3px solid #6b9eae;padding:5px 10px;color:#536f78}.ai-markdown a{color:#1768ae;text-decoration:underline}.ai-table{overflow:auto}.ai-markdown table{border-collapse:collapse;width:100%;margin:8px 0;font-size:14px}.ai-markdown th,.ai-markdown td{border:1px solid #c9d9df;padding:7px;text-align:left}.ai-markdown th{background:#dcebef}.ai-answer-note{white-space:normal;border-top:1px solid #cedddf;margin-top:12px;padding-top:10px;font-size:11px;color:#627973;display:grid;gap:6px}.ai-answer-note button{justify-self:start;font-size:12px!important}#ai-learning{width:480px}.ai-message[data-role=user]{font-size:15px}'
      ,`#ai-learning{background:#fff;font-size:14px;color:#24364b}.ai-message[data-role=assistant]{background:#fff;border:1px solid #e4eaf0;padding:18px;margin-right:0}.ai-message small{font-size:12px;color:#6b7b8e;opacity:1}.ai-markdown{display:block;font-size:16px;line-height:1.85;letter-spacing:.1px}.ai-markdown p{font-size:16px;line-height:1.85;margin:0 0 14px}.ai-markdown h2,.ai-markdown h3,.ai-markdown h4{font-size:18px;margin:20px 0 10px;font-weight:650}.ai-markdown h2{font-size:21px}.ai-markdown>:first-child{margin-top:0}.ai-math-block{overflow:auto;padding:14px 10px;background:#f5f8fc;border-radius:12px;margin:16px 0;font-size:19px}.ai-markdown .katex{font-size:1.15em}.ai-message img{display:block;width:100%;height:auto;max-height:none;object-fit:contain;cursor:zoom-in}#ai-image-viewer{position:fixed;inset:0;z-index:120;pointer-events:auto;background:#0b244ce8;overflow:auto;padding:70px 24px 24px;text-align:center}#ai-image-viewer button{position:fixed;right:24px;top:24px;padding:10px 18px;border-radius:10px;background:#fff;color:#23425f;border:0;cursor:pointer}#ai-image-viewer img{display:block;max-width:100%;height:auto;margin:auto}#ai-questions{position:fixed;right:18px;top:78px;bottom:24px;width:430px;max-width:calc(100vw - 28px);z-index:80;pointer-events:auto;background:#fff;border:1px solid #dde6ef;border-radius:18px;box-shadow:0 20px 70px #1234;display:flex;flex-direction:column;padding:16px;font:14px/1.6 'Segoe UI','Microsoft YaHei',sans-serif}#ai-questions[hidden]{display:none}#ai-questions header{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px}#ai-questions input{width:100%;max-width:none;padding:10px;border:1px solid #dce5ef;border-radius:8px}#ai-questions-list{overflow:auto;margin-top:12px}#ai-questions-list article{display:flex;border-bottom:1px solid #e5ebf2;align-items:center;gap:8px;padding:10px 0}.ai-question-record{flex:1;min-width:0;text-align:left;border:0;background:transparent}.ai-question-record strong{display:block;white-space:normal;overflow-wrap:anywhere}.ai-question-record small{display:block;color:#75869a;margin-top:6px}`
     ].join('\n');style.textContent+='.ai-head{padding:6px 12px;min-height:38px}.ai-head strong{font-size:14px}#ai-learning .ai-head button{padding:3px 7px}.ai-toolbar{flex-wrap:nowrap;padding:5px 12px;gap:6px;min-height:36px}#ai-mode{min-width:0;width:120px;font-size:12px}#ai-learning .ai-toolbar button{padding:4px 8px;white-space:nowrap;font-size:12px}#ai-compose{padding:7px 12px}#ai-question{min-height:42px;height:42px;padding:6px 9px}#ai-compose .ai-actions{margin-top:5px}.ai-message .ai-card-select{display:inline-flex;gap:5px;align-items:center;font-size:11px;float:right;cursor:pointer}.ai-prompt-row{display:flex;gap:5px;align-items:center}.ai-prompt-row span{flex:1}.ai-card-row{flex-wrap:wrap;padding:0 12px 6px}#ai-learning .ai-sentence-toggle{float:right;font-size:11px;padding:2px 6px;margin-right:7px}.ai-sentence-list{clear:both;border-top:1px solid #dce3eb;margin-top:10px;padding-top:8px;display:grid;gap:6px}.ai-sentence-list[hidden]{display:none}#ai-learning .ai-sentence-choice{text-align:left;font-size:13px;line-height:1.65;white-space:pre-wrap;padding:7px 10px}#ai-learning .ai-sentence-choice[aria-pressed=true]{background:#e1eefb;border-color:#1768ae;color:#164e73}';style.textContent+='#ai-card-options[hidden]{display:none!important}#ai-card-options{display:flex;gap:6px;width:100%}#ai-learning:not(.ai-card-selecting) .ai-card-select,#ai-learning:not(.ai-card-sentences) .ai-sentence-toggle,#ai-learning:not(.ai-card-sentences) .ai-sentence-list{display:none!important}.ai-card-row label{font-size:12px;display:flex;align-items:center;gap:4px}';shadow.append(style);
     const panel=make('section',{id:'ai-learning',role:'dialog','aria-label':'AI 讲解'});panel.hidden=true;
-    panel.innerHTML='<div class="ai-head"><button id="ai-questions-back" type="button" aria-label="返回问题列表">← 问题列表</button><strong>✦ AI 讲解</strong><button id="ai-settings-open" title="AI 设置" aria-label="AI 设置">⚙</button><button id="ai-close" aria-label="收起 AI 讲解">×</button></div><div class="ai-toolbar"><select id="ai-mode" aria-label="讲解模式"></select><button id="ai-slide-action">讲解本页 PPT</button></div><div id="ai-log" role="log" aria-label="课程对话" aria-live="polite"></div><div id="ai-status" role="status"></div><div id="ai-context-badge"></div><div id="ai-card-row" class="ai-card-row" hidden><button id="ai-save-card" type="button" disabled title="生成本地 PNG；不会自动发布到任何平台">↓ 分享知识卡</button><label><input id="ai-card-select-mode" type="checkbox">选择语句</label><div id="ai-card-options" hidden><button id="ai-card-sentences" type="button">逐句分享</button><button id="ai-card-words" type="button">逐字分享</button></div><span id="ai-card-hint" class="ai-hint">勾选问答或划选词句</span></div><form id="ai-compose"><div id="ai-attachment" hidden><img alt="待发送的课程截图"><span>截图已就位</span><button type="button" id="ai-remove-image" aria-label="移除截图">×</button></div><textarea id="ai-question" maxlength="4000" placeholder="卡在哪儿了？直接问，也可以粘贴截图。" aria-label="向 AI 提问"></textarea><div class="ai-actions"><button id="ai-clear" type="button" title="清空本课程的对话和图片上下文">新对话</button><button id="ai-stop" type="button" hidden>停止</button><span class="ai-hint">Enter 发送 · Shift 换行</span><button id="ai-send" type="submit">发送 ↗</button></div></form>';
+    panel.innerHTML='<div class="ai-head"><button id="ai-questions-back" type="button" aria-label="返回问题列表">← 问题列表</button><strong>✦ AI 讲解</strong><button id="ai-settings-open" title="AI 设置" aria-label="AI 设置">⚙</button><button id="ai-close" aria-label="收起 AI 讲解">×</button></div><div class="ai-toolbar"><select id="ai-mode" aria-label="讲解模式"></select><button id="ai-slide-action">讲解本页 PPT</button><button id="ai-screenshot" type="button">截图</button></div><div id="ai-log" role="log" aria-label="课程对话" aria-live="polite"></div><div id="ai-status" role="status"></div><div id="ai-context-badge"></div><div id="ai-card-row" class="ai-card-row" hidden><button id="ai-save-card" type="button" disabled title="生成本地 PNG；不会自动发布到任何平台">↓ 分享知识卡</button><label><input id="ai-card-select-mode" type="checkbox">选择语句</label><div id="ai-card-options" hidden><button id="ai-card-sentences" type="button">逐句分享</button><button id="ai-card-words" type="button">逐字分享</button></div><span id="ai-card-hint" class="ai-hint">勾选问答或划选词句</span></div><form id="ai-compose"><div id="ai-attachment" hidden><img alt="待发送的课程截图"><span>截图已就位</span><button type="button" id="ai-remove-image" aria-label="移除截图">×</button></div><textarea id="ai-question" maxlength="4000" placeholder="卡在哪儿了？直接问，也可以粘贴截图。" aria-label="向 AI 提问"></textarea><div class="ai-actions"><button id="ai-clear" type="button" title="清空本课程的对话和图片上下文">新对话</button><button id="ai-stop" type="button" hidden>停止</button><span class="ai-hint">Enter 发送 · Shift 换行</span><button id="ai-send" type="submit">发送 ↗</button></div></form>';
     style.textContent+=':host([data-ai-workspace]) #panel,:host([data-ai-workspace]) #compact{display:none!important}';
     style.textContent+=(globalThis.ZYWarmTheme?.css||'');shadow.append(panel);globalThis.ZYAppearance?.attach(shadow);const resume=make('button',{id:'ai-resume',text:'✦ 继续对话',type:'button'});resume.hidden=true;shadow.append(resume);const $=id=>panel.querySelector('#'+id);
     const dragHead=panel.querySelector('.ai-head');let drag=null;
@@ -274,7 +274,7 @@
     function greeting(){}
     function save(){setValue(STORAGE_KEY,{...settings});$('ai-mode').value=settings.mode;badge();}
     function open(){questions.hidden=true;panel.hidden=false;resume.hidden=true;clampFloating(panel);badge();$('ai-question').focus();persist();}
-    function collapse(){panel.hidden=true;resume.hidden=false;persist();}
+    function collapse(){if(capturePending)stop();cleanupCapture?.();stopCaptureSession();panel.hidden=true;resume.hidden=false;persist();}
     let sessionCourse=String(getCourseId()),conversationId='',conversationSource='文字提问',conversationCourse='',conversationOrigin='';
     const INDEX_KEY='ai-question-index-v1';
     const records=()=>{const value=getValue(INDEX_KEY,[]);return Array.isArray(value)?value:[];};
@@ -293,7 +293,7 @@
     function restore(){try{const data=JSON.parse(win.sessionStorage.getItem(sessionKey())||'null');if(!data)return;history=(data.history||[]).filter(t=>['user','assistant'].includes(t.role)&&typeof t.text==='string');conversationId=data.conversationId||'';conversationSource=data.conversationSource||'文字提问';conversationCourse=data.conversationCourse||'';conversationOrigin=data.conversationOrigin||'';lastAnswer=data.lastAnswer||null;$('ai-save-card').disabled=!lastAnswer;$('ai-card-row').hidden=!lastAnswer;$('ai-log').replaceChildren();if(!history.length)greeting();for(const t of history)message(t.role,t.text,t.image);archive();$('ai-question').value=String(data.draft||'').slice(0,4000);panel.hidden=!data.open;resume.hidden=!!data.open;}catch(_){} }
     function switchCourse(){resetCardChoices();selectedExcerpt='';persist();const wasOpen=!panel.hidden;stop();cleanupCapture?.();sessionCourse=String(getCourseId());conversationId='';conversationCourse='';conversationOrigin='';history=[];recentSlides=[];lastSlideKey='';slideContextEnabled=false;lastAnswer=null;$('ai-save-card').disabled=true;$('ai-card-row').hidden=true;$('ai-question').value='';$('ai-log').replaceChildren();attach(null);greeting();restore();updateCardSelection();panel.hidden=!wasOpen;resume.hidden=wasOpen;badge();status('已切换课程，对话按课程分别保留。');persist();}
     listen($('ai-question'),'input',persist);listen(win,'pagehide',persist);
-    function stop(){if(controller)persist();requestSerial++;controller?.abort();controller=null;setBusy(false);}
+    function stop(){if(controller)persist();requestSerial++;controller?.abort();controller=null;capturePending=false;setBusy(false);}
     function setBusy(busy){$('ai-send').disabled=busy;$('ai-slide-action').disabled=busy;$('ai-stop').hidden=!busy;$('ai-save-card').disabled=busy||!lastAnswer;panel.setAttribute('aria-busy',String(busy));updateCardSelection();}
     function attach(src){pendingImage=src;$('ai-attachment').hidden=!src;$('ai-attachment').querySelector('img').src=src||'';}
     function notifySlide(slide=getSlide()) {
@@ -358,19 +358,43 @@
     function captureActive(){return !!captureVideo&&captureStream?.getVideoTracks().some(t=>t.readyState==='live');}
     const captureNotice=make('div',{id:'ai-capture-session',role:'status'});captureNotice.hidden=true;captureNotice.innerHTML='<span>连续截图已开启 · 仅在本页本地取图</span><button type="button" id="ai-capture-session-stop">停止共享</button>';shadow.append(captureNotice);
     function stopCaptureSession(){const stream=captureStream;captureStream=null;const video=captureVideo;captureVideo=null;video?.pause();if(video)video.srcObject=null;stream?.getTracks().forEach(t=>t.stop());captureNotice.hidden=true;}
+    function captureWait(promise,signal,timeout=12000){
+      return new Promise((resolve,reject)=>{
+        let timer;const finish=(error,value)=>{clearTimeout(timer);signal?.removeEventListener('abort',abort);error?reject(error):resolve(value);};
+        const abort=()=>finish(abortError());
+        if(signal?.aborted){abort();return;}
+        signal?.addEventListener('abort',abort,{once:true});
+        timer=setTimeout(()=>finish(Error('截图超时，已取消。可以重新截图，或使用系统截图后粘贴。')),timeout);
+        Promise.resolve(promise).then(value=>finish(null,value),finish);
+      });
+    }
     async function captureSource(signal){
-      if(captureActive())return captureVideo;
       stopCaptureSession();
       if(!win.navigator.mediaDevices?.getDisplayMedia)throw Error('此浏览器不支持页面截图，请使用系统截图并粘贴。');
-      const stream=await win.navigator.mediaDevices.getDisplayMedia({video:{displaySurface:'browser'},audio:false,preferCurrentTab:true,selfBrowserSurface:'include'});
-      if(signal?.aborted||destroyed){stream.getTracks().forEach(t=>t.stop());throw abortError();}
-      const track=stream.getVideoTracks()[0];
-      if(track?.getSettings?.().displaySurface&&track.getSettings().displaySurface!=='browser'){stream.getTracks().forEach(t=>t.stop());throw Error('请选择当前浏览器标签页，以便选框与课程位置一致。');}
-      captureStream=stream;captureVideo=make('video');captureVideo.muted=true;captureVideo.srcObject=stream;
-      track?.addEventListener('ended',()=>{stopCaptureSession();cleanupCapture?.();status('截图共享已停止，再次截图需要重新选择当前标签页。');},{once:true});
-      await captureVideo.play();
-      if(!captureVideo.videoWidth)await new Promise((resolve,reject)=>{const timer=setTimeout(()=>reject(Error('截图画面未就绪，请重试。')),10000);const done=()=>{clearTimeout(timer);signal?.removeEventListener('abort',abort);resolve();};const abort=()=>{clearTimeout(timer);reject(abortError());};captureVideo.onloadeddata=done;signal?.addEventListener('abort',abort,{once:true});});
-      if(signal?.aborted)throw abortError();return captureVideo;
+      const pending=win.navigator.mediaDevices.getDisplayMedia({video:{displaySurface:'browser'},audio:false,preferCurrentTab:true,selfBrowserSurface:'include'});
+      let expired=false;
+      pending.then(stream=>{if(expired||signal?.aborted||destroyed)stream.getTracks().forEach(t=>t.stop());},()=>{});
+      let stream;
+      try{stream=await captureWait(pending,signal,30000);}catch(e){expired=true;throw e;}
+      const video=make('video'),track=stream.getVideoTracks()[0];
+      const release=()=>{if(captureStream===stream)stopCaptureSession();else{video.pause();video.srcObject=null;stream.getTracks().forEach(t=>t.stop());}};
+      signal?.addEventListener('abort',release,{once:true});
+      try{
+        if(signal?.aborted||destroyed)throw abortError();
+        if(track?.getSettings?.().displaySurface&&track.getSettings().displaySurface!=='browser')throw Error('请选择当前浏览器标签页，以便选框与课程位置一致。');
+        captureStream=stream;captureVideo=video;video.muted=true;video.srcObject=stream;
+        await captureWait(new Promise((resolve,reject)=>{
+          const done=()=>{if(video.videoWidth&&video.readyState>=2)finish();};
+          const ended=()=>finish(Error('截图共享已停止，可以重新截图。'));
+          const fail=()=>finish(Error('截图画面未就绪，请重试。'));
+          const abort=()=>finish(abortError());
+          const timer=setTimeout(fail,10000);
+          function finish(error){clearTimeout(timer);video.removeEventListener('loadeddata',done);video.removeEventListener('resize',done);video.removeEventListener('error',fail);track?.removeEventListener('ended',ended);signal?.removeEventListener('abort',abort);error?reject(error):resolve();}
+          video.addEventListener('loadeddata',done);video.addEventListener('resize',done);video.addEventListener('error',fail);track?.addEventListener('ended',ended,{once:true});signal?.addEventListener('abort',abort,{once:true});
+          video.play().then(done,fail);done();
+        }),signal);
+        return video;
+      }catch(e){release();throw e;}finally{signal?.removeEventListener('abort',release);}
     }
     function localCaptureAvailable(){
       if(!globalThis.ZYCardRender?.captureViewport || doc.fullscreenElement)return false;
@@ -388,30 +412,37 @@
     async function captureSnapshot(signal){
       if(localCaptureAvailable()){
         const overlays=[...shadow.querySelectorAll('#slide-image')].filter(el=>!el.closest('[hidden]'));
-        const canvas=await globalThis.ZYCardRender.captureViewport(doc,{overlays});
+        const canvas=await captureWait(globalThis.ZYCardRender.captureViewport(doc,{overlays,signal}),signal);
         if(signal?.aborted)throw abortError();return imageData('',canvas,signal);
       }
+      if(!settings.browserCapture)throw Error('此页面含受限视频或嵌入内容，请用系统截图（Windows：Win + Shift + S）后按 Ctrl + V 添加；设置中可手动开启浏览器截图。');
       const source=await captureSource(signal);
-      try{return await imageData('',source,signal);}finally{stopCaptureSession();}
+      const stream=source.srcObject;try{return await imageData('',source,signal);}finally{if(captureStream===stream)stopCaptureSession();else stream?.getTracks().forEach(t=>t.stop());}
     }
-    async function startCapture(event){
+    async function startCapture(event,wholePage=false){
       if(controller)stop();if(!String(getApiKey()||'').trim()){open();status('请先登录账号，解锁截图问答。');onRequireLogin();return;}cleanupCapture?.();
       const initial=event?.button===1?{x:event.clientX,y:event.clientY}:null;
       const gesture=initial?{start:initial,end:initial,held:true}:null;
       const trackMove=e=>{if(gesture?.held)gesture.end={x:e.clientX,y:e.clientY};};const trackUp=e=>{if(gesture&&e.button===1){gesture.end={x:e.clientX,y:e.clientY};gesture.held=false;}};
-      doc.addEventListener('mousemove',trackMove,true);doc.addEventListener('mouseup',trackUp,true);
-      const own=new AbortController();controller=own;const serial=++requestSerial;setBusy(true);
+      const cancelKey=e=>{if(e.key==='Escape'){e.preventDefault();e.stopImmediatePropagation();stop();stopCaptureSession();}};
+      doc.addEventListener('keydown',cancelKey,true);doc.addEventListener('mousemove',trackMove,true);doc.addEventListener('mouseup',trackUp,true);
+      const own=new AbortController();controller=own;capturePending=true;const serial=++requestSerial;setBusy(true);
       try{
-        const src=await captureSnapshot(own.signal);stopCaptureSession();
-        if(serial!==requestSerial||destroyed)return;showCrop(src,gesture);
-      }catch(e){if(serial===requestSerial&&e.name!=='NotAllowedError'&&e.name!=='AbortError'){open();status(e.message||'截图失败，请重试。');}}
-      finally{doc.removeEventListener('mousemove',trackMove,true);doc.removeEventListener('mouseup',trackUp,true);stopCaptureSession();if(controller===own){controller=null;setBusy(false);}}
+        const src=await captureSnapshot(own.signal);
+        if(serial!==requestSerial||destroyed)return;showCrop(src,gesture,wholePage);
+      }catch(e){own.abort();if(serial===requestSerial&&e.name!=='NotAllowedError'&&e.name!=='AbortError'){open();status(e.message||'截图失败，请重试。');}}
+      finally{doc.removeEventListener('keydown',cancelKey,true);doc.removeEventListener('mousemove',trackMove,true);doc.removeEventListener('mouseup',trackUp,true);if(controller===own){stopCaptureSession();capturePending=false;controller=null;setBusy(false);}}
     }
     function showCrop(src,gesture=null,centered=false){
       const serial=requestSerial,viewport={w:win.innerWidth,h:win.innerHeight};
       const layer=make('section',{id:'ai-crop',role:'dialog','aria-label':'截图与批注'});
-      layer.innerHTML='<div id="ai-crop-stage"><img id="ai-crop-image" alt="当前标签页本地截图"><div id="ai-crop-selection"></div></div><div class="ai-crop-head"><strong>拖框选择 · Esc 取消</strong><div id="ai-crop-tools" hidden><button id="ai-crop-pen" aria-pressed="true">画笔</button><button id="ai-crop-circle" aria-pressed="false">圈选</button><button id="ai-crop-undo" disabled>撤销</button><button id="ai-crop-reset">清除批注</button></div><div class="ai-crop-actions"><button id="ai-crop-use" disabled>添加到对话</button><button id="ai-crop-send" disabled>提问</button><button id="ai-crop-cancel">取消</button></div></div>';
+      layer.innerHTML='<div id="ai-crop-stage"><img id="ai-crop-image" alt="当前标签页本地截图"><div id="ai-crop-selection"></div></div><div class="ai-crop-head"><strong>拖框选择 · Esc 取消</strong><div id="ai-crop-tools" hidden><button id="ai-crop-pen" aria-pressed="true">画笔</button><button id="ai-crop-circle" aria-pressed="false">圈选</button><button id="ai-crop-undo" disabled>撤销</button><button id="ai-crop-reset">清除批注</button></div><div class="ai-crop-actions"><select id="ai-crop-conversation" aria-label="截图添加到哪个对话"></select><button id="ai-crop-use" disabled>添加到对话</button><button id="ai-crop-send" disabled>提问</button><button id="ai-crop-cancel">取消</button></div></div>';
       shadow.append(layer);const img=layer.querySelector('img'),stage=layer.querySelector('#ai-crop-stage'),selection=layer.querySelector('#ai-crop-selection'),use=layer.querySelector('#ai-crop-use'),submit=layer.querySelector('#ai-crop-send');
+      const destination=layer.querySelector('#ai-crop-conversation');
+      destination.append(make('option',{value:'new',text:'新对话'}));
+      if(history.length||pendingImage||$('ai-question').value)destination.append(make('option',{value:'current',text:'继续上次对话'}));
+      else {const last=records().find(r=>r.origin===String(getCourseId()));if(last)destination.append(make('option',{value:last.id,text:'继续上次对话：'+last.title.slice(0,22)}));}
+      destination.value=!panel.hidden&&destination.querySelector('[value="current"]')?'current':'new';
       let start=gesture?.start||null,rect=null,canvas=null,base=null,tool='pen',active=null,strokes=[];
       const cancel=()=>{layer.remove();doc.removeEventListener('keydown',onKey,true);if(cleanupCapture===cancel)cleanupCapture=null;};cleanupCapture=cancel;
       const onKey=e=>{if(e.key==='Escape'){e.preventDefault();e.stopImmediatePropagation();cancel();}};doc.addEventListener('keydown',onKey,true);
@@ -446,7 +477,7 @@
       if(gesture){update(gesture.end);if(!gesture.held){start=null;ready();}}
       for(const name of ['pen','circle'])layer.querySelector('#ai-crop-'+name).onclick=()=>{tool=name;for(const n of ['pen','circle'])layer.querySelector('#ai-crop-'+n).setAttribute('aria-pressed',String(n===tool));};
       layer.querySelector('#ai-crop-undo').onclick=()=>{strokes.pop();redraw();};layer.querySelector('#ai-crop-reset').onclick=()=>{strokes=[];redraw();};
-      const choose=immediate=>{if(serial!==requestSerial){cancel();return;}try{if(!canvas)return;const data=canvas.toDataURL('image/jpeg',.85);if(!validImage(data))throw Error('选区过大，请选择更小区域。');cancel();attach(data);open();if(immediate)send($('ai-question').value.trim()||'请解释截图中的内容。');else status('截图已添加到当前对话，可补充问题后发送。');}catch(e){status(e.message||'选区读取失败，请重试。');cancel();}};
+      const choose=immediate=>{if(serial!==requestSerial){cancel();return;}try{if(!canvas)return;const data=canvas.toDataURL('image/jpeg',.85);if(!validImage(data))throw Error('选区过大，请选择更小区域。');const target=destination.value;cancel();if(target==='new')clear();else if(target!=='current')loadConversation(target);conversationSource='截图提问';attach(data);open();if(immediate)send($('ai-question').value.trim()||'请解释截图中的内容。');else status(target==='new'?'截图已添加到新对话，可补充问题后发送。':'截图已添加到上次对话，可补充问题后发送。');}catch(e){status(e.message||'选区读取失败，请重试。');cancel();}};
       layer.querySelector('#ai-crop-cancel').onclick=cancel;use.onclick=()=>choose(false);submit.onclick=()=>choose(true);
     }
     let selectedExcerpt='';
@@ -472,7 +503,7 @@
       finally{if(!destroyed)updateCardSelection();}
     }
 
-    async function paste(event){const serial=requestSerial;const file=[...(event.clipboardData?.items||[])].find(i=>i.type.startsWith('image/'))?.getAsFile();if(!file)return;event.preventDefault();try{const data=await blobToData(file);if(destroyed||serial!==requestSerial)return;clear();conversationSource='截图提问';showCrop(data,null,true);status('截图已居中，可先圈画，再添加到对话。');}catch(e){status(e.message);}}
+    async function paste(event){const serial=requestSerial;const file=[...(event.clipboardData?.items||[])].find(i=>i.type.startsWith('image/'))?.getAsFile();if(!file)return;event.preventDefault();try{const data=await blobToData(file);if(destroyed||serial!==requestSerial)return;if(controller)stop();cleanupCapture?.();showCrop(data,null,true);status('截图已居中，可先圈画，再添加到对话。');}catch(e){status(e.message);}}
     const modified=e=>e.ctrlKey||e.metaKey||e.altKey||e.shiftKey;
     const middleAllowed=e=>{const target=e.composedPath?.()[0]||e.target;return e.button===1&&settings.middleClick&&!modified(e)&&!target?.closest?.('a,input,textarea,select,[contenteditable],#ai-crop');};
     const middle=e=>{if(!middleAllowed(e))return;e.preventDefault();e.stopPropagation();startCapture(e);};
@@ -501,14 +532,14 @@
     },true);
     listen(resume,'click',open);listen($('ai-close'),'click',collapse);listen($('ai-settings-open'),'click',()=>{mountSettings();onOpenSettings('ai');});
     listen($('ai-mode'),'change',()=>{settings.mode=$('ai-mode').value;save();});listen($('ai-stop'),'click',()=>{stop();status('已停止本次讲解。');});listen($('ai-clear'),'click',clear);listen($('ai-save-card'),'click',()=>{if($('ai-card-select-mode').checked&&$('ai-card-options').hidden){$('ai-card-options').hidden=false;panel.classList.add('ai-card-selecting');$('ai-card-hint').textContent='选择逐句分享，或逐字分享后划选文字；再点击分享知识卡';return;}saveKnowledgeCard();});listen($('ai-card-select-mode'),'change',()=>{selectedExcerpt='';$('ai-card-options').hidden=true;panel.classList.remove('ai-card-selecting','ai-card-sentences');updateCardSelection();});listen($('ai-card-sentences'),'click',()=>{panel.classList.add('ai-card-sentences');$('ai-card-hint').textContent='点击对话旁的逐句选择，再分享知识卡';});listen($('ai-card-words'),'click',()=>{panel.classList.remove('ai-card-sentences');$('ai-card-hint').textContent='在对话中划选文字，再分享知识卡';});listen($('ai-remove-image'),'click',()=>attach(null));
-    listen($('ai-slide-action'),'click',explainSlide);listen(captureNotice.querySelector('button'),'click',()=>{stop();stopCaptureSession();cleanupCapture?.();});listen(win,'pagehide',stopCaptureSession);listen($('ai-compose'),'submit',e=>{e.preventDefault();send($('ai-question').value);});listen($('ai-question'),'paste',paste);
+    listen($('ai-slide-action'),'click',explainSlide);listen(captureNotice.querySelector('button'),'click',()=>{stop();stopCaptureSession();cleanupCapture?.();});listen(win,'pagehide',()=>{if(capturePending)stop();cleanupCapture?.();stopCaptureSession();});listen($('ai-compose'),'submit',e=>{e.preventDefault();send($('ai-question').value);});listen(doc,'paste',e=>{const target=e.composedPath?.()[0]||e.target;if(target!==$('ai-question')&&target?.closest?.('input,textarea,[contenteditable]'))return;paste(e);},true);listen($('ai-screenshot'),'click',startCapture);
     listen($('ai-question'),'keydown',e=>{e.stopPropagation();if(e.key==='Enter'&&!e.shiftKey&&!e.isComposing){e.preventDefault();send(e.currentTarget.value);}});
     for(const [id,fn] of [['ai-open',explainSlide],['slide-explain',explainSlide],['ai-capture',startCapture]])listen(shadow.getElementById(id),'click',fn);
     function mountSettings(container=shadow.getElementById('settings-ai')){
       if(!container)return;container.replaceChildren();const form=make('div',{class:'ai-settings'});
       const field=(label,el)=>{const row=make('label',{class:'ai-stack'});row.append(make('span',{text:label}),el);form.append(row);return el;};
       const model=field('豆包讲解模型',make('input',{type:'text',readonly:'','aria-label':'豆包讲解模型'}));model.value='豆包 Seed 2.1 Lite（默认）';model.title=DEFAULTS.model;
-      for(const [key,label] of [['middleClick','按住鼠标中键拖动截图'],['followSlides','讲解时参考最近两页 PPT']]){const row=make('label'),input=make('input',{type:'checkbox'});input.checked=settings[key];row.append(input,doc.createTextNode(label));form.append(row);listen(input,'change',()=>{settings[key]=input.checked;if(key==='followSlides'){slideContextEnabled=settings[key];recentSlides=[];lastSlideKey='';notifySlide();}save();});}
+      for(const [key,label] of [['middleClick','按住鼠标中键拖动截图'],['followSlides','讲解时参考最近两页 PPT'],['browserCapture','允许浏览器截图（会短暂显示屏幕共享；默认关闭）']]){const row=make('label'),input=make('input',{type:'checkbox'});input.checked=settings[key];row.append(input,doc.createTextNode(label));form.append(row);listen(input,'change',()=>{settings[key]=input.checked;if(key==='followSlides'){slideContextEnabled=settings[key];recentSlides=[];lastSlideKey='';notifySlide();}save();});}
       const promptList=make('div',{id:'ai-prompt-list'});form.append(make('strong',{text:'讲解方式排序与默认项'}),promptList);
       function drawPrompts(){promptList.replaceChildren();settings.modeOrder.forEach((id,index)=>{const row=make('div',{class:'ai-prompt-row','data-prompt-id':id}),item=modeInfo(id);row.append(make('span',{text:item.label}));const pick=make('button',{type:'button',text:settings.mode===id?'默认':'设为默认','aria-label':'默认：'+item.label});pick.onclick=()=>{settings.mode=id;save();drawPrompts();};row.append(pick);for(const [delta,label] of [[-1,'上移'],[1,'下移']]){const button=make('button',{type:'button',text:label,'aria-label':label+'：'+item.label});button.disabled=index+delta<0||index+delta>=settings.modeOrder.length;button.onclick=()=>{const order=settings.modeOrder;[order[index],order[index+delta]]=[order[index+delta],order[index]];refreshModes();save();drawPrompts();};row.append(button);}if(id==='custom'||id.startsWith('user-')){const edit=make('button',{type:'button',text:'编辑','aria-label':'编辑：'+item.label});edit.onclick=()=>{promptName.value=item.label;promptText.value=id==='custom'?settings.customPrompt:item.prompt;add.textContent='保存提示词';add.dataset.editId=id;editor.querySelector('[role=status]').textContent='';editor.hidden=false;promptName.focus();};row.append(edit);if(id.startsWith('user-')){const remove=make('button',{type:'button',text:'删除','aria-label':'删除：'+item.label});remove.onclick=()=>{settings.prompts=settings.prompts.filter(p=>p.id!==id);settings=settingsOf(settings);refreshModes();save();drawPrompts();};row.append(remove);}}promptList.append(row);});}
       shadow.querySelector('#ai-prompt-dialog')?.remove();
@@ -523,7 +554,7 @@
     }
     greeting();badge();mountSettings();
     restore();updateCardSelection();
-    return {open,explainSlide,startCapture,saveKnowledgeCard,notifySlide,mountSettings,send,resetCourse:clear,close:collapse,switchCourse,getSettings:()=>({...settings}),destroy(){destroyed=true;stopCaptureSession();captureNotice.remove();stop();cleanupCapture?.();cleanups.forEach(fn=>fn());panel.remove();resume.remove();questions.remove();shadow.querySelector('#ai-image-viewer')?.remove();shadow.querySelector('#ai-prompt-dialog')?.remove();style.remove();}};
+    return {open,explainSlide,startCapture,capturePage:()=>startCapture(null,true),saveKnowledgeCard,notifySlide,mountSettings,send,resetCourse:clear,close:collapse,switchCourse,getSettings:()=>({...settings}),destroy(){destroyed=true;stopCaptureSession();captureNotice.remove();stop();cleanupCapture?.();cleanups.forEach(fn=>fn());panel.remove();resume.remove();questions.remove();shadow.querySelector('#ai-image-viewer')?.remove();shadow.querySelector('#ai-prompt-dialog')?.remove();style.remove();}};
   }
   return {renderMarkdown,selectionSentences,DEFAULTS,MODES,cardText,wrapCardText,renderKnowledgeCard,renderKnowledgeCards,settingsOf,makeBody,textOfResponse,requestResponse,trimHistory,wordAt,validImage,mountLearningAssistant};
 });

@@ -6,12 +6,13 @@ function mount({shadow,host,getVideo,getLocal,getCues,getCourse,getClock,getSeek
  const $=id=>shadow.getElementById(id);
  const style=document.createElement('style');style.id='zy-player-control-rules';style.textContent=`
  video[data-zy-enhanced]::-webkit-media-controls-fullscreen-button{display:none!important}
- [data-zy-local-player] .vjs-control-bar,[data-zy-local-player] .prism-controlbar,[data-zy-local-player] .dplayer-controller,[data-zy-local-player] .xgplayer-controls,[data-zy-local-player] xg-controls,[data-zy-local-player] .jw-controlbar,[data-zy-local-player] .video-controls,[data-zy-local-player] .player-controls,[data-zy-local-player] .control-bar,[data-zy-local-player] .vjs-big-play-button,[data-zy-local-player] .prism-big-play-btn,[data-zy-local-player] .dplayer-controller-mask{display:none!important;pointer-events:none!important}
+ [data-zy-classroom-fullscreen]:fullscreen .cmc-player > .control-content{position:fixed!important;left:0!important;right:0!important;top:auto!important;bottom:0!important;width:100%!important;transform:none!important;z-index:30!important}
+ [data-zy-local-player] .cmc-player > .control-content,[data-zy-local-player] .cmc-m-control,[data-zy-local-player] .vjs-control-bar,[data-zy-local-player] .prism-controlbar,[data-zy-local-player] .dplayer-controller,[data-zy-local-player] .xgplayer-controls,[data-zy-local-player] xg-controls,[data-zy-local-player] .jw-controlbar,[data-zy-local-player] .video-controls,[data-zy-local-player] .player-controls,[data-zy-local-player] .control-bar,[data-zy-local-player] .vjs-big-play-button,[data-zy-local-player] .prism-big-play-btn,[data-zy-local-player] .dplayer-controller-mask{display:none!important;pointer-events:none!important}
  `;document.head.append(style);
  let current=null,controlRoot=null,method=null,ownMethod=null,nativeFsRecovery=false,signature='',following=true,lastCue=null;
  const nativeOwners=new Map();
- function playerRoot(video){return video?.parentElement?.closest('.video-js,.prism-player,.dplayer,.xgplayer,.jwplayer,#player,.video-player,.player-container')||video?.parentElement;}
- async function enterFullscreen(){const video=getVideo();if(!video)throw Error('请先打开课程视频');const container=playerRoot(video);if(!container?.requestFullscreen)throw Error('浏览器不支持课堂全屏');await container.requestFullscreen();$('fullscreen-notice').hidden=true;}
+ function playerRoot(video){return video?.parentElement?.closest('.cmc-main,.video-js,.prism-player,.dplayer,.xgplayer,.jwplayer,#player,.video-player,.player-container')||video?.parentElement;}
+ async function enterFullscreen(){const video=getVideo();if(!video)throw Error('请先打开课程视频');const container=playerRoot(video);if(!container?.requestFullscreen)throw Error('浏览器不支持课堂全屏');container.setAttribute('data-zy-classroom-fullscreen','true');try{await container.requestFullscreen();}catch(error){container.removeAttribute('data-zy-classroom-fullscreen');throw error;}$('fullscreen-notice').hidden=true;}
  async function toggleFullscreen(){try{if(document.fullscreenElement)await document.exitFullscreen();else await enterFullscreen();}catch(e){$('slides-status').textContent='全屏未完成：'+e.message;}}
  $('focus-fullscreen').onclick=toggleFullscreen;
  $('fullscreen-recover').onclick=async()=>{try{await enterFullscreen();}catch{ $('slides-status').textContent='请点击“专注全屏”进入课堂全屏。';}};
@@ -19,7 +20,7 @@ function mount({shadow,host,getVideo,getLocal,getCues,getCourse,getClock,getSeek
  window.addEventListener('pointerup',event=>{const target=event.composedPath()[0]?.closest?.('button,summary');if(!target||!event.composedPath().includes(host))return;setTimeout(()=>{if(shadow.activeElement===target)target.blur();},0);},true);
  const onFs=async()=>{
   if(document.fullscreenElement?.tagName==='VIDEO'&&!nativeFsRecovery){nativeFsRecovery=true;try{await document.exitFullscreen();await enterFullscreen();}catch{$('fullscreen-notice').hidden=false;}finally{nativeFsRecovery=false;}}
-  const fs=document.fullscreenElement;if(fs&&fs.tagName!=='VIDEO')fs.append(host);
+  const fs=document.fullscreenElement;for(const el of document.querySelectorAll('[data-zy-classroom-fullscreen]'))if(el!==fs)el.removeAttribute('data-zy-classroom-fullscreen');if(fs&&fs.tagName!=='VIDEO')fs.append(host);
  };
  document.addEventListener('fullscreenchange',onFs);
  // Capture website fullscreen buttons before handlers that fullscreen only the video.
