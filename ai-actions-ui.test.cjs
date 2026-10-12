@@ -32,7 +32,7 @@ const {chromium}=require('playwright');
   const size=await page.evaluate(src=>new Promise(resolve=>{const i=new Image();i.onload=()=>resolve([i.width,i.height]);i.src=src;}),image);
   assert.ok(size[0]<1600&&size[1]<800);assert.match(await page.evaluate(()=>JSON.stringify(calls[1].input)),/selected lesson text/,'screenshot continues the existing conversation');assert.equal(await page.evaluate(()=>track.readyState),'live');assert.equal(await page.evaluate(()=>captureCalls),1);
   // The authorized stream is reused for subsequent screenshots.
-  assert.equal(await host.locator('#ai-capture-session').isVisible(),true);assert.equal(await page.evaluate(()=>captureCalls),1);
+  assert.equal(await host.locator('#ai-capture-session').isVisible(),false);assert.equal(await page.evaluate(()=>captureCalls),1);
   await host.locator('#ai-close').click();
   for(let i=0;i<2;i++){
    await page.mouse.move(650,350);await page.mouse.down({button:'middle'});await host.locator('#ai-crop').waitFor({state:'visible'});await page.mouse.move(900,550);await page.mouse.up({button:'middle'});

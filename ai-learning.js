@@ -366,7 +366,7 @@
     async function explainSlide(){const before=requestSerial;let slide=getSlide();if(!String(getApiKey()||'').trim()){onRequireLogin();return;}if(!slide){await prepareSlide();slide=getSlide();}if(destroyed||before!==requestSerial)return;slideContextEnabled=settings.followSlides;if(!slide){open();status('请先打开本课程的 PPT，再点击讲解本页。');return;}await send('请讲解当前这页 PPT，结合老师附近的字幕说明重点和我需要掌握的内容。',{slide:slide||{},image:null});}
     function clear(){followLog=true;jumpLatest.hidden=true;activeImageDismiss?.();resetCardChoices();selectedExcerpt='';persist();stop();conversationId='';conversationSource='文字提问';conversationCourse='';conversationOrigin='';lastAnswer=null;$('ai-save-card').disabled=true;$('ai-card-row').hidden=true;cleanupCapture?.();panel.querySelector('#ai-question').value='';history=[];recentSlides=[];lastSlideKey='';slideContextEnabled=false;$('ai-log').replaceChildren();attach(null);greeting();badge();status('已开始新对话，旧截图与 PPT 上下文已清空。');persist();}
     function captureActive(){return !!captureVideo&&captureStream?.getVideoTracks().some(t=>t.readyState==='live');}
-    const captureNotice=make('div',{id:'ai-capture-session',role:'status'});captureNotice.hidden=true;captureNotice.innerHTML='<span>连续截图已开启 · 仅在本页本地取图</span><button type="button" id="ai-capture-session-stop">取消截图</button>';shadow.append(captureNotice);
+    const captureNotice=make('div',{id:'ai-capture-session',role:'status'});captureNotice.hidden=true;captureNotice.innerHTML='<span>正在截取当前页面…</span><button type="button" id="ai-capture-session-stop">取消截图</button>';shadow.append(captureNotice);
     function stopCaptureSession(){captureEndCleanup?.();captureEndCleanup=null;const stream=captureStream;captureStream=null;const video=captureVideo;captureVideo=null;video?.pause();if(video)video.srcObject=null;stream?.getTracks().forEach(t=>t.stop());captureNotice.hidden=true;}
     function captureWait(promise,signal,timeout=12000){
       return new Promise((resolve,reject)=>{
@@ -405,12 +405,8 @@
           video.play().then(done,fail);done();
         }),signal);
         const ended=()=>stopCaptureSession();track?.addEventListener('ended',ended,{once:true});captureEndCleanup=()=>track?.removeEventListener('ended',ended);
-        restoreCaptureNotice();return video;
+        return video;
       }catch(e){release();throw e;}finally{signal?.removeEventListener('abort',release);}
-    }
-    function restoreCaptureNotice(){
-      if(captureActive()){captureNotice.querySelector('span').textContent='本页截图会话已开启 · 再次截图无需重新授权';captureNotice.querySelector('button').textContent='停止共享';captureNotice.hidden=false;}
-      else captureNotice.hidden=true;
     }
     function capturePaint(signal){return new Promise((resolve,reject)=>{
       let frame,timer;const finish=error=>{win.cancelAnimationFrame(frame);win.clearTimeout(timer);signal.removeEventListener('abort',abort);error?reject(error):resolve();};
@@ -474,7 +470,7 @@
         open();status(e.name==='NotAllowedError'?'浏览器截图未获授权，请重新点击并选择当前标签页；也可用系统截图后粘贴。':e.name==='InvalidStateError'?'浏览器需要一次点击授权当前标签页，请点击下方按钮。':e.message||'截图失败，请重试。');
         if(e.name==='InvalidStateError'){const retry=make('button',{id:'ai-capture-retry',type:'button',text:'授权并截图'});retry.onclick=()=>startCapture(null,wholePage,direct);$('ai-status').append(retry);}
       }}
-      finally{doc.removeEventListener('keydown',cancelKey,true);if(controller===own){capturePending=false;controller=null;setBusy(false);}restoreCaptureNotice();}
+      finally{doc.removeEventListener('keydown',cancelKey,true);if(controller===own){capturePending=false;controller=null;setBusy(false);}if(!capturePending)captureNotice.hidden=true;}
     }
     function showCrop(src,gesture=null,centered=false){
       const serial=requestSerial,viewport={w:win.innerWidth,h:win.innerHeight};
