@@ -366,7 +366,7 @@
     async function explainSlide(){const before=requestSerial;let slide=getSlide();if(!String(getApiKey()||'').trim()){onRequireLogin();return;}if(!slide){await prepareSlide();slide=getSlide();}if(destroyed||before!==requestSerial)return;slideContextEnabled=settings.followSlides;if(!slide){open();status('请先打开本课程的 PPT，再点击讲解本页。');return;}await send('请讲解当前这页 PPT，结合老师附近的字幕说明重点和我需要掌握的内容。',{slide:slide||{},image:null});}
     function clear(){followLog=true;jumpLatest.hidden=true;activeImageDismiss?.();resetCardChoices();selectedExcerpt='';persist();stop();conversationId='';conversationSource='文字提问';conversationCourse='';conversationOrigin='';lastAnswer=null;$('ai-save-card').disabled=true;$('ai-card-row').hidden=true;cleanupCapture?.();panel.querySelector('#ai-question').value='';history=[];recentSlides=[];lastSlideKey='';slideContextEnabled=false;$('ai-log').replaceChildren();attach(null);greeting();badge();status('已开始新对话，旧截图与 PPT 上下文已清空。');persist();}
     function captureActive(){return !!captureVideo&&captureStream?.getVideoTracks().some(t=>t.readyState==='live');}
-    const captureNotice=make('div',{id:'ai-capture-session',role:'status'});captureNotice.hidden=true;captureNotice.innerHTML='<span>连续截图已开启 · 仅在本页本地取图</span><button type="button" id="ai-capture-session-stop">停止共享</button>';shadow.append(captureNotice);
+    const captureNotice=make('div',{id:'ai-capture-session',role:'status'});captureNotice.hidden=true;captureNotice.innerHTML='<span>连续截图已开启 · 仅在本页本地取图</span><button type="button" id="ai-capture-session-stop">取消截图</button>';shadow.append(captureNotice);
     function stopCaptureSession(){const stream=captureStream;captureStream=null;const video=captureVideo;captureVideo=null;video?.pause();if(video)video.srcObject=null;stream?.getTracks().forEach(t=>t.stop());captureNotice.hidden=true;}
     function captureWait(promise,signal,timeout=12000){
       return new Promise((resolve,reject)=>{
@@ -379,7 +379,7 @@
       });
     }
     async function captureSource(signal){
-      stopCaptureSession();
+      stopCaptureSession();captureNotice.querySelector('span').textContent='请选择当前标签页进行截图…';captureNotice.hidden=false;
       if(!win.navigator.mediaDevices?.getDisplayMedia)throw Error('此浏览器不支持页面截图，请使用系统截图并粘贴。');
       const pending=win.navigator.mediaDevices.getDisplayMedia({video:{displaySurface:'browser'},audio:false,preferCurrentTab:true,selfBrowserSurface:'include'});
       let expired=false;
@@ -437,6 +437,7 @@
       const cancelKey=e=>{if(e.key==='Escape'){e.preventDefault();e.stopImmediatePropagation();stop();stopCaptureSession();}};
       doc.addEventListener('keydown',cancelKey,true);doc.addEventListener('mousemove',trackMove,true);doc.addEventListener('mouseup',trackUp,true);
       const own=new AbortController();controller=own;capturePending=true;const serial=++requestSerial;setBusy(true);
+      captureNotice.querySelector('span').textContent='正在截取当前页面…';captureNotice.hidden=false;
       try{
         const src=await captureSnapshot(own.signal);
         if(serial!==requestSerial||destroyed)return;showCrop(src,gesture,wholePage);

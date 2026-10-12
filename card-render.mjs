@@ -17,7 +17,7 @@ export async function captureViewport(doc,{overlays=[],signal}={}){
  const win=doc.defaultView;
  if(signal?.aborted)throw new DOMException('Cancelled','AbortError');
  const existing=new Set(doc.querySelectorAll('iframe.html2canvas-container'));
- const pending=html2canvas(doc.documentElement,{logging:false,scale:Math.min(2,win.devicePixelRatio||1),width:win.innerWidth,height:win.innerHeight,x:win.scrollX,y:win.scrollY,windowWidth:win.innerWidth,windowHeight:win.innerHeight,scrollX:win.scrollX,scrollY:win.scrollY,useCORS:true,allowTaint:false,imageTimeout:3000,ignoreElements:el=>el.id==='zy-subtitle-host',onclone:()=>{if(signal?.aborted)throw new DOMException('Cancelled','AbortError');}});
+ const pending=html2canvas(doc.documentElement,{logging:false,scale:Math.min(1,1600/Math.max(win.innerWidth,win.innerHeight)),width:win.innerWidth,height:win.innerHeight,x:win.scrollX,y:win.scrollY,windowWidth:win.innerWidth,windowHeight:win.innerHeight,scrollX:win.scrollX,scrollY:win.scrollY,useCORS:true,allowTaint:false,imageTimeout:600,ignoreElements:el=>el.id==='zy-subtitle-host',onclone:()=>{if(signal?.aborted)throw new DOMException('Cancelled','AbortError');}});
  const frame=[...doc.querySelectorAll('iframe.html2canvas-container')].find(el=>!existing.has(el));
  const cleanup=()=>frame?.remove();signal?.addEventListener('abort',cleanup,{once:true});
  let canvas;try{canvas=await pending;}finally{signal?.removeEventListener('abort',cleanup);cleanup();}
