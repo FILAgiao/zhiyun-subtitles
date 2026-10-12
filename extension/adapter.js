@@ -25,7 +25,24 @@ function extensionRequest(o){
  port.postMessage({url:o.url,method:o.method||'GET',headers:o.headers||{},data:o.data,timeout:o.timeout});
  return {abort};
 }
+function captureExtensionTab(signal){
+ return new Promise((resolve,reject)=>{
+  let finished=false;
+  const finish=(error,value)=>{if(finished)return;finished=true;clearTimeout(timer);signal?.removeEventListener('abort',abort);error?reject(error):resolve(value);};
+  const abort=()=>finish(new DOMException('Cancelled','AbortError'));
+  const timer=setTimeout(()=>finish(Error('原生截图超时，请重试。')),6000);
+  if(signal?.aborted){abort();return;}signal?.addEventListener('abort',abort,{once:true});
+  try{chrome.runtime.sendMessage({type:'zy-capture-visible'},response=>{
+   const error=chrome.runtime.lastError;
+   if(error)finish(Error('扩展截图不可用，请重新加载扩展。'));
+   else if(!response?.ok)finish(Error(response?.error||'原生截图不可用。'));
+   else if(typeof response.data!=='string'||!response.data.startsWith('data:image/png;base64,'))finish(Error('原生截图未返回图片。'));
+   else finish(null,response.data);
+  });}catch(e){finish(e);}
+ });
+}
 async function startExtension(run){
+ globalThis.ZYNativeCapture={capture:captureExtensionTab};
  globalThis.ZY_CLIENT_TYPE='chrome-extension';
  const saved=await chrome.storage.local.get(null);let pending=Promise.resolve();
  const GM_getValue=(key,fallback)=>Object.hasOwn(saved,key)?saved[key]:fallback;
@@ -36,6 +53,7 @@ async function startExtension(run){
  chrome.storage.onChanged.addListener((changes,area)=>{if(area==='local')for(const [key,value] of Object.entries(changes)){if(Object.hasOwn(value,'newValue'))saved[key]=value.newValue;else delete saved[key];}});
  chrome.runtime.onMessage.addListener((m,sender)=>{
   if(sender.id!==chrome.runtime.id)return;const shadow=document.getElementById('zy-subtitle-host')?.shadowRoot;if(!shadow)return;
+  if(m.type==='zy-capture-page'){(shadow.getElementById('web-page-ask')||shadow.getElementById('ai-screenshot'))?.click();}
   if(m.type==='zy-open'){const panel=shadow.getElementById('panel');if(panel)panel.hidden=false;const compact=shadow.getElementById('compact');if(compact)compact.hidden=true;shadow.getElementById('web-settings-open')?.click();shadow.getElementById('account-open')?.click();}
   if(m.type==='zy-ask'&&typeof m.text==='string'&&m.text.trim()){
    const panel=shadow.getElementById('ai-learning'),question=shadow.getElementById('ai-question');if(!panel||!question)return;panel.hidden=false;question.value='请解释以下选中文字：\n'+m.text.slice(0,4000);question.focus();shadow.getElementById('ai-compose')?.dispatchEvent(new Event('submit',{bubbles:true,cancelable:true}));

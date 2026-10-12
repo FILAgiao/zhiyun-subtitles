@@ -14,7 +14,29 @@ function allowedRequest(o){
  return {url:u.href,method,headers,body:method==='POST'?o.data:undefined,credentials:school?'include':'omit',redirect:'error',cache:'no-store'};
 }
 function toBase64(bytes){let raw='';for(let i=0;i<bytes.length;i+=8192)raw+=String.fromCharCode(...bytes.subarray(i,i+8192));return btoa(raw);}
+// Serialize captures per window to stay within Chromium's two-captures/second limit.
+const captureQueues=new Map(),captureTimes=new Map();
+async function captureSenderTab(api,sender){
+ if(sender?.id!==api.runtime.id||sender.frameId!==0||!Number.isInteger(sender.tab?.id)||!/^https?:\/\//.test(sender.url||''))throw Error('Screenshot request denied');
+ const id=sender.tab.id,windowId=sender.tab.windowId;
+ const previous=captureQueues.get(windowId)||Promise.resolve();
+ const pending=previous.catch(()=>{}).then(async()=>{
+  const delay=550-(Date.now()-(captureTimes.get(windowId)||0));if(delay>0)await new Promise(resolve=>setTimeout(resolve,delay));
+  const tab=await api.tabs.get(id);if(!tab.active||tab.windowId!==windowId||!/^https?:\/\//.test(tab.url||''))throw Error('请回到要截图的标签页后重试。');
+  captureTimes.set(windowId,Date.now());
+  const data=await api.tabs.captureVisibleTab(windowId,{format:'png'});
+  const current=await api.tabs.get(id);if(!current.active||current.windowId!==windowId||current.url!==tab.url)throw Error('截图期间切换了标签页，请重试。');
+  if(typeof data!=='string'||!data.startsWith('data:image/png;base64,'))throw Error('浏览器截图未返回图片。');
+  return data;
+ });
+ captureQueues.set(windowId,pending);
+ try{return await pending;}finally{if(captureQueues.get(windowId)===pending)captureQueues.delete(windowId);}
+}
 if(typeof chrome!=='undefined'){
+ chrome.runtime.onMessage.addListener((message,sender,respond)=>{
+  if(message?.type!=='zy-capture-visible')return;
+  captureSenderTab(chrome,sender).then(data=>respond({ok:true,data}),error=>respond({ok:false,error:error.message||'浏览器原生截图暂不可用。'}));return true;
+ });
  chrome.runtime.onConnect.addListener(port=>{
   if(port.name!=='zy-request'||port.sender?.id!==chrome.runtime.id||!/^https?:\/\//.test(port.sender?.url||'')){port.disconnect();return;}
   const controller=new AbortController();let started=false,timer;
@@ -33,8 +55,9 @@ if(typeof chrome!=='undefined'){
    }catch(e){post({type:controller.signal.aborted?'abort':'error'});}finally{clearTimeout(timer);}
   });
  });
- chrome.action.onClicked.addListener(async tab=>{if(!tab.id||!/^https?:\/\//.test(tab.url||''))return;try{await chrome.tabs.sendMessage(tab.id,{type:'zy-open'});}catch(_){}});
+ chrome.action.onClicked.addListener(async tab=>{if(!tab.id||!/^https?:\/\//.test(tab.url||''))return;try{await chrome.tabs.sendMessage(tab.id,{type:'zy-capture-page'});}catch(_){}});
+ chrome.commands.onCommand.addListener(async command=>{if(command!=='zy-capture-page')return;const [tab]=await chrome.tabs.query({active:true,currentWindow:true});if(tab?.id&&/^https?:\/\//.test(tab.url||''))try{await chrome.tabs.sendMessage(tab.id,{type:'zy-capture-page'});}catch(_){}});
  chrome.runtime.onInstalled.addListener(()=>chrome.contextMenus.create({id:'zy-ask',title:'问上课爽',contexts:['selection'],documentUrlPatterns:['http://*/*','https://*/*']}));
  chrome.contextMenus.onClicked.addListener(async(info,tab)=>{if(info.menuItemId==='zy-ask'&&tab?.id)try{await chrome.tabs.sendMessage(tab.id,{type:'zy-ask',text:String(info.selectionText||'').slice(0,4000)});}catch(_){}});
 }
-if(typeof module!=='undefined')module.exports={allowedRequest};
+if(typeof module!=='undefined')module.exports={allowedRequest,captureSenderTab};
