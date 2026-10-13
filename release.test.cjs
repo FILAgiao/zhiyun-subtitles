@@ -7,6 +7,7 @@ const field=name=>metadata.match(new RegExp('^// @'+name+'\\s+(.+)$','m'))?.[1].
 assert.equal(field('name'),'浙大上课爽');
 assert.equal(field('version'),JSON.parse(fs.readFileSync('package.json','utf8')).version);
 assert.equal(field('namespace'),'zhiyunzimu.local');
+assert.match(metadata,/^\/\/ @connect\s+cmc\.zju\.edu\.cn$/m,'School PPT reads need the same domain permission as the image reader');
 assert.equal(field('updateURL'),'https://raw.githubusercontent.com/FILAgiao/zhiyun-subtitles/main/zhiyun-subtitles.meta.js');
 assert.equal(field('downloadURL'),'https://raw.githubusercontent.com/FILAgiao/zhiyun-subtitles/main/zhiyun-subtitles.user.js');
 assert.match(field('description'),/网课不硬扛，浙大上课爽！/);

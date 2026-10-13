@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         浙大上课爽
 // @namespace    zhiyunzimu.local
-// @version      0.20.38
+// @version      0.20.42
 // @description  网课不硬扛，浙大上课爽！智云课堂同步字幕、PPT 讲解与本机缓存。
 // @match        https://*/*
 // @match        http://*/*
@@ -16,6 +16,7 @@
 // @connect      video.cmc.zju.edu.cn
 // @connect      vod.cmc.zju.edu.cn
 // @connect      interactivemeta.cmc.zju.edu.cn
+// @connect      cmc.zju.edu.cn
 // @homepageURL  https://github.com/FILAgiao/zhiyun-subtitles
 // @supportURL   https://github.com/FILAgiao/zhiyun-subtitles/issues
 // @updateURL    https://raw.githubusercontent.com/FILAgiao/zhiyun-subtitles/main/zhiyun-subtitles.meta.js

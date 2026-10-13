@@ -1,6 +1,6 @@
 {
   "name": "zhiyun-subtitles",
-  "version": "0.20.38",
+  "version": "0.20.42",
   "private": true,
   "description": "浙大上课爽：网课不硬扛，浙大上课爽！同步字幕、PPT 讲解与本机缓存。",
   "scripts": {
@@ -22,11 +22,12 @@
     "test:appearance": "node appearance-ui.test.cjs",
     "test:caption": "node caption-controls-ui.test.cjs",
     "test:ai:placement": "node ai-placement-ui.test.cjs",
+    "test:ai:resume": "node ai-resume-drag-ui.test.cjs",
     "test:web:launcher": "node web-launcher-ui.test.cjs && node web-launcher-interactions-ui.test.cjs",
     "build:extension": "node build-extension.cjs",
     "test:extension": "node --test extension.test.cjs extension-bridge.test.cjs && node extension-ui.test.cjs && node extension-screenshot-ui.test.cjs",
     "test:fullscreen": "node classroom-fullscreen-ui.test.cjs",
-    "test:screenshot": "node screenshot-gesture-ui.test.cjs && node screenshot-session-ui.test.cjs && node screenshot-repeat-ui.test.cjs && node ai-actions-ui.test.cjs",
+    "test:screenshot": "node classroom-screenshot-ui.test.cjs && node classroom-ppt-integration-ui.test.cjs && node ppt-image-ui.test.cjs && node screenshot-gesture-ui.test.cjs && node screenshot-session-ui.test.cjs && node screenshot-repeat-ui.test.cjs && node ai-actions-ui.test.cjs",
     "test:ai:scroll": "node ai-stream-scroll-ui.test.cjs",
     "test:selection": "node selection-lifecycle-ui.test.cjs"
   },

@@ -18,18 +18,31 @@ function mount({shadow,host,getVideo,getLocal,getCues,getCourse,getClock,getSeek
  progress.onpointerdown=()=>{seeking=true;};progress.oninput=()=>{seeking=true;control('zy-play-time').textContent=clock(progress.value)+' / '+clock(getVideo()?.duration);};progress.onchange=()=>{seeking=false;seek(Number(progress.value));};window.addEventListener('pointerup',()=>{seeking=false;});window.addEventListener('pointercancel',()=>{seeking=false;});
  control('zy-play-volume').oninput=e=>{const video=getVideo();if(video){video.volume=Number(e.target.value);video.muted=false;}};control('zy-play-mute').onclick=()=>{const video=getVideo();if(video)video.muted=!video.muted;};control('zy-play-rate').onchange=e=>{const video=getVideo();if(video)video.playbackRate=Number(e.target.value);};
  function updateTransport(video,cached){transport.hidden=!video||!cached;if(transport.hidden)return;const duration=Number.isFinite(video.duration)?Math.max(0,video.duration):0;progress.max=String(duration);progress.disabled=!duration;if(!seeking){progress.value=String(Math.max(0,Math.min(duration,video.currentTime||0)));setText(control('zy-play-time'),clock(video.currentTime)+' / '+clock(duration));}setText(control('zy-play-toggle'),video.paused?'▶':'Ⅱ');control('zy-play-toggle').setAttribute('aria-label',video.paused?'播放':'暂停');control('zy-play-volume').value=String(video.volume);setText(control('zy-play-mute'),video.muted?'取消静音':'音量');control('zy-play-rate').value=String(video.playbackRate);}
- let current=null,controlRoot=null,extraControlRoot=null,method=null,ownMethod=null,nativeFsRecovery=false,signature='',following=true,lastCue=null;
+ let current=null,controlRoot=null,extraControlRoot=null,method=null,ownMethod=null,nativeFsRecovery=false,signature='',following=true,lastCue=null,fullscreenHome=null,destroyed=false;
  const nativeOwners=new Map();
  function playerRoot(video){return video?.parentElement?.closest('.cmc-main,.video-js,.prism-player,.dplayer,.xgplayer,.jwplayer,#player,.video-player,.player-container')||video?.parentElement;}
- async function enterFullscreen(){const video=getVideo();if(!video)throw Error('请先打开课程视频');const container=playerRoot(video);if(!container?.requestFullscreen)throw Error('浏览器不支持课堂全屏');container.setAttribute('data-zy-classroom-fullscreen','true');try{await container.requestFullscreen();}catch(error){container.removeAttribute('data-zy-classroom-fullscreen');throw error;}$('fullscreen-notice').hidden=true;}
+ function restoreFullscreenHost(){
+  if(!fullscreenHome)return;const {parent,next}=fullscreenHome;fullscreenHome=null;
+  const target=parent?.isConnected?parent:document.body;
+  if(target&&host.parentNode!==target)target.insertBefore(host,next?.parentNode===target?next:null);
+ }
+ function moveFullscreenHost(fs){
+  if(!fs||fs.tagName==='VIDEO'){restoreFullscreenHost();return;}
+  if(fs===host||host.contains(fs)||fs.contains(host))return;
+  if(!fullscreenHome)fullscreenHome={parent:host.parentNode,next:host.nextSibling};
+  fs.append(host);
+ }
+ async function enterFullscreen(){if(destroyed)throw Error('课堂助手已关闭');const video=getVideo();if(!video)throw Error('请先打开课程视频');const container=playerRoot(video);if(!container?.requestFullscreen)throw Error('浏览器不支持课堂全屏');container.setAttribute('data-zy-classroom-fullscreen','true');try{await container.requestFullscreen();}catch(error){container.removeAttribute('data-zy-classroom-fullscreen');if(!document.fullscreenElement)restoreFullscreenHost();throw error;}if(destroyed){container.removeAttribute('data-zy-classroom-fullscreen');return;}$('fullscreen-notice').hidden=true;}
  async function toggleFullscreen(){try{if(document.fullscreenElement)await document.exitFullscreen();else await enterFullscreen();}catch(e){$('slides-status').textContent='全屏未完成：'+e.message;}}
  $('focus-fullscreen').onclick=toggleFullscreen;
  $('fullscreen-recover').onclick=async()=>{try{await enterFullscreen();}catch{ $('slides-status').textContent='请点击“专注全屏”进入课堂全屏。';}};
  // Pointer clicks should not leave a stale cache action owning the space bar.
  window.addEventListener('pointerup',event=>{const target=event.composedPath()[0]?.closest?.('button,summary');if(!target||!event.composedPath().includes(host))return;setTimeout(()=>{if(shadow.activeElement===target)target.blur();},0);},true);
  const onFs=async()=>{
+  if(destroyed)return;
   if(document.fullscreenElement?.tagName==='VIDEO'&&!nativeFsRecovery){nativeFsRecovery=true;try{await document.exitFullscreen();await enterFullscreen();}catch{$('fullscreen-notice').hidden=false;}finally{nativeFsRecovery=false;}}
-  const fs=document.fullscreenElement;for(const el of document.querySelectorAll('[data-zy-classroom-fullscreen]'))if(el!==fs)el.removeAttribute('data-zy-classroom-fullscreen');if(fs&&fs.tagName!=='VIDEO')fs.append(host);update();
+  if(destroyed)return;
+  const fs=document.fullscreenElement;for(const el of document.querySelectorAll('[data-zy-classroom-fullscreen]'))if(el!==fs)el.removeAttribute('data-zy-classroom-fullscreen');moveFullscreenHost(fs);update();
  };
  document.addEventListener('fullscreenchange',onFs);
  // Capture website fullscreen buttons before handlers that fullscreen only the video.
@@ -91,7 +104,7 @@ function mount({shadow,host,getVideo,getLocal,getCues,getCourse,getClock,getSeek
   $('cache-transport').hidden=true;
   updateTranscript();
  }
- return{update,toggleFullscreen,enterFullscreen};
+ return{update,toggleFullscreen,enterFullscreen,destroy(){destroyed=true;document.removeEventListener('fullscreenchange',onFs);restoreFullscreenHost();for(const el of document.querySelectorAll('[data-zy-classroom-fullscreen]'))el.removeAttribute('data-zy-classroom-fullscreen');}};
 }
 if(typeof module!=='undefined'&&module.exports)module.exports={isEditing};else root.ZYPlayerInteractions={mount};
 })(typeof globalThis!=='undefined'?globalThis:this);
