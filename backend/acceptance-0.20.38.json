@@ -1,0 +1,18 @@
+{
+  "version": "0.20.38",
+  "backup": "/opt/zhiyun-gateway/backend/.rollback-userscript-0.20.38-20261013T122506Z",
+  "public_files": {
+    "install.user.js": {
+      "version": "0.20.38",
+      "sha256": "cde6584553236e8f814a3b4d1dabb3cf932327519ece8335ed8af95465484f30",
+      "bytes": 1410912
+    },
+    "install.meta.js": {
+      "version": "0.20.38",
+      "sha256": "596fa17817aaed31b69476d601d91ac69098cc7c9cac1d99b104ac2b9df528ea",
+      "bytes": 1026
+    }
+  },
+  "health": "ok",
+  "url": "https://47.77.182.216.sslip.io/gateway/install.user.js"
+}

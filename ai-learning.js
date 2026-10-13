@@ -549,11 +549,13 @@
     listen(doc,'mousedown',middle,true);listen(doc,'auxclick',e=>{if(middleAllowed(e))e.preventDefault();},true);
     let selectionMenu=null;
     const closeSelection=()=>{selectionMenu?.remove();selectionMenu=null;};cleanups.push(closeSelection);
+    listen(doc,'visibilitychange',()=>{if(doc.visibilityState==='hidden')closeSelection();});
+    listen(win,'pagehide',closeSelection);
     listen(doc,'pointerdown',e=>{if(!e.composedPath().includes(selectionMenu))closeSelection();},true);
     listen(doc,'keydown',e=>{if(e.key==='Escape')closeSelection();},true);listen(doc,'scroll',closeSelection,true);
     listen(doc,'contextmenu',closeSelection,true);
     listen(doc,'pointerup',e=>{
-      if(e.button!==0||modified(e))return;const target=e.composedPath?.()[0]||e.target;if(target?.closest?.('#ai-selection-menu'))return;closeSelection();
+      if(doc.visibilityState==='hidden'||e.button!==0||modified(e))return;const target=e.composedPath?.()[0]||e.target;if(target?.closest?.('#ai-selection-menu'))return;closeSelection();
       if(target?.closest?.('input,textarea,select,[contenteditable],#ai-learning,#ai-crop,#settings-dialog'))return;
       const selection=win.getSelection(),text=String(selection||'').trim();if(!text||text.length>4000||!selection.rangeCount)return;
       const range=selection.getRangeAt(0);if(shadow.contains(range.startContainer)||shadow.contains(range.endContainer))return;
