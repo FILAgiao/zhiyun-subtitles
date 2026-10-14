@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         浙大上课爽
 // @namespace    zhiyunzimu.local
-// @version      0.20.43
+// @version      0.20.44
 // @description  网课不硬扛，浙大上课爽！智云课堂同步字幕、PPT 讲解与本机缓存。
 // @match        https://*/*
 // @match        http://*/*
@@ -713,6 +713,44 @@ var ZYCardRender=(()=>{var VQ=Object.create;var fr=Object.defineProperty;var NQ=
 
 globalThis.ZYCardRender=ZYCardRender;
 
+/* Native screenshot client for the temporary userscript test bridge.
+ * The shipping extension calls its own isolated adapter directly. */
+(function(root){
+'use strict';
+function create(win){
+ const doc=win.document,protocolVersion=1,requestEvent='zy-userscript-capture-request',responseEvent='zy-userscript-capture-response';
+ const pending=new Map();let activation=null;
+ const id=()=>win.crypto?.randomUUID?.()||Date.now().toString(36)+'-'+Math.random().toString(36).slice(2)+'-'+Math.random().toString(36).slice(2);
+ const error=code=>{const messages={BRIDGE_NO_GESTURE:'请用中键拖框或点击截图按钮重试。',BRIDGE_NOT_ACTIVE:'请回到需要截图的标签页后重试。',BRIDGE_BUSY:'上一张截图还在处理中，请稍后重试。',NATIVE_CAPTURE_FAILED:'原生截图失败，请检查截图扩展的网站访问权限后重试。'};const e=new Error(messages[code]||'截图测试扩展未连接，请加载扩展并刷新页面。');e.code=code;return e;};
+ const send=message=>doc.dispatchEvent(new win.CustomEvent(requestEvent,{detail:JSON.stringify({protocolVersion,...message})}));
+ function receive(event){
+  if(typeof event.detail!=='string'||event.detail.length>64001000)return;
+  let m;try{m=JSON.parse(event.detail);}catch(_){return;}
+  if(m?.protocolVersion!==protocolVersion)return;
+  if(m.type==='activation'&&typeof m.activationId==='string'&&Number.isFinite(m.expiresAt)&&m.expiresAt>Date.now()&&m.expiresAt<=Date.now()+3000){activation={id:m.activationId,expiresAt:m.expiresAt};return;}
+  const job=pending.get(m.requestId);if(!job||job.type!==m.type||job.activationId&&job.activationId!==m.activationId)return;
+  if(m.type==='hello'){job.finish(null,m.ok===true&&m.available===true);return;}
+  if(!m.ok){job.finish(error(m.errorCode));return;}
+  if(typeof m.data!=='string'||!m.data.startsWith('data:image/png;base64,')||m.data.length>64000000){job.finish(error('NATIVE_CAPTURE_FAILED'));return;}
+  job.finish(null,m.data);
+ }
+ doc.addEventListener(responseEvent,receive,true);
+ function exchange(type,signal,grant){return new Promise((resolve,reject)=>{
+  const requestId=id(),job={type,activationId:grant?.id};let timer;
+  const cancel=()=>{if(type==='capture')send({type:'cancel',requestId,activationId:grant.id});};
+  job.finish=(e,value)=>{if(pending.get(requestId)!==job)return;pending.delete(requestId);win.clearTimeout(timer);signal?.removeEventListener('abort',abort);e?reject(e):resolve(value);};
+  const abort=()=>{cancel();job.finish(new win.DOMException('Cancelled','AbortError'));};
+  pending.set(requestId,job);if(signal?.aborted){abort();return;}signal?.addEventListener('abort',abort,{once:true});
+  timer=win.setTimeout(()=>{cancel();job.finish(type==='hello'?null:error('NATIVE_CAPTURE_FAILED'),false);},type==='hello'?250:6000);
+  send({type,requestId,...(grant?{activationId:grant.id}:{})});
+ });}
+ function revoke(){activation=null;for(const job of pending.values())if(job.type==='capture')job.finish(error('BRIDGE_NOT_ACTIVE'));}
+ win.addEventListener('blur',revoke);win.addEventListener('pagehide',revoke);doc.addEventListener('visibilitychange',()=>{if(doc.visibilityState!=='visible')revoke();});
+ return {available:signal=>exchange('hello',signal),capture:signal=>{if(signal?.aborted)return Promise.reject(new win.DOMException('Cancelled','AbortError'));const grant=activation;activation=null;if(!grant||grant.expiresAt<Date.now())return Promise.reject(error('BRIDGE_NO_GESTURE'));return exchange('capture',signal,grant);}};
+}
+if(typeof module==='object'&&module.exports)module.exports={create};else root.ZYCaptureBridge=create(root);
+})(globalThis);
+
 /* 浙大上课爽 · AI learning assistant. Bundled locally into the userscript. */
 (function (root, factory) {
   const api = factory();
@@ -950,7 +988,7 @@ globalThis.ZYCardRender=ZYCardRender;
     const {shadow,request,getApiKey=()=>'',getCapabilities=()=>({webSearch:true}),getCourseId=()=>'',onOpenAccount=()=>onOpenSettings('connection'),prepareSlide=()=>{},getSlide=()=>null,getContext=()=>'',getCourseTitle=()=>'',getCaptureTarget=()=>null,getValue=(_,d)=>d,setValue=()=>{},onRequireLogin=()=>{},onOpenSettings=()=>{}}=options;
     if(!shadow || typeof request!=='function')throw new Error('AI 助手缺少 shadow 或 request');
     const doc=shadow.ownerDocument,win=doc.defaultView;
-    let settings=settingsOf(getValue(STORAGE_KEY,DEFAULTS)),history=[],lastAnswer=null,recentSlides=[],lastSlideKey='',pendingImage=null,controller=null,destroyed=false,cleanupCapture=null,requestSerial=0,slideContextEnabled=settings.followSlides,captureStream=null,captureVideo=null,captureEndCleanup=null,capturePending=false,captureHideCount=0,captureHiddenElements=[];
+    let settings=settingsOf(getValue(STORAGE_KEY,DEFAULTS)),history=[],lastAnswer=null,recentSlides=[],lastSlideKey='',pendingImage=null,controller=null,destroyed=false,cleanupCapture=null,requestSerial=0,slideContextEnabled=settings.followSlides,capturePending=false,captureHideCount=0,captureHiddenElements=[];
     let activeImageDismiss=null,flushPendingReply=null;
     const cleanups=[()=>activeImageDismiss?.()];if(globalThis.ZYMath)cleanups.push(globalThis.ZYMath.install(shadow));
     function listen(el,event,fn,opts){el?.addEventListener(event,fn,opts);cleanups.push(()=>el?.removeEventListener(event,fn,opts));}
@@ -1133,7 +1171,7 @@ globalThis.ZYCardRender=ZYCardRender;
     async function explainSlide(){const before=requestSerial;let slide=getSlide();if(!String(getApiKey()||'').trim()){onRequireLogin();return;}if(!slide){await prepareSlide();slide=getSlide();}if(destroyed||before!==requestSerial)return;slideContextEnabled=settings.followSlides;if(!slide){open();status('请先打开本课程的 PPT，再点击讲解本页。');return;}await send('请讲解当前这页 PPT，结合老师附近的字幕说明重点和我需要掌握的内容。',{slide:slide||{},image:null});}
     function clear(){followLog=true;jumpLatest.hidden=true;activeImageDismiss?.();resetCardChoices();selectedExcerpt='';persist();stop();conversationId='';conversationSource='文字提问';conversationCourse='';conversationOrigin='';lastAnswer=null;$('ai-save-card').disabled=true;$('ai-card-row').hidden=true;cleanupCapture?.();panel.querySelector('#ai-question').value='';history=[];recentSlides=[];lastSlideKey='';slideContextEnabled=false;$('ai-log').replaceChildren();attach(null);greeting();badge();status('已开始新对话，旧截图与 PPT 上下文已清空。');persist();}
     const captureNotice=make('div',{id:'ai-capture-session',role:'status'});captureNotice.hidden=true;captureNotice.innerHTML='<span>正在截取当前页面…</span><button type="button" id="ai-capture-session-stop">取消截图</button>';shadow.append(captureNotice);
-    function stopCaptureSession(){captureEndCleanup?.();captureEndCleanup=null;const stream=captureStream;captureStream=null;const video=captureVideo;captureVideo=null;video?.pause();if(video)video.srcObject=null;stream?.getTracks().forEach(t=>t.stop());captureNotice.hidden=true;}
+    function hideCaptureNotice(){captureNotice.hidden=true;}
     function captureWait(promise,signal,timeout=12000){
       return new Promise((resolve,reject)=>{
         let timer;const finish=(error,value)=>{clearTimeout(timer);signal?.removeEventListener('abort',abort);error?reject(error):resolve(value);};
@@ -1144,45 +1182,10 @@ globalThis.ZYCardRender=ZYCardRender;
         Promise.resolve(promise).then(value=>finish(null,value),finish);
       });
     }
-    async function captureSource(signal){
-      stopCaptureSession();captureNotice.querySelector('span').textContent='请选择当前标签页进行截图…';captureNotice.hidden=false;
-      if(!win.navigator.mediaDevices?.getDisplayMedia)throw Error('此浏览器不支持页面截图，请使用系统截图并粘贴。');
-      const pending=win.navigator.mediaDevices.getDisplayMedia({video:{displaySurface:'browser'},audio:false,preferCurrentTab:true,selfBrowserSurface:'include'});
-      let expired=false;
-      pending.then(stream=>{if(expired||signal?.aborted||destroyed)stream.getTracks().forEach(t=>t.stop());},()=>{});
-      let stream;
-      try{stream=await captureWait(pending,signal,30000);}catch(e){expired=true;throw e;}
-      const video=make('video'),track=stream.getVideoTracks()[0];
-      const release=()=>{if(captureStream===stream)stopCaptureSession();else{video.pause();video.srcObject=null;stream.getTracks().forEach(t=>t.stop());}};
-      signal?.addEventListener('abort',release,{once:true});
-      try{
-        if(signal?.aborted||destroyed)throw abortError();
-        if(track?.getSettings?.().displaySurface&&track.getSettings().displaySurface!=='browser')throw Error('请选择当前浏览器标签页，以便选框与课程位置一致。');
-        captureStream=stream;captureVideo=video;video.muted=true;video.srcObject=stream;
-        await captureWait(new Promise((resolve,reject)=>{
-          const done=()=>{if(video.videoWidth&&video.readyState>=2)finish();};
-          const ended=()=>finish(Error('截图共享已停止，可以重新截图。'));
-          const fail=()=>finish(Error('截图画面未就绪，请重试。'));
-          const abort=()=>finish(abortError());
-          const timer=setTimeout(fail,10000);
-          function finish(error){clearTimeout(timer);video.removeEventListener('loadeddata',done);video.removeEventListener('resize',done);video.removeEventListener('error',fail);track?.removeEventListener('ended',ended);signal?.removeEventListener('abort',abort);error?reject(error):resolve();}
-          video.addEventListener('loadeddata',done);video.addEventListener('resize',done);video.addEventListener('error',fail);track?.addEventListener('ended',ended,{once:true});signal?.addEventListener('abort',abort,{once:true});
-          video.play().then(done,fail);done();
-        }),signal);
-        const ended=()=>stopCaptureSession();track?.addEventListener('ended',ended,{once:true});captureEndCleanup=()=>track?.removeEventListener('ended',ended);
-        return video;
-      }catch(e){release();throw e;}finally{signal?.removeEventListener('abort',release);}
-    }
     function capturePaint(signal){return new Promise((resolve,reject)=>{
       let frame,timer;const finish=error=>{win.cancelAnimationFrame(frame);win.clearTimeout(timer);signal.removeEventListener('abort',abort);error?reject(error):resolve();};
       const abort=()=>finish(abortError());if(signal.aborted){abort();return;}signal.addEventListener('abort',abort,{once:true});
       frame=win.requestAnimationFrame(()=>{win.clearTimeout(timer);timer=win.setTimeout(()=>finish(),0);});timer=win.setTimeout(()=>finish(),60);
-    });}
-    function captureFrame(video,signal){return new Promise((resolve,reject)=>{
-      let id,timer;const finish=error=>{win.clearTimeout(timer);if(id!==undefined)video.cancelVideoFrameCallback?.(id);signal.removeEventListener('abort',abort);error?reject(error):resolve();};
-      const abort=()=>finish(abortError());if(signal.aborted){abort();return;}signal.addEventListener('abort',abort,{once:true});
-      if(video.requestVideoFrameCallback){id=video.requestVideoFrameCallback(()=>finish());timer=win.setTimeout(()=>finish(Error('截图画面未更新，请重试。')),3000);}
-      else timer=win.setTimeout(()=>finish(),120);
     });}
     const captureMask=make('style');captureMask.textContent='[data-zy-capture-hidden],[data-zy-capture-hidden] *{visibility:hidden!important}';shadow.append(captureMask);
     async function withCaptureHidden(signal,read){
@@ -1232,24 +1235,17 @@ globalThis.ZYCardRender=ZYCardRender;
       if(signal.aborted)throw abortError();return canvas.toDataURL('image/jpeg',.9);
     }
     function captureViewport(){return {w:win.innerWidth,h:win.innerHeight};}
-    async function settleCaptureLayout(signal){
-      const began=win.performance.now();let previous='',stable=0;
-      // Stopping sharing removes browser chrome asynchronously; allow the classroom's
-      // 100 ms layout tick to run before creating a preview in the new viewport.
-      do{await capturePaint(signal);const box=mediaBounds(getSlide()?.viewportElement),key=JSON.stringify([win.innerWidth,win.innerHeight,box]);stable=key===previous?stable+1:0;previous=key;}while(win.performance.now()-began<250&&(win.performance.now()-began<100||stable<2));
-    }
-    async function captureSnapshot(signal,region){
-      try{const local=await captureClassroom(signal,region);if(local)return {src:local,viewport:captureViewport()};}catch(e){if(signal.aborted||e.name==='AbortError')throw e;}
-      if(globalThis.ZYNativeCapture?.capture){
-        try{return await withCaptureHidden(signal,async()=>{const viewport=captureViewport();return {src:await imageData(await captureWait(globalThis.ZYNativeCapture.capture(signal),signal),null,signal),viewport};});}
-        catch(e){if(signal.aborted||e.name==='AbortError')throw e;}
+    async function captureSnapshot(signal,region,directSlide=null){
+      let native=globalThis.ZYNativeCapture;
+      if(!native?.capture&&globalThis.ZYCaptureBridge?.available&&await globalThis.ZYCaptureBridge.available(signal))native=globalThis.ZYCaptureBridge;
+      if(native?.capture){
+        try{return await withCaptureHidden(signal,async()=>{const viewport=captureViewport();return {src:await imageData(await captureWait(native.capture(signal),signal),null,signal),viewport};});}
+        catch(e){if(signal.aborted||e.name==='AbortError')throw e;const error=new Error(e.code==='BRIDGE_NO_GESTURE'||e.code==='BRIDGE_NOT_ACTIVE'?e.message:'原生截图失败，请检查扩展的网站访问权限或重新加载扩展后重试；也可粘贴系统截图。');error.code='NATIVE_CAPTURE_FAILED';throw error;}
       }
-      // One frame per permission. Release every track before annotation or AI UI.
-      let source;
-      try{
-        source=await captureSource(signal);
-        return await withCaptureHidden(signal,async()=>{await captureFrame(source,signal);const viewport=captureViewport();return {src:await imageData('',source,signal),viewport,shared:true};});
-      }finally{if(source&&captureVideo===source)stopCaptureSession();}
+      // A plain userscript can still read an accessible PPT or media element.
+      if(directSlide)return {src:await slideImage(directSlide,signal),viewport:captureViewport()};
+      const local=await captureClassroom(signal,region);if(local)return {src:local,viewport:captureViewport()};
+      const error=new Error('当前页面需要浏览器原生截图。测试油猴时请加载截图测试辅助扩展并刷新页面，或粘贴系统截图。');error.code='NATIVE_CAPTURE_UNAVAILABLE';throw error;
     }
     // Keep DOM cloning, image encoding and annotation controls out of the drag gesture.
     async function selectCaptureRegion(initial,signal){
@@ -1282,8 +1278,7 @@ globalThis.ZYCardRender=ZYCardRender;
         if(own.signal.aborted||serial!==requestSerial||destroyed)return;
         setBusy(true);captureNotice.querySelector('span').textContent='正在截取当前页面…';captureNotice.hidden=false;
         captureNotice.querySelector('button').textContent='取消截图';
-        const snapshot=direct&&slide?{src:await slideImage(slide,own.signal),viewport:captureViewport()}:await captureSnapshot(own.signal,gesture);
-        if(snapshot.shared)await settleCaptureLayout(own.signal);
+        const snapshot=await captureSnapshot(own.signal,gesture,direct?slide:null);
         const src=snapshot.src;
         if(serial!==requestSerial||destroyed)return;
         if(direct){
@@ -1291,8 +1286,8 @@ globalThis.ZYCardRender=ZYCardRender;
           conversationSource='截图提问';attach(src);open();status(slide?'本页 PPT 已添加，可补充问题后发送。':'当前页面截图已添加，可补充问题后发送。');
         }else showCrop(src,gesture,wholePage&&!gesture?.slideOnly,snapshot.viewport);
        }catch(e){own.abort();if(serial===requestSerial&&e.name!=='AbortError'){
-        open();status(e.name==='NotAllowedError'?'浏览器截图未获授权，请重新点击并选择当前标签页；也可用系统截图后粘贴。':e.name==='InvalidStateError'?'浏览器需要一次点击授权当前标签页，请点击下方按钮。':e.message||'截图失败，请重试。');
-        if(e.name==='InvalidStateError'){const retry=make('button',{id:'ai-capture-retry',type:'button',text:'授权并截图'});retry.onclick=()=>startCapture(null,wholePage,direct);$('ai-status').append(retry);}
+        open();status(e.message||'截图失败，请重试。');
+        if(e.code==='NATIVE_CAPTURE_FAILED'){const retry=make('button',{id:'ai-capture-retry',type:'button',text:'重试截图'});retry.onclick=()=>startCapture(null,wholePage,direct);$('ai-status').append(retry);}
       }}
       finally{doc.removeEventListener('keydown',cancelKey,true);if(controller===own){capturePending=false;controller=null;setBusy(false);}if(!capturePending)captureNotice.hidden=true;}
     }
@@ -1410,7 +1405,7 @@ globalThis.ZYCardRender=ZYCardRender;
     },true);
     listen(resume,'click',e=>{if(suppressResumeClick&&e.detail!==0){suppressResumeClick=false;e.preventDefault();e.stopPropagation();return;}suppressResumeClick=false;open();});listen($('ai-close'),'click',collapse);listen($('ai-settings-open'),'click',()=>{mountSettings();onOpenSettings('ai');});
     listen($('ai-mode'),'change',()=>{settings.mode=$('ai-mode').value;save();});listen($('ai-stop'),'click',()=>{stop();status('已停止本次讲解。');});listen($('ai-clear'),'click',clear);listen($('ai-save-card'),'click',()=>{if($('ai-card-select-mode').checked&&$('ai-card-options').hidden){$('ai-card-options').hidden=false;panel.classList.add('ai-card-selecting');$('ai-card-hint').textContent='选择逐句分享，或逐字分享后划选文字；再点击分享知识卡';return;}saveKnowledgeCard();});listen($('ai-card-select-mode'),'change',()=>{selectedExcerpt='';$('ai-card-options').hidden=true;panel.classList.remove('ai-card-selecting','ai-card-sentences');updateCardSelection();});listen($('ai-card-sentences'),'click',()=>{panel.classList.add('ai-card-sentences');$('ai-card-hint').textContent='点击对话旁的逐句选择，再分享知识卡';});listen($('ai-card-words'),'click',()=>{panel.classList.remove('ai-card-sentences');$('ai-card-hint').textContent='在对话中划选文字，再分享知识卡';});listen($('ai-remove-image'),'click',()=>attach(null));
-    listen($('ai-slide-action'),'click',explainSlide);listen(captureNotice.querySelector('button'),'click',()=>{stop();stopCaptureSession();cleanupCapture?.();});listen(win,'pagehide',()=>{if(capturePending)stop();cleanupCapture?.();stopCaptureSession();});listen($('ai-compose'),'submit',e=>{e.preventDefault();send($('ai-question').value);});listen(doc,'paste',e=>{const target=e.composedPath?.()[0]||e.target;if(target!==$('ai-question')&&target?.closest?.('input,textarea,[contenteditable]'))return;paste(e);},true);listen($('ai-screenshot'),'click',startCapture);
+    listen($('ai-slide-action'),'click',explainSlide);listen(captureNotice.querySelector('button'),'click',()=>{stop();hideCaptureNotice();cleanupCapture?.();});listen(win,'pagehide',()=>{if(capturePending)stop();cleanupCapture?.();hideCaptureNotice();});listen($('ai-compose'),'submit',e=>{e.preventDefault();send($('ai-question').value);});listen(doc,'paste',e=>{const target=e.composedPath?.()[0]||e.target;if(target!==$('ai-question')&&target?.closest?.('input,textarea,[contenteditable]'))return;paste(e);},true);listen($('ai-screenshot'),'click',startCapture);
     listen($('ai-question'),'keydown',e=>{e.stopPropagation();if(e.key==='Enter'&&!e.shiftKey&&!e.isComposing){e.preventDefault();send(e.currentTarget.value);}});
     for(const [id,fn] of [['ai-open',explainSlide],['slide-explain',explainSlide],['ai-capture',startCapture]])listen(shadow.getElementById(id),'click',fn);
     function mountSettings(container=shadow.getElementById('settings-ai')){
@@ -1432,7 +1427,7 @@ globalThis.ZYCardRender=ZYCardRender;
     }
     greeting();badge();mountSettings();
     restore();clampResume();updateCardSelection();
-    return {open,explainSlide,startCapture,capturePage:()=>startCapture(null,true,true),saveKnowledgeCard,notifySlide,mountSettings,send,resetCourse:clear,close:collapse,switchCourse,getSettings:()=>({...settings}),destroy(){destroyed=true;stopCaptureSession();captureNotice.remove();captureMask.remove();stop();cleanupCapture?.();cleanups.forEach(fn=>fn());panel.remove();resume.remove();questions.remove();shadow.querySelector('#ai-image-viewer')?.remove();shadow.querySelector('#ai-prompt-dialog')?.remove();style.remove();}};
+    return {open,explainSlide,startCapture,capturePage:()=>startCapture(null,true,true),saveKnowledgeCard,notifySlide,mountSettings,send,resetCourse:clear,close:collapse,switchCourse,getSettings:()=>({...settings}),destroy(){destroyed=true;hideCaptureNotice();captureNotice.remove();captureMask.remove();stop();cleanupCapture?.();cleanups.forEach(fn=>fn());panel.remove();resume.remove();questions.remove();shadow.querySelector('#ai-image-viewer')?.remove();shadow.querySelector('#ai-prompt-dialog')?.remove();style.remove();}};
   }
   return {renderMarkdown,selectionSentences,DEFAULTS,MODES,cardText,wrapCardText,renderKnowledgeCard,renderKnowledgeCards,settingsOf,makeBody,textOfResponse,requestResponse,trimHistory,wordAt,validImage,mountLearningAssistant};
 });

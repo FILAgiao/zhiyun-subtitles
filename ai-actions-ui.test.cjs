@@ -7,11 +7,10 @@ const {chromium}=require('playwright');
   await page.setContent('<div id="pane-voice"><span id="text">selected lesson text</span></div><div id="pane-ppt"><canvas id="picture" width="2000" height="1000" style="width:400px;height:200px"></canvas><a href="#"><canvas id="link-image" width="30" height="30"></canvas></a></div><div id="host"></div>');
   await page.addScriptTag({content:(fs.readFileSync('warm-theme.js','utf8')+'\n'+fs.readFileSync('ai-learning.js','utf8'))});
   await page.evaluate(()=>{
-   const shadow=document.querySelector('#host').attachShadow({mode:'open'});window.calls=[];window.captureCalls=0;window.track=null;
-   Object.defineProperty(navigator,'mediaDevices',{value:{getDisplayMedia:async()=>{
-    captureCalls++;const canvas=document.querySelector('#picture'),stream=canvas.captureStream(10);window.track=stream.getVideoTracks()[0];
-    const timer=setInterval(()=>canvas.getContext('2d').fillRect(0,0,1,1),50);track.addEventListener('ended',()=>clearInterval(timer));return stream;
-   }},configurable:true});
+   const shadow=document.querySelector('#host').attachShadow({mode:'open'});window.calls=[];window.captureCalls=0;window.shares=0;
+   Object.defineProperty(navigator,'mediaDevices',{value:{getDisplayMedia:async()=>{shares++;throw Error('Static screenshot must not request sharing');}},configurable:true});
+   window.nativeFrame=document.createElement('canvas');nativeFrame.width=1200;nativeFrame.height=900;nativeFrame.getContext('2d').fillStyle='orange';nativeFrame.getContext('2d').fillRect(0,0,1200,900);
+   window.ZYNativeCapture={capture:async()=>{captureCalls++;return nativeFrame.toDataURL();}};
    window.ai=ZhiyunLearning.mountLearningAssistant({shadow,getValue:(k,d)=>k==='ai-learning-settings-v1'?{browserCapture:true}:d,getApiKey:()=> 'opaque-session',request:o=>{
     calls.push(JSON.parse(o.data));queueMicrotask(()=>o.onload({status:200,responseText:JSON.stringify({output:[{type:'message',content:[{type:'output_text',text:'done'}]}]})}));return{abort(){}};
    }});
@@ -30,17 +29,17 @@ const {chromium}=require('playwright');
   await page.waitForFunction(()=>calls.length===2);assert.match(await page.evaluate(()=>calls[1].input.at(-1).content[0].text),/请解释截图中的内容/);
   const image=await page.evaluate(()=>calls[1].input.at(-1).content.find(x=>x.type==='input_image').image_url);
   const size=await page.evaluate(src=>new Promise(resolve=>{const i=new Image();i.onload=()=>resolve([i.width,i.height]);i.src=src;}),image);
-  assert.ok(size[0]<1600&&size[1]<800);assert.match(await page.evaluate(()=>JSON.stringify(calls[1].input)),/selected lesson text/,'screenshot continues the existing conversation');assert.equal(await page.evaluate(()=>track.readyState),'ended');assert.equal(await page.evaluate(()=>captureCalls),1);
-  // Each browser screenshot releases sharing before annotation and question handling.
+  assert.ok(size[0]<1600&&size[1]<800);assert.match(await page.evaluate(()=>JSON.stringify(calls[1].input)),/selected lesson text/,'screenshot continues the existing conversation');assert.equal(await page.evaluate(()=>shares),0);assert.equal(await page.evaluate(()=>captureCalls),1);
+  // Every middle screenshot reads a new static frame with no sharing.
   assert.equal(await host.locator('#ai-capture-session').isVisible(),false);assert.equal(await page.evaluate(()=>captureCalls),1);
   await host.locator('#ai-close').click();
   for(let i=0;i<2;i++){
    await page.mouse.move(650,350);await page.mouse.down({button:'middle'});await host.locator('#ai-crop').waitFor({state:'visible'});await page.mouse.move(900,550);await page.mouse.up({button:'middle'});
-   await host.locator('#ai-crop-preview').waitFor();assert.equal(await host.locator('#ai-crop-send').isEnabled(),true);assert.equal(await page.evaluate(()=>captureCalls),i+2);assert.equal(await page.evaluate(()=>track.readyState),'ended');if(i===0){await host.locator('#ai-crop-conversation').selectOption('current');await host.locator('#ai-crop-use').click();assert.equal(await host.locator('#ai-attachment').isVisible(),true);assert.match(await host.locator('#ai-log').textContent(),/selected lesson text/);assert.equal(await page.evaluate(()=>calls.length),2);await host.locator('#ai-close').click();}else await host.locator('#ai-crop-cancel').click();assert.equal(await host.locator('#ai-learning').isVisible(),false,'cancelling a crop keeps the conversation closed');
+   await host.locator('#ai-crop-preview').waitFor();assert.equal(await host.locator('#ai-crop-send').isEnabled(),true);assert.equal(await page.evaluate(()=>captureCalls),i+2);assert.equal(await page.evaluate(()=>shares),0);if(i===0){await host.locator('#ai-crop-conversation').selectOption('current');await host.locator('#ai-crop-use').click();assert.equal(await host.locator('#ai-attachment').isVisible(),true);assert.match(await host.locator('#ai-log').textContent(),/selected lesson text/);assert.equal(await page.evaluate(()=>calls.length),2);await host.locator('#ai-close').click();}else await host.locator('#ai-crop-cancel').click();assert.equal(await host.locator('#ai-learning').isVisible(),false,'cancelling a crop keeps the conversation closed');
   }
-  assert.equal(await page.evaluate(()=>calls.length),2);await page.evaluate(()=>ai.destroy());assert.equal(await page.evaluate(()=>track.readyState),'ended');assert.equal(await host.locator('#ai-capture-session').isVisible(),false);
-  await page.evaluate(()=>navigator.mediaDevices.getDisplayMedia=async()=>{throw new DOMException('Cancelled','NotAllowedError');});await page.mouse.click(650,350,{button:'middle'});await page.waitForTimeout(100);assert.equal(await host.locator('#ai-learning').isVisible(),false,'cancelling browser screenshot permission keeps the conversation closed');
+  assert.equal(await page.evaluate(()=>calls.length),2);await page.evaluate(()=>ai.destroy());assert.equal(await page.evaluate(()=>shares),0);assert.equal(await host.locator('#ai-capture-session').isVisible(),false);
+  await page.mouse.click(650,350,{button:'middle'});await page.waitForTimeout(100);assert.equal(await host.locator('#ai-learning').isVisible(),false,'destroyed assistant has no active screenshot listeners');assert.equal(await page.evaluate(()=>captureCalls),3);assert.equal(await page.evaluate(()=>shares),0);
   const result=await page.evaluate(()=>{const target=document.querySelector('#link-image'),ev=new MouseEvent('mousedown',{button:1,bubbles:true,cancelable:true,composed:true});target.dispatchEvent(ev);const shift=new MouseEvent('mousedown',{button:1,shiftKey:true,bubbles:true,cancelable:true,composed:true});document.querySelector('#picture').dispatchEvent(shift);return [ev.defaultPrevented,shift.defaultPrevented];});assert.deepEqual(result,[false,false]);
-  assert.deepEqual(errors,[]);console.log('PASS: middle-drag at original coordinates, cropped-only one-click send, unchanged layout, one-frame sharing released across repeated captures and native link/Shift behavior.');
+  assert.deepEqual(errors,[]);console.log('PASS: middle-drag at original coordinates, cropped-only one-click send, unchanged layout, new static native frames across repeated captures with zero sharing and native link/Shift behavior.');
  }finally{await browser.close();}
 })().catch(e=>{console.error(e);process.exitCode=1;});

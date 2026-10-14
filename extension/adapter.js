@@ -42,7 +42,59 @@ function captureExtensionTab(signal){
  });
 }
 async function startExtension(run){
- globalThis.ZYNativeCapture={capture:captureExtensionTab};
+ // All-sites host access removes Chromium's activeTab gate. Keep each capture
+ // behind one real screenshot action in this isolated content-script world.
+ const screenshotButtons=new Set(['web-page-ask','ai-capture','ai-screenshot','ai-capture-retry']);
+ let activation=null,middle=null,generation=0;
+ const available=()=>window.top===window&&document.visibilityState==='visible';
+ const focused=()=>available()&&document.hasFocus();
+ const modified=event=>event.altKey||event.ctrlKey||event.metaKey||event.shiftKey;
+ const assistantHost=()=>{const host=document.getElementById('zy-subtitle-host');return host?.isConnected&&host.shadowRoot?.getElementById('ai-learning')?host:null;};
+ function elementVisible(element){
+  if(!element?.isConnected||element.hidden||element.disabled)return false;
+  const box=element.getBoundingClientRect();if(!box.width||!box.height||box.right<=0||box.bottom<=0||box.left>=innerWidth||box.top>=innerHeight)return false;
+  for(let node=element;node&&node!==document;node=node.parentElement||node.getRootNode?.().host){
+   if(node.hidden)return false;const css=getComputedStyle(node);if(css.display==='none'||css.visibility==='hidden'||css.visibility==='collapse')return false;
+  }
+  return true;
+ }
+ function authorize(runtime=false){
+  // A browser toolbar/command invocation may briefly focus browser chrome.
+  // Runtime requests are extension-owned; the background still checks active tab.
+  if(runtime?!available():!focused())return;
+  activation={expiresAt:Date.now()+2500,url:location.href,generation,runtime};
+ }
+ function revoke(){activation=null;middle=null;generation++;}
+ function gestureError(code,message){const error=new Error(message);error.code=code;return error;}
+ globalThis.ZYNativeCapture={capture:async signal=>{
+  const grant=activation;activation=null;
+  if(signal?.aborted)throw new DOMException('Cancelled','AbortError');
+  if(!grant||grant.expiresAt<Date.now()||grant.url!==location.href||grant.generation!==generation)throw gestureError('BRIDGE_NO_GESTURE','请用鼠标中键拖框，或亲自点击助手的截图按钮后重试。');
+  if(grant.runtime?!available():!focused())throw gestureError('BRIDGE_NOT_ACTIVE','请回到要截图的页面再操作。');
+  const data=await captureExtensionTab(signal);
+  if(grant.generation!==generation||grant.url!==location.href||(grant.runtime?!available():!focused()))throw gestureError('BRIDGE_NOT_ACTIVE','截图时页面已失去焦点，请回到页面重试。');
+  return data;
+ }};
+ document.addEventListener('mousedown',event=>{
+  middle=null;
+  if(!event.isTrusted||event.button!==1||modified(event)||!focused()||!assistantHost())return;
+  const target=event.composedPath()[0];if(target?.closest?.('a,input,textarea,select,button,[contenteditable],#ai-crop'))return;
+  middle={began:Date.now(),url:location.href};
+ },true);
+ document.addEventListener('mouseup',event=>{
+  if(event.button!==1)return;const candidate=middle;middle=null;
+  if(!candidate||!event.isTrusted||modified(event)||candidate.url!==location.href||Date.now()-candidate.began>60000)return;
+  const crop=assistantHost()?.shadowRoot?.getElementById('ai-crop');
+  if(!crop||crop.getAttribute('aria-label')!=='拖框截图'||!elementVisible(crop))return;
+  authorize();
+ },true);
+ document.addEventListener('click',event=>{
+  if(!event.isTrusted||event.button!==0||modified(event)||!focused())return;
+  const host=assistantHost(),button=event.composedPath().find(node=>node?.tagName==='BUTTON'&&screenshotButtons.has(node.id));
+  if(!host||!button||button.getRootNode()!==host.shadowRoot||!elementVisible(button))return;
+  authorize();
+ },true);
+ window.addEventListener('blur',revoke);window.addEventListener('pagehide',revoke);document.addEventListener('visibilitychange',()=>{if(!focused())revoke();});
  globalThis.ZY_CLIENT_TYPE='chrome-extension';
  const saved=await chrome.storage.local.get(null);let pending=Promise.resolve();
  const GM_getValue=(key,fallback)=>Object.hasOwn(saved,key)?saved[key]:fallback;
@@ -53,7 +105,7 @@ async function startExtension(run){
  chrome.storage.onChanged.addListener((changes,area)=>{if(area==='local')for(const [key,value] of Object.entries(changes)){if(Object.hasOwn(value,'newValue'))saved[key]=value.newValue;else delete saved[key];}});
  chrome.runtime.onMessage.addListener((m,sender)=>{
   if(sender.id!==chrome.runtime.id)return;const shadow=document.getElementById('zy-subtitle-host')?.shadowRoot;if(!shadow)return;
-  if(m.type==='zy-capture-page'){(shadow.getElementById('web-page-ask')||shadow.getElementById('ai-screenshot'))?.click();}
+  if(m.type==='zy-capture-page'){const button=shadow.getElementById('web-page-ask')||shadow.getElementById('ai-screenshot');if(button){authorize(true);button.click();}}
   if(m.type==='zy-open'){const panel=shadow.getElementById('panel');if(panel)panel.hidden=false;const compact=shadow.getElementById('compact');if(compact)compact.hidden=true;shadow.getElementById('web-settings-open')?.click();shadow.getElementById('account-open')?.click();}
   if(m.type==='zy-ask'&&typeof m.text==='string'&&m.text.trim()){
    const panel=shadow.getElementById('ai-learning'),question=shadow.getElementById('ai-question');if(!panel||!question)return;panel.hidden=false;question.value='请解释以下选中文字：\n'+m.text.slice(0,4000);question.focus();shadow.getElementById('ai-compose')?.dispatchEvent(new Event('submit',{bubbles:true,cancelable:true}));

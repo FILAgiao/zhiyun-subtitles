@@ -22,7 +22,7 @@ const fs=require('node:fs'),assert=require('node:assert/strict'),{chromium}=requ
     if(o.url==='https://fixture-gateway.test/v1/activity'){o.onload?.({status:200,responseText:'{}'});return;}
     otherRequests.push(o.url);o.onerror?.(Error('No external requests allowed in integration fixture'));
    });return{abort(){aborted=true;o.onabort?.();}};};
-   Object.defineProperty(navigator,'mediaDevices',{configurable:true,value:{getDisplayMedia:async()=>{shares++;throw Error('Classroom screenshot must not request sharing');}}});window.ZYNativeCapture={capture:async()=>{nativeCalls++;throw Error('PPT pixels must use local compositor');}};
+   Object.defineProperty(navigator,'mediaDevices',{configurable:true,value:{getDisplayMedia:async()=>{shares++;throw Error('Classroom screenshot must not request sharing');}}});
    const video=document.querySelector('#mainVideo'),canvas=document.createElement('canvas');canvas.width=640;canvas.height=360;const ctx=canvas.getContext('2d');ctx.fillStyle='rgb(130,70,180)';ctx.fillRect(0,0,640,360);video.srcObject=canvas.captureStream(30);await video.play();window.videoTimer=setInterval(()=>ctx.fillRect(0,0,2,2),30);Object.defineProperties(video,{duration:{get:()=>3600},currentTime:{get:()=>0},paused:{get:()=>true}});
   },sourceURL);
   await page.addScriptTag({content:fs.readFileSync('zhiyun-subtitles.user.js','utf8').replace(/const DEFAULT_ORIGIN=[^;]+;/,'const DEFAULT_ORIGIN="";')});

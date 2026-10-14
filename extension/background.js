@@ -1,5 +1,6 @@
 'use strict';
 const GATEWAY='https://47.77.182.216.sslip.io/gateway';
+// Persistent host access is for static tab pixels; the public network bridge remains pinned.
 function allowedRequest(o){
  const u=new URL(o.url),method=(o.method||'GET').toUpperCase();
  if(u.protocol!=='https:'||u.username||u.password||u.hash)throw Error('Request denied');
@@ -17,12 +18,13 @@ function toBase64(bytes){let raw='';for(let i=0;i<bytes.length;i+=8192)raw+=Stri
 // Serialize captures per window to stay within Chromium's two-captures/second limit.
 const captureQueues=new Map(),captureTimes=new Map();
 async function captureSenderTab(api,sender){
- if(sender?.id!==api.runtime.id||sender.frameId!==0||!Number.isInteger(sender.tab?.id)||!/^https?:\/\//.test(sender.url||''))throw Error('Screenshot request denied');
- const id=sender.tab.id,windowId=sender.tab.windowId;
+ if(sender?.id!==api.runtime.id||sender.frameId!==0||!Number.isInteger(sender.tab?.id)||!Number.isInteger(sender.tab?.windowId)||!/^https?:\/\//.test(sender.url||''))throw Error('Screenshot request denied');
+ const id=sender.tab.id,windowId=sender.tab.windowId,origin=new URL(sender.url).origin;
  const previous=captureQueues.get(windowId)||Promise.resolve();
  const pending=previous.catch(()=>{}).then(async()=>{
   const delay=550-(Date.now()-(captureTimes.get(windowId)||0));if(delay>0)await new Promise(resolve=>setTimeout(resolve,delay));
   const tab=await api.tabs.get(id);if(!tab.active||tab.windowId!==windowId||!/^https?:\/\//.test(tab.url||''))throw Error('请回到要截图的标签页后重试。');
+  if(new URL(tab.url).origin!==origin)throw Error('页面已跳转，请在当前页面重新截图。');
   captureTimes.set(windowId,Date.now());
   const data=await api.tabs.captureVisibleTab(windowId,{format:'png'});
   const current=await api.tabs.get(id);if(!current.active||current.windowId!==windowId||current.url!==tab.url)throw Error('截图期间切换了标签页，请重试。');
