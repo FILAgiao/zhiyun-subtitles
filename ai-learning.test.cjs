@@ -114,3 +114,41 @@ test('Markdown card sanitization preserves formatting while hiding credentials',
  const text=ai.cardText('# 标题\n**核心** `code`\nBearer hidden https://example.test/private secret-key','secret-key',true);
  assert.match(text,/# 标题/);assert.match(text,/\*\*核心\*\*/);assert.match(text,/`code`/);assert.doesNotMatch(text,/hidden|example\.test|secret-key/);
 });
+
+
+test('Question summaries share the answer request only when requested',()=>{
+ const first=ai.makeBody({question:'为什么梯度下降需要学习率？',summarize:true});
+ assert.match(first.input[0].content,/首行只写 \{"title":"问题摘要"\}/);
+ assert.match(first.input[0].content,/6～16个字/);
+ assert.match(first.input[0].content,/随后换行直接写 Markdown/);
+ assert.equal(first.stream,true);assert.equal(first.input.length,2);
+ assert.doesNotMatch(ai.makeBody({question:'再举个例子'}).input[0].content,/首行只写/);
+ for(const mode of ['feynman','technical','exam','custom'])assert.match(ai.makeBody({settings:{mode},question:'解释图片',summarize:true}).input[0].content,/问题摘要/);
+});
+
+test('Summary metadata is withheld until its first line is complete',()=>{
+ const answer='## 梯度下降\n\n使用 $\\eta$ 控制步长。\n\n```python\nx -= rate * gradient\n```';
+ const header='{"title":"梯度下降的学习率"}\n';
+ for(let i=1;i<header.length;i++)assert.equal(ai.splitLearningReply(header.slice(0,i)).text,'');
+ for(let i=0;i<=answer.length;i++){
+  const parsed=ai.splitLearningReply(header+answer.slice(0,i));
+  assert.equal(parsed.title,'梯度下降的学习率');assert.equal(parsed.text,answer.slice(0,i).trimStart());
+ }
+ assert.deepEqual(ai.splitLearningReply(header+answer,{final:true}),{title:'梯度下降的学习率',text:answer});
+});
+
+test('Summary parser tolerates fenced metadata and preserves ordinary answers',()=>{
+ const expected={title:'多态原理',text:'同一调用，不同实现。'};
+ assert.deepEqual(ai.splitLearningReply('```json\r\n{"title":"多态原理"}\r\n```\r\n同一调用，不同实现。',{final:true}),expected);
+ for(const text of ['普通回答。','```python\nprint(1)\n```','{"value":1}\n这是示例','{"title":42}\n回答','{"title":"标题","other":1}\n回答','{公式未闭合'])assert.equal(ai.splitLearningReply(text,{final:true}).text,text);
+ assert.deepEqual(ai.splitLearningReply('{"title":"多态原理"}',{final:true}),{title:'多态原理',text:''});
+ assert.equal(ai.splitLearningReply('```json\n{"title":"多态原理"}\n``').text,'');
+ for(const prefix of ['```J','```JS','```JSO','```JSON'])assert.equal(ai.splitLearningReply(prefix).text,'');
+});
+
+test('Question titles remain short, single-line and Unicode-safe',()=>{
+ assert.equal(ai.questionTitle('  梯度\n  下降\t原理  '),'梯度 下降 原理');
+ assert.equal(ai.questionTitle('😀'.repeat(30)),'😀'.repeat(24)+'…');
+ assert.equal(ai.questionTitle(null),'');assert.equal(ai.questionTitle({title:'x'}),'');
+ assert.equal(ai.questionTitle('x'.repeat(25)).length,25);
+});

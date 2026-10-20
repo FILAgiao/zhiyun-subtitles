@@ -1,0 +1,7 @@
+{
+  "version": "0.20.48",
+  "source": "dist/zhiyun-subtitles-0.20.48.zip",
+  "archive_sha256": "9846a29aa92437a32663947affe9d535dcacff76a75f3a5f27801143f2d3da0a",
+  "gateway_sha256": "9aec2debadb841d93c9badb18c88481db43f29c12c6294250aec481696802eef",
+  "background_sha256": "bc975937da0eed12bdd53665e88db99f8a0d3254557b2636fc7a3fe971c27501"
+}

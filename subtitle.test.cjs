@@ -200,7 +200,10 @@ test('target language detection skips Chinese, English and neutral text but reta
  const {isTargetLanguage}=require('./zhiyun-subtitles.user.js');
  assert.equal(isTargetLanguage('我们现在开始讨论这个问题。','zh'),true);
  assert.equal(isTargetLanguage('对','zh'),true);
- assert.equal(isTargetLanguage('我们用 Python 来分析这些数据','zh'),true);
+ assert.equal(isTargetLanguage('我们用 Python 来分析这些数据','zh'),false);
+ assert.equal(isTargetLanguage('我们使用 Transformer attention mechanism 来处理输入序列并输出结果','zh'),false);
+ assert.equal(isTargetLanguage('这里使用 CPU GPU API 共同完成计算','zh'),false);
+ assert.equal(isTargetLanguage('使用 Python','zh'),false);
  assert.equal(isTargetLanguage('This is the next example.','zh'),false);
  assert.equal(isTargetLanguage('这里我们说 the market is very efficient today','zh'),false);
  assert.equal(isTargetLanguage('This is the next example.','en'),true);
@@ -208,19 +211,19 @@ test('target language detection skips Chinese, English and neutral text but reta
  assert.equal(isTargetLanguage('2026 / 09 / 19 …','zh'),true);
  assert.equal(isTargetLanguage('これはテストです','zh'),false);
 });
-test('mixed-language queues send only subtitles needing translation without disabling translation',async()=>{
+test('pure Chinese skips requests while every mixed sentence is translated to Chinese',async()=>{
  const {calls,request}=mockRequests();const t=createTranslator(request);
- t.start('en','zh');t.schedule(['我们继续讲下一页','The first example','我们用 API 来处理这些数据','The second example']);
- assert.equal(calls.length,1);assert.equal(calls[0].text,'The first example');
- calls[0].resolve('第一个例子');await flush();
- assert.equal(calls.length,2);assert.equal(calls[1].text,'The second example');
- calls[1].resolve('第二个例子');await flush();
- t.schedule(['现在都是中文','好的']);assert.equal(calls.length,2);assert.equal(t.enabled,true);
- t.start('zh','en');t.schedule(['This is already English','现在换成中文']);
- assert.equal(calls.length,3);assert.equal(calls[2].text,'现在换成中文');
+ const mixed=['我们用 API 来处理这些数据','这里使用 Transformer attention mechanism 来分析这个序列'];
+ t.start('auto','zh');t.schedule(['我们继续讲下一页',...mixed,'The second example']);
+ assert.equal(calls.length,1);assert.equal(calls[0].text,mixed[0]);
+ calls[0].resolve('我们用接口来处理这些数据');await flush();
+ assert.equal(calls.length,2);assert.equal(calls[1].text,mixed[1]);
+ calls[1].resolve('这里使用注意力机制来分析这个序列');await flush();
+ assert.equal(calls.length,3);assert.equal(calls[2].text,'The second example');
+ calls[2].resolve('第二个例子');await flush();
+ t.schedule(['现在都是中文','好的']);assert.equal(calls.length,3);assert.equal(t.enabled,true);
  t.stop();
 });
-
 
 test('video downloader uses privileged transport, validates bytes and rejects unsafe domains',async()=>{
  const {downloadVideo}=require('./zhiyun-subtitles.user.js');

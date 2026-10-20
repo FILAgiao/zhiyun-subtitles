@@ -31,3 +31,9 @@ backend/install.meta.js
 dist/
 
 backend/.store-review-account.json
+
+# Generated versioned download page
+backend/download.html
+
+# Copied public page artwork (source: assets/onboarding)
+backend/landing/

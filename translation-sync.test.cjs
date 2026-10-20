@@ -19,7 +19,7 @@ test('context payload bounds user supplied references and subtitle windows',()=>
   assert.equal(data.preceding.length,30);assert.equal(data.preceding[0].length,600);assert.equal(data.terminology.length,4000);
   const cues=Array.from({length:100},(_,index)=>({start:index,original:'sentence '+index}));
   const jobs=translationJobs(cues,50,12);
-  assert.equal(jobs.length,12);assert.equal(jobs[0].context.before.length,12);assert.equal(jobs[0].context.after.length,12);
+  assert.equal(jobs.length,4);assert.equal(jobs[0].context.before.length,12);assert.equal(jobs[0].context.after.length,12);
   assert.equal(jobs[0].context.before.at(-1),'sentence 49');assert.equal(jobs[1].context.before.at(-1),'sentence 50');
   assert.deepEqual(translationJobs(cues,-1),[]);
 });
@@ -79,12 +79,12 @@ test('in flight calibration and buffering cannot immediately trigger a second pa
   for(let time=123;time<=130;time++) assert.equal(s.advance(time,true,120,true),false);
   assert.equal(s.elapsed,0);
 });
-test('prefetch covers one minute with a bounded count and keeps nearby sparse cues',()=>{
+test('prefetch is bounded to four cues and thirty seconds with one sparse successor',()=>{
   const dense=Array.from({length:40},(_,i)=>({start:i*10,original:'sentence '+i}));
-  assert.equal(translationJobs(dense,0).length,7);
-  assert.equal(translationJobs(dense,0).at(-1).text,'sentence 6');
+  assert.equal(translationJobs(dense,0).length,4);
+  assert.equal(translationJobs(dense,0).at(-1).text,'sentence 3');
   const sparse=dense.map((cue,i)=>({...cue,start:i*100}));
-  assert.equal(translationJobs(sparse,0).length,4);
+  assert.equal(translationJobs(sparse,0).length,2);
 });
 test('two workers deduplicate in-flight jobs, prioritize seek queue and keep stable status',async()=>{
   const calls=[],messages=[];

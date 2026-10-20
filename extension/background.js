@@ -1,7 +1,8 @@
 'use strict';
+const RELEASE_CHANNEL='unpacked';
 const GATEWAY='https://47.77.182.216.sslip.io/gateway';
 // Persistent host access is for static tab pixels; the public network bridge remains pinned.
-function allowedRequest(o){
+function allowedRequest(o,runtime=globalThis.chrome?.runtime){
  const u=new URL(o.url),method=(o.method||'GET').toUpperCase();
  if(u.protocol!=='https:'||u.username||u.password||u.hash)throw Error('Request denied');
  const gateway=u.origin===new URL(GATEWAY).origin&&/^\/gateway\/v1\/(?:auth\/(?:login|logout)|me|activity|history|ark\/responses|speech\/(?:submit|query)|learning\/jobs\/(?:create|poll|cancel))$/.test(u.pathname)&&!u.search;
@@ -11,7 +12,7 @@ function allowedRequest(o){
  const headers={};for(const [k,v] of Object.entries(o.headers||{})){
   const lower=k.toLowerCase();if(gateway&&['authorization','content-type','x-app-id','x-api-request-id','x-client-type'].includes(lower)||school&&['range','if-range','accept'].includes(lower))headers[k]=String(v);
  }
- if(gateway){headers['X-App-Id']='zhiyun-subtitles';headers['X-Client-Type']='chrome-extension';}
+ if(gateway){headers['X-App-Id']='zhiyun-subtitles';headers['X-Client-Type']='chrome-extension';headers['X-Client-Channel']=RELEASE_CHANNEL;const version=runtime?.getManifest?.()?.version||'';if(version)headers['X-Client-Version']=version;}
  return {url:u.href,method,headers,body:method==='POST'?o.data:undefined,credentials:school?'include':'omit',redirect:'error',cache:'no-store'};
 }
 function toBase64(bytes){let raw='';for(let i=0;i<bytes.length;i+=8192)raw+=String.fromCharCode(...bytes.subarray(i,i+8192));return btoa(raw);}

@@ -1,0 +1,83 @@
+{
+  "schemaVersion": 1,
+  "quotes": [
+    {
+      "id": "zhu-truth",
+      "text": "只问是非，不计利害。",
+      "author": "竺可桢",
+      "category": "求是与治学",
+      "sourceTitle": "浙江大学：竺可桢——求是精神薪火相传",
+      "source": "https://www.zju.edu.cn/2021/0416/c57381a2296082/pagem.htm"
+    },
+    {
+      "id": "zhu-perseverance",
+      "text": "排万难冒百死以求真理。",
+      "author": "竺可桢",
+      "category": "求是与治学",
+      "sourceTitle": "浙江大学：浙大学子的标杆",
+      "source": "https://www.zju.edu.cn/2022/0325/c66007a2510816/pagem.htm"
+    },
+    {
+      "id": "zhongyong-learning",
+      "text": "博学之、审问之、慎思之、明辨之、笃行之。",
+      "author": "《中庸》 · 竺可桢引述",
+      "category": "经典与求学",
+      "sourceTitle": "浙江大学校训说明：竺可桢谈求是时引述《中庸》",
+      "source": "https://www.zju.edu.cn/xx1/listm.htm"
+    },
+    {
+      "id": "confucius-thought",
+      "text": "学而不思则罔，思而不学则殆。",
+      "author": "孔子",
+      "category": "哲学与教育",
+      "sourceTitle": "《论语·为政》；中央纪委网站品典栏目附原典",
+      "source": "https://m.ccdi.gov.cn/content/56/7a/3777.html"
+    },
+    {
+      "id": "zhuge-learning",
+      "text": "非学无以广才，非志无以成学。",
+      "author": "诸葛亮",
+      "category": "立志与学习",
+      "sourceTitle": "《诫子书》；农业部网站刊载原文节选",
+      "source": "https://jcj.moa.gov.cn/lzwh/lzjy/201006/t20100629_1829343.htm"
+    },
+    {
+      "id": "wang-action",
+      "text": "知是行之始，行是知之成。",
+      "author": "王阳明",
+      "category": "哲学与实践",
+      "sourceTitle": "《传习录》；财政部山西监管局引述",
+      "source": "https://sn.mof.gov.cn/gzdt/caizhengjiancha/201607/t20160701_2343733.htm"
+    },
+    {
+      "id": "musk-work",
+      "text": "格外努力地工作！",
+      "author": "埃隆·马斯克",
+      "category": "创业与行动",
+      "sourceTitle": "USC 2014 Commencement：校方刊物记录马斯克给毕业生的建议",
+      "source": "https://customsitesmedia.usc.edu/wp-content/uploads/sites/326/2014/09/17160607/Commencement-2014.pdf",
+      "original": "Work super hard!",
+      "isTranslation": true
+    },
+    {
+      "id": "trump-done",
+      "text": "不要让任何人告诉你，这件事办不到。",
+      "author": "唐纳德·特朗普",
+      "category": "行动与信心",
+      "sourceTitle": "2017年就职演讲准备稿，白宫历史档案",
+      "source": "https://trumpwhitehouse.archives.gov/briefings-statements/the-inaugural-address/",
+      "original": "Do not let anyone tell you it cannot be done.",
+      "isTranslation": true
+    },
+    {
+      "id": "newton-giants",
+      "text": "如果我看得更远，那是因为我站在巨人的肩上。",
+      "author": "艾萨克·牛顿",
+      "category": "科学与传承",
+      "sourceTitle": "牛顿致胡克信中的名句；牛津大学 Newton Project 收录",
+      "source": "https://www.newtonproject.ox.ac.uk/view/texts/normalized/OTHE00018",
+      "original": "If I have seen further it is by standing on the sholders of Giants.",
+      "isTranslation": true
+    }
+  ]
+}

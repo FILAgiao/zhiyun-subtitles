@@ -8,7 +8,8 @@ root=Path(__file__).resolve().parent.parent
 origin='https://47.77.182.216.sslip.io/gateway';remote='/opt/zhiyun-gateway/backend'
 version=json.loads((root/'package.json').read_text(encoding='utf-8'))['version']
 stamp=datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')
-files=['server.py','admin_api.py','admin.html','admin.css','admin.js','privacy.html','install.user.js','install.meta.js','extension.zip']
+files=['public_page.py','server.py','admin_api.py','admin.html','admin.css','admin.js','privacy.html','download.html','download.css','install.user.js','install.meta.js','extension.zip']
+files += ['landing/'+name for name in ['brand-logo.png','image-02.webp','image-01.webp','image-03.webp','image-04.webp','image-05.webp','image-06.webp']]
 content={name:(root/'backend'/name).read_bytes() if name!='extension.zip' else (root/'dist'/('zhiyun-subtitles-'+version+'.zip')).read_bytes() for name in files}
 client=paramiko.SSHClient();client.load_host_keys(str(root/'backend/.known_hosts'));client.set_missing_host_key_policy(paramiko.RejectPolicy())
 password=getpass.getpass('SSH password (not echoed): ')
@@ -17,10 +18,12 @@ finally:password=None
 sftp=client.open_sftp();backup=remote+'/.rollback-release-'+version+'-'+stamp
 
 def command(cmd):
- _,out,err=client.exec_command(cmd,timeout=45);result=out.read().decode();error=err.read().decode();assert out.channel.recv_exit_status()==0,'Remote operation failed: '+error[:200];return result.strip()
+ _,out,err=client.exec_command(cmd,timeout=180);result=out.read().decode();error=err.read().decode();assert out.channel.recv_exit_status()==0,'Remote operation failed: '+error[:200];return result.strip()
 def q(value):return shlex.quote(value)
 try:
- sftp.mkdir(backup,0o700)
+ sftp.mkdir(backup,0o700);sftp.mkdir(backup+'/landing',0o700)
+ try:assert stat.S_ISDIR(sftp.stat(remote+'/landing').st_mode)
+ except FileNotFoundError:sftp.mkdir(remote+'/landing',0o755)
  changed=[]
  for name,data in content.items():
   dest=remote+'/'+name
@@ -38,7 +41,7 @@ try:
  config=json.loads(command("docker inspect zhiyun-gateway"))[0]
  assert config['Config']['WorkingDir']=='/app' and config['Config']['User']=='10001:10001'
  assert {m['Source']:m['Destination'] for m in config['Mounts'] if m['Type']=='bind'}=={'/opt/zhiyun-gateway/backend':'/app/backend','/opt/zhiyun-gateway/data':'/data'}
- for name in ['server.py','admin_api.py']:
+ for name in ['server.py','admin_api.py','public_page.py']:
   code="compile(open('/app/backend/"+name+".candidate-"+stamp+"').read(), '"+name+"', 'exec')"
   command('docker exec zhiyun-gateway python -c '+q(code))
  snapshot='/data/gateway-before-'+version+'-'+stamp+'.sqlite3'
@@ -51,9 +54,9 @@ try:
  sftp.chmod(env,0o600);settings=None
  for name in files:sftp.posix_rename(remote+'/'+name+'.candidate-'+stamp,remote+'/'+name)
  old='zhiyun-gateway-before-'+stamp
- command('docker stop zhiyun-gateway');command('docker rename zhiyun-gateway '+q(old))
+ command('docker stop --time 130 zhiyun-gateway');command('docker rename zhiyun-gateway '+q(old))
  h=config['HostConfig'];image=config['Config']['Image']
- args=['docker','run','-d','--name','zhiyun-gateway','--restart','unless-stopped','--network','deploy_internal','--user','10001:10001','--read-only','--tmpfs','/tmp:rw,noexec,nosuid,size=16m','--memory',str(h['Memory']),'--cpus',str((h['NanoCpus'] or 500000000)/1000000000),'--pids-limit',str(h['PidsLimit'] or 64),'--cap-drop','ALL','--security-opt','no-new-privileges:true','--env-file',env,'-v','/opt/zhiyun-gateway/backend:/app/backend:ro','-v','/opt/zhiyun-gateway/data:/data:rw','-w','/app',image,'python','backend/server.py','serve']
+ args=['docker','run','-d','--name','zhiyun-gateway','--restart','unless-stopped','--stop-timeout','130','--network','deploy_internal','--user','10001:10001','--read-only','--tmpfs','/tmp:rw,noexec,nosuid,size=16m','--memory',str(h['Memory']),'--cpus',str((h['NanoCpus'] or 500000000)/1000000000),'--pids-limit',str(h['PidsLimit'] or 64),'--cap-drop','ALL','--security-opt','no-new-privileges:true','--env-file',env,'-v','/opt/zhiyun-gateway/backend:/app/backend:ro','-v','/opt/zhiyun-gateway/data:/data:rw','-w','/app',image,'python','backend/server.py','serve']
  command(' '.join(q(a) for a in args));healthy=False
  for _ in range(20):
   try:
@@ -66,8 +69,8 @@ try:
  for name in files:
   dest=remote+'/'+name
   assert command('sha256sum '+q(dest)).split()[0]==hashlib.sha256(content[name]).hexdigest()
- for name in ['install.user.js','install.meta.js','admin.html','admin.js','admin.css','privacy.html','extension.zip']:
-  public='admin' if name=='admin.html' else 'privacy' if name=='privacy.html' else name
+ for name in ['install.user.js','install.meta.js','admin.html','admin.js','admin.css','privacy.html','download.html','download.css','extension.zip']+[name for name in files if name.startswith('landing/')]:
+  public='admin' if name=='admin.html' else 'privacy' if name=='privacy.html' else 'download' if name=='download.html' else name
   with urllib.request.urlopen(urllib.request.Request(origin+'/'+public,headers={'Cache-Control':'no-cache'}),timeout=30) as r:data=r.read()
   assert data==content[name],'Public file differs: '+name
   checks[name]={'bytes':len(data),'sha256':hashlib.sha256(data).hexdigest()}

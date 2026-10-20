@@ -1,0 +1,93 @@
+{
+  "version": "0.20.61",
+  "backup": "/opt/zhiyun-gateway/backend/.rollback-release-0.20.61-20261020T024542Z",
+  "database_backup": "/data/gateway-before-0.20.61-20261020T024542Z.sqlite3",
+  "changed": [
+    "public_page.py",
+    "server.py",
+    "admin_api.py",
+    "admin.html",
+    "admin.js",
+    "privacy.html",
+    "download.html",
+    "download.css",
+    "install.user.js",
+    "install.meta.js",
+    "extension.zip",
+    "landing/brand-logo.png",
+    "landing/image-02.webp",
+    "landing/image-01.webp",
+    "landing/image-03.webp",
+    "landing/image-04.webp",
+    "landing/image-05.webp",
+    "landing/image-06.webp"
+  ],
+  "public_files": {
+    "install.user.js": {
+      "bytes": 2165949,
+      "sha256": "38b0a141e770f28feba8e51009456dcb6e0d9f8ee3e178af4fe5786e6635c5e9"
+    },
+    "install.meta.js": {
+      "bytes": 1058,
+      "sha256": "e9971ebaeff7a41e4cde901ed75435ea8a5430ed3bc963bb3c149bc9f4e2116f"
+    },
+    "admin.html": {
+      "bytes": 7856,
+      "sha256": "feb47bbc0d299a0c12acbc6020057657c132acb06a0677f3f29d87b068f0d1c2"
+    },
+    "admin.js": {
+      "bytes": 12346,
+      "sha256": "3f74cbb669cc1a404f17bffe13d9a549d73def1ae791404616a6db0cf31cac3e"
+    },
+    "admin.css": {
+      "bytes": 4262,
+      "sha256": "f727a89543209867dc0db83c2bc3bd028645da0cf33363c9d70cf25a2dcb0878"
+    },
+    "privacy.html": {
+      "bytes": 4665,
+      "sha256": "942ba8289911ee0ae67d388c47c0e9fd4a2bf23755da43320aecd45f259f3d6a"
+    },
+    "download.html": {
+      "bytes": 10820,
+      "sha256": "dc25db089f656107fc94111d96f198018885807b45faba6bb2a6c7d40b4769a0"
+    },
+    "download.css": {
+      "bytes": 13795,
+      "sha256": "9ae647c994b2eeba3922357b1ed1f0277b77f04684a7b004ba65e8a060fe00d4"
+    },
+    "extension.zip": {
+      "bytes": 1129272,
+      "sha256": "e104f65bc3f8c521f1fdc3e16474230f20d71b6318442be208d9f337e88e5fb4"
+    },
+    "landing/brand-logo.png": {
+      "bytes": 16647,
+      "sha256": "d032bffde2189fdb2ef7a89001b4b08d77b9598a8209bfeb7f70bdabcf778d45"
+    },
+    "landing/image-02.webp": {
+      "bytes": 93362,
+      "sha256": "c388a454b1ee80469940adf0e0601fd91d3190696fcc126ecd2a282eceade995"
+    },
+    "landing/image-01.webp": {
+      "bytes": 80220,
+      "sha256": "118129817c6bc3eebec6fbf285fe4cff766b896870f760be3c943d75cb941027"
+    },
+    "landing/image-03.webp": {
+      "bytes": 110046,
+      "sha256": "489f400e9367dc74a209917e462bfb03e1af3265c92b12f1920239f99aa120a8"
+    },
+    "landing/image-04.webp": {
+      "bytes": 101578,
+      "sha256": "491b18d1d15ff3ca864e19f95b635876cb9be136eea04b8e7300e53a4b4197cb"
+    },
+    "landing/image-05.webp": {
+      "bytes": 126906,
+      "sha256": "4178877027782200c8af3031a4984d322ff939b49e4203dfaca145bc1dcb44a9"
+    },
+    "landing/image-06.webp": {
+      "bytes": 111354,
+      "sha256": "c3d55abed0b877a07ea89fc2e3fb158b0dfe0b77f3170f291ca8c64a0e3916a7"
+    }
+  },
+  "health": "ok",
+  "url": "https://47.77.182.216.sslip.io/gateway/install.user.js"
+}

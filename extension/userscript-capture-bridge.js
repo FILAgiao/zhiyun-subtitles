@@ -50,7 +50,7 @@
   middle=null;
   if(!event.isTrusted||event.button!==1||modified(event)||!visible()||!assistantHost())return;
   const target=event.composedPath()[0];
-  if(target?.closest?.('a,input,textarea,select,button,[contenteditable],#ai-crop'))return;
+  if(target?.closest?.('a,input,textarea,select,[contenteditable],#ai-crop'))return;
   middle={began:Date.now(),url:location.href};
  },true);
  document.addEventListener('mouseup',event=>{

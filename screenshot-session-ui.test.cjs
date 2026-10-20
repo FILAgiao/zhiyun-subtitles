@@ -10,9 +10,13 @@ const fs=require('node:fs'),assert=require('node:assert/strict'),{chromium}=requ
    Object.defineProperty(navigator,'mediaDevices',{configurable:true,value:{getDisplayMedia:async()=>{shares++;throw Error('Static screenshot must never request display sharing');}}});
    window.staticProvider={capture:async signal=>{nativeCalls++;nativeSignals.push(signal);return canvas.toDataURL();}};window.ZYNativeCapture=staticProvider;
    window.deferNative=()=>{delete window.finishNative;ZYNativeCapture={capture:signal=>{nativeCalls++;nativeSignals.push(signal);return new Promise(resolve=>window.finishNative=resolve);}};window.pending=ai.capturePage();};
-   window.mount=()=>window.ai=ZhiyunLearning.mountLearningAssistant({shadow,getValue:(k,d)=>d,getApiKey:()=> 'fixture',request:()=>{throw Error('Screenshot must not send to AI before user chooses');}});mount();
+   window.testKey='fixture';window.loginCalls=0;window.mount=()=>window.ai=ZhiyunLearning.mountLearningAssistant({shadow,getValue:(k,d)=>d,getApiKey:()=>testKey,onRequireLogin:()=>loginCalls++,request:()=>{throw Error('Screenshot must not send to AI before user chooses');}});mount();
   });
   const host=page.locator('#host'),noSharing=async()=>{assert.equal(await page.evaluate(()=>shares),0,'native captures never invoke getDisplayMedia');assert.equal(await host.locator('#ai-capture-session').isVisible(),false);assert.equal(await host.locator('[data-zy-capture-hidden]').count(),0,'assistant controls are restored after every capture');};
+  // Logged-out captures only request login, without opening chat or taking pixels.
+  await page.evaluate(()=>testKey='');await page.mouse.move(200,100);await page.mouse.down({button:'middle'});await page.mouse.up({button:'middle'});
+  await page.evaluate(()=>ai.capturePage());assert.equal(await page.evaluate(()=>loginCalls),2);assert.equal(await page.evaluate(()=>nativeCalls),0);assert.ok(await host.locator('#ai-panel').isHidden());assert.equal(await host.locator('#ai-crop').count(),0);
+  await page.evaluate(()=>testKey='fixture');
   // Successful repeated actions read fresh static pixels, without retaining a stream.
   for(let i=0;i<3;i++){await page.evaluate(()=>ai.capturePage());await host.locator('#ai-attachment').waitFor({state:'visible'});assert.equal(await host.locator('#ai-crop').count(),0);assert.equal(await page.evaluate(()=>nativeCalls),i+1);await noSharing();await host.locator('#ai-close').click();}
   await page.evaluate(()=>ai.startCapture(null,true));await host.locator('#ai-crop-preview').waitFor();assert.equal(await page.evaluate(()=>nativeCalls),4);await noSharing();await host.locator('#ai-crop-cancel').click();

@@ -37,7 +37,7 @@ function mount({shadow,host,getVideo,getLocal,getCues,getCourse,getClock,getSeek
  $('focus-fullscreen').onclick=toggleFullscreen;
  $('fullscreen-recover').onclick=async()=>{try{await enterFullscreen();}catch{ $('slides-status').textContent='请点击“专注全屏”进入课堂全屏。';}};
  // Pointer clicks should not leave a stale cache action owning the space bar.
- window.addEventListener('pointerup',event=>{const target=event.composedPath()[0]?.closest?.('button,summary');if(!target||!event.composedPath().includes(host))return;setTimeout(()=>{if(shadow.activeElement===target)target.blur();},0);},true);
+ window.addEventListener('pointerup',event=>{const target=event.composedPath()[0]?.closest?.('button,summary');if(!target||!event.composedPath().includes(host)||target.closest('dialog[open]'))return;setTimeout(()=>{if(shadow.activeElement===target)target.blur();},0);},true);
  const onFs=async()=>{
   if(destroyed)return;
   if(document.fullscreenElement?.tagName==='VIDEO'&&!nativeFsRecovery){nativeFsRecovery=true;try{await document.exitFullscreen();await enterFullscreen();}catch{$('fullscreen-notice').hidden=false;}finally{nativeFsRecovery=false;}}
@@ -56,7 +56,7 @@ function mount({shadow,host,getVideo,getLocal,getCues,getCourse,getClock,getSeek
  },true);
  window.addEventListener('keydown',event=>{
   const video=getVideo();if(!video||event.altKey||event.ctrlKey||event.metaKey||event.shiftKey||![' ','Spacebar','ArrowLeft','ArrowRight'].includes(event.key))return;
-  const target=event.composedPath()[0];if(isEditing(target)||!$('settings-dialog').hidden||target?.closest?.('#ai-learning,#ai-crop'))return;
+  const target=event.composedPath()[0];if(isEditing(target)||shadow.querySelector('dialog[open]')||!$('settings-dialog').hidden||target?.closest?.('#ai-learning,#ai-crop'))return;
   if(target?.closest?.('#slides')&&event.key!==' ')return;
   if([' ','Spacebar'].includes(event.key)&&target?.closest?.('button,summary,a,[role=button]'))return;
   // Native range inputs, text fields and settings retain their own keyboard semantics.

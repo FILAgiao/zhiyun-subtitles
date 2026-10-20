@@ -12,7 +12,7 @@ assert.equal(field('updateURL'),'https://raw.githubusercontent.com/FILAgiao/zhiy
 assert.equal(field('downloadURL'),'https://raw.githubusercontent.com/FILAgiao/zhiyun-subtitles/main/zhiyun-subtitles.user.js');
 assert.match(field('description'),/网课不硬扛，浙大上课爽！/);
 assert.ok(!/^\/\/ @require\s/m.test(metadata),'Release must include its modules without remote code dependencies');
-for(const file of ['warm-theme.js','appearance-theme.js','progressive-cache.bundle.js','cache-storage.js','study-ui.js','player-interactions.js','math-render.bundle.js','card-render.bundle.js','capture-bridge-client.js','ai-learning.js'])assert.ok(source.includes(fs.readFileSync(file,'utf8')),file+' needs rebuilding');
+for(const file of ['warm-theme.js','appearance-theme.js','progressive-cache.bundle.js','cache-storage.js','study-ui.js','player-interactions.js','math-render.bundle.js','card-render.bundle.js','capture-bridge-client.js','ai-learning.js','translation-request.js'])assert.ok(source.includes(fs.readFileSync(file,'utf8')),file+' needs rebuilding');
 assert.equal(source.split('// BEGIN BUNDLED LEARNING MODULES').length,2);
 assert.equal(source.split('// END BUNDLED LEARNING MODULES').length,2);
 console.log('PASS: release name, version, update/download URLs, metadata and bundled modules agree.');
@@ -27,3 +27,7 @@ if(fs.existsSync('backend/install.user.js')){
  assert.match(directMeta,new RegExp('@version\\s+'+JSON.parse(fs.readFileSync('package.json','utf8')).version.replaceAll('.','\\.')));
  console.log('PASS: direct server installer has matching version and self-hosted update metadata.');
 }
+
+const artwork=require('./load-onboarding-assets.cjs')();assert.ok(source.includes(JSON.stringify(artwork)),'Frog onboarding artwork must match the bundled build');
+assert.ok(!source.includes('const ZY_ONBOARDING_IMAGES='),'Legacy promotional images must not remain bundled');
+console.log('PASS: offline frog artwork matches the bundled welcome build.');

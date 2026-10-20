@@ -78,7 +78,7 @@ async function startExtension(run){
  document.addEventListener('mousedown',event=>{
   middle=null;
   if(!event.isTrusted||event.button!==1||modified(event)||!focused()||!assistantHost())return;
-  const target=event.composedPath()[0];if(target?.closest?.('a,input,textarea,select,button,[contenteditable],#ai-crop'))return;
+  const target=event.composedPath()[0];if(target?.closest?.('a,input,textarea,select,[contenteditable],#ai-crop'))return;
   middle={began:Date.now(),url:location.href};
  },true);
  document.addEventListener('mouseup',event=>{
@@ -108,7 +108,7 @@ async function startExtension(run){
   if(m.type==='zy-capture-page'){const button=shadow.getElementById('web-page-ask')||shadow.getElementById('ai-screenshot');if(button){authorize(true);button.click();}}
   if(m.type==='zy-open'){const panel=shadow.getElementById('panel');if(panel)panel.hidden=false;const compact=shadow.getElementById('compact');if(compact)compact.hidden=true;shadow.getElementById('web-settings-open')?.click();shadow.getElementById('account-open')?.click();}
   if(m.type==='zy-ask'&&typeof m.text==='string'&&m.text.trim()){
-   const panel=shadow.getElementById('ai-learning'),question=shadow.getElementById('ai-question');if(!panel||!question)return;panel.hidden=false;question.value='请解释以下选中文字：\n'+m.text.slice(0,4000);question.focus();shadow.getElementById('ai-compose')?.dispatchEvent(new Event('submit',{bubbles:true,cancelable:true}));
+   const panel=shadow.getElementById('ai-learning'),question=shadow.getElementById('ai-question');if(!panel||!question)return;question.value='请解释以下选中文字：\n'+m.text.slice(0,4000);shadow.getElementById('ai-compose')?.dispatchEvent(new Event('submit',{bubbles:true,cancelable:true}));
   }
  });
  run(extensionRequest,GM_getValue,GM_setValue,GM_deleteValue,GM_registerMenuCommand);

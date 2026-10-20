@@ -1,2 +1,5 @@
 # Preserve exact historical installer bytes for SHA256 verification.
 releases/** -text
+
+# Preserve the frozen store client used for compatibility contract tests.
+fixtures/compat/*.js -text

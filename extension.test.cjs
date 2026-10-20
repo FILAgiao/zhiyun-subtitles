@@ -15,3 +15,13 @@ test('native screenshot validates sender and active tab before and after capture
  changed=true;await assert.rejects(captureSenderTab(api,sender),/标签页/);assert.equal(captureCount,1);
  changed=false;api.tabs.captureVisibleTab=async()=>{changed=true;captureCount++;return 'data:image/png;base64,fixture';};await assert.rejects(captureSenderTab(api,sender),/切换/);
 });
+
+
+test('background owns client version and channel metadata; school requests cannot receive it',()=>{
+ const runtime={getManifest:()=>({version:'0.20.61'})};
+ const gateway=allowedRequest({url:'https://47.77.182.216.sslip.io/gateway/v1/me',headers:{'X-Client-Version':'99.99.99','X-Client-Channel':'edge-store'}},runtime);
+ assert.equal(gateway.headers['X-Client-Version'],require('./package.json').version);
+ assert.equal(gateway.headers['X-Client-Channel'],'unpacked');
+ const school=allowedRequest({url:'https://video.cmc.zju.edu.cn/a',headers:{'X-Client-Version':'99.99.99','X-Client-Channel':'edge-store'}},runtime);
+ assert.equal(school.headers['X-Client-Version'],undefined);assert.equal(school.headers['X-Client-Channel'],undefined);
+});

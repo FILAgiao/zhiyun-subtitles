@@ -23,6 +23,47 @@ class Tests(unittest.TestCase):
     def fails(self,status,fn):
         with self.assertRaises(Fault) as ctx: fn()
         self.assertEqual(status,ctx.exception.status)
+    def test_public_download_page_and_browser_packages(self):
+        from pathlib import Path
+        import zipfile
+        server=make_server(self.gateway,port=0)
+        thread=threading.Thread(target=server.serve_forever,daemon=True);thread.start()
+        try:
+            base='http://127.0.0.1:'+str(server.server_port)
+            folder=Path(__file__).parent
+            for url in ['/','/index.html','/download','/download/','/download.html','/?source=qr','/download?from=mobile']:
+                with urllib.request.urlopen(base+url) as response:
+                    self.assertEqual(response.status,200)
+                    self.assertEqual(response.read(),(folder/'download.html').read_bytes())
+                    self.assertIn("style-src 'self'",response.headers['Content-Security-Policy'])
+            with urllib.request.urlopen(base+'/download.css') as response:
+                self.assertEqual(response.headers.get_content_type(),'text/css')
+            for browser in ['chrome','edge']:
+                with urllib.request.urlopen(base+'/'+browser+'.zip') as response:
+                    data=response.read()
+                    self.assertEqual(data,(folder/'extension.zip').read_bytes())
+                    self.assertIn('attachment;',response.headers['Content-Disposition'])
+                    self.assertIn(browser,response.headers['Content-Disposition'])
+                    with zipfile.ZipFile(io.BytesIO(data)) as z:
+                        manifest=json.loads(z.read('manifest.json'))
+                        self.assertEqual(manifest['manifest_version'],3)
+            for number in ['02','01','03','04','05','06']:
+                with urllib.request.urlopen(base+'/landing/image-'+number+'.webp') as response:
+                    self.assertEqual(response.headers.get_content_type(),'image/webp')
+                    self.assertEqual(response.read(),(folder/'landing'/('image-'+number+'.webp')).read_bytes())
+            request=urllib.request.Request(base+'/download?stale-session=1',headers={'Authorization':'Bearer expired-token'})
+            with urllib.request.urlopen(request) as response:
+                self.assertEqual(response.status,200,'an expired account cannot block a public introduction page')
+            with self.assertRaises(urllib.error.HTTPError) as caught:
+                urllib.request.urlopen(base+'/v1/me')
+            self.assertEqual(caught.exception.code,401,'account APIs remain protected')
+            from backend.public_page import public_page_file
+            self.assertIsNone(public_page_file('/landing/../server.py'))
+            self.assertIsNone(public_page_file('/landing/%2e%2e/server.py'))
+            self.assertEqual(self.events,[],'public downloads never call a model')
+        finally:
+            server.shutdown();server.server_close();thread.join()
+
     def test_learning_defaults_to_server_model(self):
         body={'input':[{'role':'user','content':'hello'}]}
         self.call('/v1/ark/responses',body)
@@ -82,6 +123,32 @@ class Tests(unittest.TestCase):
             except Fault as e: return e.status
         with concurrent.futures.ThreadPoolExecutor(2) as pool: results=list(pool.map(invoke,range(2)))
         self.assertEqual(sorted(results),[200,429]); self.assertEqual(len(self.events),1)
+    def test_limit_codes_separate_quota_concurrency_and_rate(self):
+        for _ in range(2): self.gateway.reserve(1,'zhiyun-subtitles','ark')
+        with self.assertRaises(Fault) as ctx: self.gateway.reserve(1,'zhiyun-subtitles','ark')
+        self.assertEqual((ctx.exception.code,ctx.exception.retry_after),('concurrency_limit',5))
+        self.gateway.add_user('a@example.test','long-test-password','zhiyun-subtitles',2,20)
+        with self.assertRaises(Fault) as ctx: self.gateway.reserve(1,'zhiyun-subtitles','ark')
+        self.assertEqual(ctx.exception.code,'quota_exhausted');self.assertIsNone(ctx.exception.retry_after)
+        self.gateway.throttle('diagnostic-test',1)
+        with self.assertRaises(Fault) as ctx: self.gateway.throttle('diagnostic-test',1)
+        self.assertEqual(ctx.exception.code,'rate_limit');self.assertGreater(ctx.exception.retry_after,0)
+
+    def test_http_rejection_exposes_code_retry_and_private_diagnostic_id(self):
+        from contextlib import redirect_stderr
+        for _ in range(2): self.gateway.reserve(1,'zhiyun-subtitles','ark')
+        server=make_server(self.gateway,port=0);thread=threading.Thread(target=server.serve_forever,daemon=True);thread.start()
+        diagnostic=io.StringIO()
+        try:
+            req=urllib.request.Request('http://127.0.0.1:'+str(server.server_port)+'/v1/ark/responses',json.dumps(self.body).encode(),{**self.headers,'Content-Type':'application/json'})
+            with redirect_stderr(diagnostic), self.assertRaises(urllib.error.HTTPError) as ctx: urllib.request.urlopen(req,timeout=5)
+            response=ctx.exception;body=json.loads(response.read());response.close()
+            self.assertEqual(response.code,429);self.assertEqual(body['error_code'],'concurrency_limit');self.assertEqual(response.headers['Retry-After'],'5')
+            self.assertEqual(response.headers['X-Request-Id'],body['request_id'])
+            event=json.loads(diagnostic.getvalue());self.assertEqual(event['request_id'],body['request_id']);self.assertEqual(event['error_code'],'concurrency_limit')
+            self.assertNotIn(self.token,diagnostic.getvalue());self.assertNotIn('a@example.test',diagnostic.getvalue());self.assertNotIn('hello',diagnostic.getvalue())
+        finally:server.shutdown();server.server_close();thread.join()
+
     def test_uncertain_upstream_remains_charged(self):
         self.gateway.upstream=lambda *args: (_ for _ in ()).throw(Fault(502,'timeout'))
         self.fails(502,lambda:self.call('/v1/ark/responses',self.body))
@@ -142,7 +209,7 @@ class Tests(unittest.TestCase):
         self.gateway.add_user('owner@example.test','long-admin-password','zhiyun-subtitles',admin=True,username='owner')
         token=self.call('/v1/auth/login',{'email':'owner','password':'long-admin-password'},headers={'X-App-Id':'zhiyun-subtitles','X-Client-Type':'admin-web'})[2]['token']
         headers={**self.headers,'Authorization':'Bearer '+token}
-        created=self.call('/v1/admin/users',{'email':'new@example.test','username':'新同学','password':'long-new-password','request_limit':1,'audio_limit':0,'is_admin':True},headers)[2]
+        created=self.call('/v1/admin/users',{'email':'new@example.test','username':'新同学','password':'long-new-password','plan':'pro','request_limit':1,'audio_limit':0,'is_admin':True},headers)[2]
         new_token=self.call('/v1/auth/login',{'email':'新同学','password':'long-new-password'})[2]['token']
         new_headers={**self.headers,'Authorization':'Bearer '+new_token}
         self.assertFalse(self.call('/v1/me',headers=new_headers,method='GET')[2]['is_admin'])
@@ -171,15 +238,13 @@ class Tests(unittest.TestCase):
         for _ in range(9): self.fails(401,lambda:self.call('/v1/auth/login',{'email':'a@example.test','password':'wrong'}))
         self.fails(429,lambda:self.call('/v1/auth/login',{'email':'a@example.test','password':'long-test-password'}))
 
-    def test_guest_speech_without_login_and_job_isolation(self):
+    def test_guest_paid_endpoints_require_login_without_upstream_calls(self):
         headers={'X-App-Id':'zhiyun-subtitles','X-Api-Request-Id':str(uuid.uuid4())}
-        self.gateway.handle('POST','/v1/speech/submit',headers,self.wav_body(12),'guest-a')
-        self.gateway.handle('POST','/v1/speech/query',headers,{},'guest-a')
-        self.fails(404,lambda:self.gateway.handle('POST','/v1/speech/query',headers,{},'guest-b'))
-        self.fails(401,lambda:self.gateway.handle('POST','/v1/ark/responses',headers,self.body,'guest-a'))
-        self.fails(401,lambda:self.gateway.handle('POST','/v1/speech/submit',{**headers,'X-App-Id':'other'},self.wav_body(),'guest-a'))
-        self.assertEqual(len(self.events),2)
-        self.assertNotIn('test-server-only',json.dumps(self.gateway.handle('POST','/v1/speech/query',headers,{},'guest-a')))
+        for ip in ['guest-a','guest-b']:
+            for endpoint in ['/v1/speech/submit','/v1/speech/query','/v1/ark/responses','/v1/learning/jobs/create']:
+                self.fails(401,lambda:self.gateway.handle('POST',endpoint,headers,{},ip))
+        self.assertEqual(self.events,[])
+        with self.gateway.db() as db:self.assertEqual(db.execute('SELECT COUNT(*) FROM grants WHERE user<0').fetchone()[0],0)
 
     def test_incremental_job_returns_partial_before_completion_and_calls_model_once(self):
         ready=threading.Event();release=threading.Event();done=threading.Event();count=[]

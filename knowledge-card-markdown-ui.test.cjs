@@ -1,10 +1,103 @@
-const fs=require('fs'),assert=require('node:assert/strict'),{chromium}=require('playwright');
-(async()=>{const browser=await chromium.launch({headless:true,executablePath:'C:/Program Files/Google/Chrome/Application/chrome.exe'});try{const page=await browser.newPage({viewport:{width:1440,height:1000},acceptDownloads:true}),errors=[];page.on('pageerror',e=>errors.push(e.message));await page.setContent('<!doctype html><div id="host"></div>');for(const file of ['math-render.bundle.js','card-render.bundle.js','ai-learning.js'])await page.addScriptTag({path:file});for(const [name,file,mime] of [['ZY_STUDY_MASCOT','assets/study-eagle.png','image/png'],['ZY_BRAND_EAGLE','assets/qiushi-eagle.svg','image/svg+xml'],['ZY_SHARE_QR','assets/share-qr.png','image/png']])await page.addScriptTag({content:'const '+name+'='+JSON.stringify('data:'+mime+';base64,'+fs.readFileSync(file).toString('base64'))+';'});
-await page.evaluate(()=>{window.exported=[];const capture=ZYCardRender.render;globalThis.ZYCardRender={render:(doc,build)=>capture(doc,(fd,body)=>{build(fd,body);exported.push({text:body.textContent,html:body.innerHTML});})};const shadow=document.querySelector('#host').attachShadow({mode:'open'});window.ai=ZhiyunLearning.mountLearningAssistant({shadow,getApiKey:()=> 'test-session',request:o=>{queueMicrotask(()=>o.onload({status:200,responseText:JSON.stringify({output:[{type:'message',content:[{type:'output_text',text:'第一句讲直觉。第二句举例子！第三句是结论。'}]}]})}));return{abort(){}};}});ai.open();});const host=page.locator('#host');
-const ask=async text=>{await host.locator('#ai-question').fill(text);await host.locator('#ai-send').click();await page.waitForFunction(()=>document.querySelector('#host').shadowRoot.querySelector('#ai-learning').getAttribute('aria-busy')==='false');};await ask('第一问');await ask('第二问');assert.equal(await host.locator('#ai-save-card').isEnabled(),true);assert.equal(await host.locator('.ai-sentence-toggle').first().isVisible(),false);const allDownload=page.waitForEvent('download');await host.locator('#ai-save-card').click();await allDownload;assert.deepEqual(await page.evaluate(()=>exported.map(x=>x.text)),['第一问','第一句讲直觉。第二句举例子！第三句是结论。','第二问','第一句讲直觉。第二句举例子！第三句是结论。']);await page.evaluate(()=>exported=[]);await host.locator('#ai-card-select-mode').check();assert.equal(await host.locator('#ai-card-options').isVisible(),false);await host.locator('#ai-save-card').click();assert.equal(await host.locator('#ai-card-options').isVisible(),true);await host.locator('#ai-card-sentences').click();const checks=host.locator('.ai-card-select input');await checks.nth(0).check();assert.equal(await checks.nth(1).isChecked(),false);assert.equal(await checks.nth(2).isChecked(),false);await checks.nth(1).uncheck();assert.equal(await checks.nth(0).isChecked(),true);await checks.nth(3).check();assert.equal(await checks.nth(2).isChecked(),false);await checks.nth(2).uncheck();assert.equal(await checks.nth(3).isChecked(),true);await checks.nth(3).uncheck();
-await checks.nth(0).check();await host.locator('.ai-sentence-toggle').nth(1).click();const sentences=host.locator('.ai-message').nth(1).locator('.ai-sentence-choice');assert.equal(await sentences.count(),3);await sentences.nth(1).click();assert.equal(await sentences.nth(1).getAttribute('aria-pressed'),'true');assert.equal(await checks.nth(0).isChecked(),true);const download=page.waitForEvent('download');await host.locator('#ai-save-card').click();await download;assert.deepEqual(await page.evaluate(()=>exported.map(x=>x.text)),['第一问','第二句举例子！']);await sentences.nth(1).click();assert.equal(await host.locator('#ai-save-card').isDisabled(),false);await checks.nth(0).uncheck();assert.equal(await host.locator('#ai-save-card').isEnabled(),true);await checks.nth(0).check();await checks.nth(1).check();await page.evaluate(()=>exported=[]);const paired=page.waitForEvent('download');await host.locator('#ai-save-card').click();await paired;assert.equal(await page.evaluate(()=>exported.length),2);assert.match(await page.evaluate(()=>exported[0].text),/第一问/);
-await host.locator('#ai-card-words').click();for(const checkbox of await checks.all())await checkbox.uncheck();await page.evaluate(()=>{exported=[];const shadow=document.querySelector('#host').shadowRoot;const node=shadow.querySelectorAll('.ai-message')[1].querySelector('.ai-markdown p');const range=document.createRange();range.setStart(node.firstChild,0);range.setEnd(node.firstChild,2);getSelection().removeAllRanges();getSelection().addRange(range);node.dispatchEvent(new MouseEvent('mouseup',{bubbles:true,composed:true}));});const wordsDownload=page.waitForEvent('download');await host.locator('#ai-save-card').click();await wordsDownload;assert.deepEqual(await page.evaluate(()=>exported.map(x=>x.text)),['第一']);await host.locator('#ai-card-select-mode').uncheck();assert.equal(await host.locator('#ai-card-options').isVisible(),false);
-const markdown='# 因果推断\n\n**核心直觉**：相关性不等于因果性。\n\n- 看见关联\n- 检查混杂因素\n\n> 同时发生，不代表互为因果。\n\n| 概念 | 解释 |\n| --- | --- |\n| 相关 | 一起变化 |\n| 因果 | 改变因素影响结果 |\n\n```python\nprint("hello")\n```\n\n$$\nP(Y\\mid do(X=x)) = \\frac{1}{2}\n$$';
-const src=await page.evaluate(async text=>{exported=[];const canvas=await ZhiyunLearning.renderKnowledgeCard(document,{course:'因果推断与机器学习（研）',mode:'费曼 · 大白话',turns:[{role:'user',text:'怎样理解因果推断？'},{role:'assistant',text}]});return canvas.toDataURL();},markdown);fs.writeFileSync('knowledge-card-markdown-preview.png',Buffer.from(src.split(',')[1],'base64'));const html=await page.evaluate(()=>exported.at(-1).html);for(const pattern of [/<h2/,/<strong/,/<ul/,/<blockquote/,/<table/,/<pre/,/katex/])assert.match(html,pattern);assert.equal(await page.locator('iframe').count(),0);assert.deepEqual(errors,[]);await page.screenshot({path:'knowledge-card-sentence-selection-preview.png'});console.log('PASS: independent question-answer selection, selected question retained with answer sentences, real Markdown heading/bold/list/table/code/formula PNG and renderer cleanup.');}finally{await browser.close();}})().catch(e=>{console.error(e);process.exitCode=1;});
-
-
+const fs=require('fs'),assert=require('node:assert/strict'),{chromium}=require('playwright'),jsQR=require('jsqr');
+(async()=>{
+ const browser=await chromium.launch({headless:true,executablePath:'C:/Program Files/Google/Chrome/Application/chrome.exe'});
+ try{
+  const page=await browser.newPage({viewport:{width:1440,height:1000},acceptDownloads:true}),errors=[];
+  page.on('pageerror',e=>errors.push(e.message));
+  await page.setContent('<!doctype html><div id="host"></div>');
+  for(const file of ['math-render.bundle.js','card-render.bundle.js','ai-learning.js'])await page.addScriptTag({path:file});
+  // Read the actual built assets, so an accidental PNG watermark cannot pass with an SVG test fixture.
+  const build=fs.readFileSync('backend/install.user.js','utf8');
+  for(const name of ['ZY_STUDY_MASCOT','ZY_BRAND_EAGLE','ZY_SHARE_QR'])await page.addScriptTag({content:build.match(new RegExp('const '+name+'="[^"]*";'))[0]});
+  await page.addScriptTag({content:build.match(/^const ZY_KNOWLEDGE_CARD_QUOTES=.+;$/m)[0]});
+  assert.match(build,/const ZY_BRAND_EAGLE="data:image\/svg\+xml;base64,/);
+  await page.evaluate(()=>{
+   window.exported=[];const capture=ZYCardRender.render;
+   globalThis.ZYCardRender={render:(doc,build)=>capture(doc,(fd,body)=>{build(fd,body);exported.push({text:body.textContent,html:body.innerHTML});})};
+   const shadow=document.querySelector('#host').attachShadow({mode:'open'});
+   window.ai=ZhiyunLearning.mountLearningAssistant({shadow,getApiKey:()=> 'test-session',request:o=>{queueMicrotask(()=>o.onload({status:200,responseText:JSON.stringify({output:[{type:'message',content:[{type:'output_text',text:'第一句讲直觉。第二句举例子！第三句是结论。'}]}]})}));return{abort(){}};}});ai.open();
+  });
+  const host=page.locator('#host'),dialog=host.locator('#ai-card-dialog');
+  const ask=async text=>{await host.locator('#ai-question').fill(text);await host.locator('#ai-send').click();await page.waitForFunction(()=>document.querySelector('#host').shadowRoot.querySelector('#ai-learning').getAttribute('aria-busy')==='false');};
+  const download=async()=>{const event=page.waitForEvent('download');await dialog.locator('#ai-card-confirm').click();await event;await dialog.waitFor({state:'detached'});};
+  const exported=()=>page.evaluate(()=>window.exported.map(x=>x.text));
+  const reset=()=>page.evaluate(()=>window.exported=[]);
+  await ask('第一问');await ask('第二问');
+  assert.equal(await host.locator('#ai-card-select-mode,#ai-card-words,.ai-card-select,.ai-sentence-toggle').count(),0);
+  assert.equal(await host.locator('#ai-save-card').innerText(),'↓ 导出知识卡');
+  await host.locator('#ai-save-card').click();await dialog.waitFor();
+  assert.equal(await dialog.locator('#ai-card-choices').isVisible(),false);
+  await download();
+  assert.deepEqual(await exported(),['第一问','第一句讲直觉。第二句举例子！第三句是结论。','第二问','第一句讲直觉。第二句举例子！第三句是结论。']);
+  await reset();await host.locator('#ai-save-card').click();await dialog.locator('#ai-card-sentences').click();
+  assert.equal(await dialog.locator('#ai-card-confirm').isDisabled(),true,'no silent fallback to exporting everything');
+  const pairs=dialog.locator('.ai-card-pair');assert.equal(await pairs.count(),2);
+  await pairs.nth(0).locator('.ai-sentence-choice').nth(1).click();
+  await page.screenshot({path:'knowledge-card-sentence-selection-preview.png'});
+  await download();assert.deepEqual(await exported(),['第一问','第二句举例子！']);
+  await reset();await host.locator('#ai-save-card').click();await dialog.locator('#ai-card-sentences').click();
+  await pairs.nth(1).locator('.ai-sentence-choice').nth(2).click();await download();
+  assert.deepEqual(await exported(),['第二问','第三句是结论。'],'a follow-up never pairs with the first question');
+  await reset();await host.locator('#ai-save-card').click();await dialog.locator('#ai-card-sentences').click();
+  await pairs.nth(0).locator('.ai-sentence-choice').nth(0).click();await pairs.nth(1).locator('.ai-sentence-choice').nth(1).click();
+  await dialog.locator('#ai-card-all').click();await dialog.locator('#ai-card-sentences').click();await download();
+  assert.deepEqual(await exported(),['第一问','第一句讲直觉。','第二问','第二句举例子！']);
+  await reset();await host.locator('#ai-save-card').click();await dialog.locator('#ai-card-sentences').click();
+  await pairs.nth(0).locator('.ai-card-pair-all').click();await pairs.nth(0).locator('.ai-card-pair-all').click();
+  assert.equal(await dialog.locator('#ai-card-confirm').isDisabled(),true);
+  await page.keyboard.press('Escape');assert.equal(await dialog.count(),0);
+  assert.equal(await host.locator('#ai-save-card').evaluate(n=>n===n.getRootNode().activeElement),true);
+  await host.locator('#ai-save-card').click();await page.keyboard.press('Shift+Tab');
+  assert.equal(await dialog.locator('#ai-card-cancel').evaluate(n=>n===n.getRootNode().activeElement),true,'focus stays inside modal');
+  await dialog.locator('#ai-card-cancel').click();
+  // Rendering failure keeps the selected excerpt and permits retry.
+  await host.locator('#ai-save-card').click();await dialog.locator('#ai-card-sentences').click();await pairs.nth(0).locator('.ai-sentence-choice').nth(1).click();
+  await page.evaluate(()=>{window.goodRender=ZYCardRender.render;ZYCardRender.render=async()=>{throw Error('fixture rendering failure');};});
+  await dialog.locator('#ai-card-confirm').click();await dialog.locator('#ai-card-summary').filter({hasText:'生成失败'}).waitFor();
+  assert.equal(await pairs.nth(0).locator('.ai-sentence-choice').nth(1).getAttribute('aria-pressed'),'true');
+  await page.evaluate(()=>ZYCardRender.render=window.goodRender);await reset();await download();assert.deepEqual(await exported(),['第一问','第二句举例子！']);
+  // A paired image survives excerpt export from a restored conversation.
+  const attached=await page.evaluate(()=>{const c=document.createElement('canvas');c.width=16;c.height=12;c.getContext('2d').fillRect(0,0,16,12);return c.toDataURL('image/png');});
+  await page.evaluate(image=>ai.send('截图中的问题',{image}),attached);
+  await host.locator('#ai-save-card').click();await dialog.locator('#ai-card-sentences').click();
+  assert.equal(await dialog.locator('.ai-card-pair img').getAttribute('src'),attached);
+  await dialog.locator('.ai-sentence-choice').nth(0).click();
+  const imageDownload=page.waitForEvent('download');await dialog.locator('#ai-card-confirm').click();const imageFile=await imageDownload;
+  await imageFile.saveAs('.testdeps/card-image-excerpt.png');await dialog.waitFor({state:'detached'});
+  // Verify structured Markdown blocks remain atomic.
+  const segments=await page.evaluate(()=>ZhiyunLearning.selectionSentences('前一句。后一句！\n```js\na();\nb();\n```\n| A | B |\n|---|---|\n|1|2|\n$$\nx=1\n$$'));
+  assert.equal(segments.length,5);assert.match(segments[2],/a\(\);\nb\(\);/);
+  const markdown='# 因果推断\n\n**核心直觉**：相关性不等于因果性。\n\n- 看见关联\n- 检查混杂因素\n\n> 同时发生，不代表互为因果。\n\n| 概念 | 解释 |\n| --- | --- |\n| 相关 | 一起变化 |\n| 因果 | 改变因素影响结果 |\n\n```python\nprint("hello")\n```\n\n$$\nP(Y\\mid do(X=x)) = \\frac{1}{2}\n$$';
+  const result=await page.evaluate(async ({text,image})=>{
+   const draws=[],labels=[],proto=CanvasRenderingContext2D.prototype,draw=proto.drawImage,fill=proto.fillText,clip=proto.clip;let clipped=0;
+   proto.clip=function(...args){if(this.canvas.width===1080)clipped++;return clip.apply(this,args);};
+   proto.drawImage=function(image,...args){if(this.canvas.width===1080)draws.push({kind:image.src===ZY_STUDY_MASCOT?'mascot':image.src===ZY_BRAND_EAGLE?'eagle':'other',args});return draw.call(this,image,...args);};
+   proto.fillText=function(text,x,y,...args){if(this.canvas.width===1080)labels.push({text,x,y,width:this.measureText(text).width,inkRight:this.measureText(text).actualBoundingBoxRight,align:this.textAlign,baseline:this.textBaseline});return fill.call(this,text,x,y,...args);};
+   const small=await ZhiyunLearning.renderKnowledgeCard(document,{course:'知识卡短句测试',mode:'费曼 · 大白话',turns:[{role:'user',text:'什么是因果？'},{role:'assistant',text:'改变原因，会影响结果。'}]});
+   proto.drawImage=draw;proto.fillText=fill;proto.clip=clip;
+   const size=Number(small.dataset.qrSize),qr={width:size,height:size,data:Array.from(small.getContext('2d').getImageData(Number(small.dataset.qrX),Number(small.dataset.qrY),size,size).data)};
+   const card=await ZhiyunLearning.renderKnowledgeCard(document,{course:'因果推断与机器学习（研）',mode:'费曼 · 大白话',turns:[{role:'user',text:'怎样理解因果推断？',image},{role:'assistant',text}]});
+   return {draws,labels,clipped,quoteId:small.dataset.quoteId,quoteLines:Number(small.dataset.quoteLines),quoteAuthor:small.dataset.quoteAuthor,quoteSource:small.dataset.quoteSource,quotes:ZhiyunLearning.KNOWLEDGE_CARD_QUOTES,small:small.toDataURL(),large:card.toDataURL(),smallHeight:small.height,largeHeight:card.height,bottom:small.height-Number(small.dataset.qrY)-size,qr};
+  },{text:markdown,image:attached});
+  assert.ok(result.draws.some(x=>x.kind==='mascot'&&x.args[0]<150&&x.args[2]<70),'yellow answer avatar is restored at icon size');
+  assert.ok(result.draws.some(x=>x.kind==='eagle'&&x.args[0]>=500&&x.args[0]<600&&x.args[2]>=600),'header uses a large SVG eagle across the right side, independently of the avatar');
+  assert.ok(result.labels.some(x=>x.text==='AI 讲解'&&x.x===156&&x.baseline==='middle'),'avatar leaves room for the answer label');
+  assert.equal(result.clipped,0,'the complete answer avatar is never clipped');
+  assert.equal(result.quoteLines,1,'short quotations stay horizontal');
+  const quote=result.quotes.find(q=>q.id===result.quoteId);assert.ok(quote);assert.equal(result.quoteAuthor,quote.author);
+  const quoteLabel=result.labels.find(x=>x.text===quote.text),authorLabel=result.labels.find(x=>x.text==='—— '+quote.author+(quote.isTranslation?' · 译':''));assert.ok(quoteLabel&&authorLabel);
+  assert.equal(authorLabel.align,'left');assert.ok(Math.abs(authorLabel.x-Math.max(99,Math.min(quoteLabel.x+(quoteLabel.inkRight??quoteLabel.width)+8,779-authorLabel.width)))<.1,'name sits next to the sentence ending, with room before QR');
+  assert.equal(authorLabel.y-quoteLabel.y,26,'name is immediately below the final punctuation');
+  assert.ok(!result.labels.some(x=>/不止记住答案|把一个疑问|求知手记/.test(x.text)));
+  assert.ok(result.smallHeight<1040);assert.ok(result.largeHeight>result.smallHeight);assert.ok(result.bottom<85&&result.bottom>60);
+  assert.equal(jsQR(new Uint8ClampedArray(result.qr.data),result.qr.width,result.qr.height)?.data,'https://47.77.182.216.sslip.io/gateway/download');
+  fs.writeFileSync('knowledge-card-compact-preview.png',Buffer.from(result.small.split(',')[1],'base64'));
+  fs.writeFileSync('knowledge-card-markdown-preview.png',Buffer.from(result.large.split(',')[1],'base64'));
+  const html=await page.evaluate(()=>window.exported.at(-1).html);
+  for(const pattern of [/<h2/,/<strong/,/<ul/,/<blockquote/,/<table/,/<pre/,/katex/])assert.match(html,pattern);
+  assert.equal(await page.locator('iframe').count(),0);assert.deepEqual(errors,[]);
+  await page.setViewportSize({width:390,height:844});await host.locator('#ai-save-card').click();await dialog.locator('#ai-card-sentences').click();
+  const bounds=await dialog.boundingBox();assert.ok(bounds.width<=390&&bounds.x>=0&&bounds.height<=844);
+  console.log('PASS: direct export dialog, paired excerpts across turns, empty-selection guard, mode switch, select-all toggle, keyboard focus, atomic blocks, Markdown/formula/image rendering, compact height, restored yellow avatar, separate SVG watermark, horizontal quotations with attribution beside the sentence ending and editable library and decodable server QR.');
+ }finally{await browser.close();}
+})().catch(e=>{console.error(e);process.exitCode=1;});
