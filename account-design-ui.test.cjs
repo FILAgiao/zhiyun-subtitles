@@ -12,6 +12,7 @@ const assert=require('node:assert/strict'),{chromium}=require('playwright');
    window.GM_xmlhttpRequest=o=>{calls.push({url:o.url});const timer=setTimeout(()=>{
     let result={},status=200;
     if(o.url.endsWith('/auth/login')){if(failLogin){result={error:'账号或密码不正确，请检查后重试'};status=401;}else result={...fixtureProfile,server_time:Math.floor(Date.now()/1000),token:'trial-session'};}
+    else if(o.url.endsWith('/prompts'))result={prompts:[{id:'feynman',label:'费曼 · 大白话',prompt:'用大白话解释',scope:'official',revision:1}]};
     else if(o.url.endsWith('/me'))result={...fixtureProfile,server_time:Math.floor(Date.now()/1000)};
     else if(o.url.endsWith('/learning/jobs/create')){fixtureProfile.usage.requests++;result={id:'trial-job'};}
     else if(o.url.endsWith('/learning/jobs/poll'))result={state:'complete',text:'先把问题拆成几个小步骤，再逐步理解。',response:{status:'completed',output:[{type:'message',content:[{type:'output_text',text:'先把问题拆成几个小步骤，再逐步理解。'}]}]}};

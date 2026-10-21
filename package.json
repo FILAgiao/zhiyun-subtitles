@@ -1,10 +1,10 @@
 {
   "name": "zhiyun-subtitles",
-  "version": "0.20.61",
+  "version": "0.20.72",
   "private": true,
   "description": "浙大上课爽：网课不硬扛，浙大上课爽！同步字幕、PPT 讲解与本机缓存。",
   "scripts": {
-    "test": "node --test subtitle.test.cjs translation-sync.test.cjs cache-close.test.cjs ai-learning.test.cjs translation-reliability.test.cjs",
+    "test": "node --test subtitle.test.cjs translation-sync.test.cjs cache-close.test.cjs ai-learning.test.cjs translation-reliability.test.cjs speech-alignment.test.cjs",
     "test:ui": "node ui.test.cjs && node playback-ui.test.cjs && node player-edge-ui.test.cjs && node translation-sync-ui.test.cjs && node course-route-ui.test.cjs && node ai-learning-ui.test.cjs && node simple-ui.test.cjs && node question-history-ui.test.cjs && node ppt-thumbnails-ui.test.cjs && node ppt-sync-ui.test.cjs",
     "build:stream": "node build-stream.cjs",
     "test:media": "node generate-test-media.cjs",
@@ -31,16 +31,24 @@
     "build:quotes": "node build-userscript.cjs && node build-extension.cjs",
     "build:capture:bridge": "node build-capture-bridge.cjs",
     "test:translation": "node --test translation-reliability.test.cjs translation-sync.test.cjs && node translation-reliability-ui.test.cjs",
-    "test:extension": "node --test extension.test.cjs extension-bridge.test.cjs && node extension-ui.test.cjs && node extension-screenshot-ui.test.cjs",
+    "test:extension": "node --test extension.test.cjs extension-bridge.test.cjs && node extension-ui.test.cjs && node extension-screenshot-ui.test.cjs && node extension-focus-ui.test.cjs && node paste-scope-ui.test.cjs --extension",
+    "test:live": "node live-classroom-ui.test.cjs && node live-extension-ui.test.cjs",
+    "test:livingpage": "node livingpage-ui.test.cjs && node livingpage-ui.test.cjs --extension",
+    "test:interfaces": "node interface-compat-ui.test.cjs && node interface-compat-ui.test.cjs --extension",
     "test:fullscreen": "node classroom-fullscreen-ui.test.cjs",
+    "test:paste": "node paste-scope-ui.test.cjs && node paste-scope-ui.test.cjs --extension",
     "test:screenshot": "node native-capture-policy-ui.test.cjs && node classroom-screenshot-ui.test.cjs && node classroom-ppt-integration-ui.test.cjs && node ppt-image-ui.test.cjs && node screenshot-gesture-ui.test.cjs && node screenshot-session-ui.test.cjs && node screenshot-repeat-ui.test.cjs && node ai-actions-ui.test.cjs",
     "test:ai:scroll": "node ai-stream-scroll-ui.test.cjs",
     "test:ai:layout": "node ai-conversation-layout-ui.test.cjs",
     "test:selection": "node selection-lifecycle-ui.test.cjs",
     "test:capture:bridge": "node userscript-native-bridge-ui.test.cjs",
-    "test:accounts": "python -m unittest backend.test_accounts -v && node --test gateway-client.test.cjs && node account-policy-ui.test.cjs && node backend-ui.test.cjs",
+    "test:accounts": "python -m unittest backend.test_accounts -v && node --test gateway-client.test.cjs account-transport.test.cjs && node account-policy-ui.test.cjs && node backend-ui.test.cjs",
     "test:account:design": "node account-design-ui.test.cjs",
-    "test:compatibility": "python -m unittest backend.test_compatibility -v && node --test compatibility.test.cjs"
+    "test:account:transport": "node --test account-transport.test.cjs && node account-transport-ui.test.cjs",
+    "test:compatibility": "python -m unittest backend.test_compatibility -v && node --test compatibility.test.cjs",
+    "test:prompts": "python -m unittest backend.test_prompts -v && node --test cloud-prompts.test.cjs && node cloud-prompts-ui.test.cjs && node cloud-prompts-admin-ui.test.cjs",
+    "test:study": "python -m unittest backend.test_study -q && node study-sync-ui.test.cjs",
+    "test:study:portal": "node study-portal-ui.test.cjs"
   },
   "engines": {
     "node": ">=20.8"

@@ -1,0 +1,315 @@
+{
+  "checkedAt": "2026-10-20T07:58:11.597Z",
+  "status": "final",
+  "url": "file:///F:/all_my_code/tools/zhiyunzimu/marketing/wechat/2026-10-20-launch/preview.html",
+  "sourceSha256": "cc5cf14a17afe3f9777b782ea1ab357630b83a13d9fdc32b28a253699b55f9a9",
+  "previewSha256": "c2216dbdaa902ae600525cb2dcf9c8d499fccfae68f608a766d9d724306faec6",
+  "viewports": [
+    {
+      "viewport": 1440,
+      "documentWidth": 1440,
+      "bodyWidth": 1440,
+      "contentWidth": 700,
+      "contentScrollWidth": 700,
+      "images": [
+        {
+          "src": "images/01-cache.png",
+          "complete": true,
+          "naturalWidth": 1280,
+          "naturalHeight": 800,
+          "width": 649,
+          "height": 405.625
+        },
+        {
+          "src": "images/02-sync.png",
+          "complete": true,
+          "naturalWidth": 1280,
+          "naturalHeight": 800,
+          "width": 649,
+          "height": 405.625
+        },
+        {
+          "src": "images/03-bilingual.png",
+          "complete": true,
+          "naturalWidth": 1586,
+          "naturalHeight": 992,
+          "width": 649,
+          "height": 405.921875
+        },
+        {
+          "src": "images/04-classroom.png",
+          "complete": true,
+          "naturalWidth": 1280,
+          "naturalHeight": 800,
+          "width": 649,
+          "height": 405.625
+        },
+        {
+          "src": "images/05-ai-explain.png",
+          "complete": true,
+          "naturalWidth": 1280,
+          "naturalHeight": 800,
+          "width": 649,
+          "height": 405.625
+        },
+        {
+          "src": "images/06-capture.png",
+          "complete": true,
+          "naturalWidth": 1280,
+          "naturalHeight": 800,
+          "width": 649,
+          "height": 405.625
+        },
+        {
+          "src": "images/07-knowledge-card.png",
+          "complete": true,
+          "naturalWidth": 1280,
+          "naturalHeight": 800,
+          "width": 649,
+          "height": 405.625
+        }
+      ],
+      "overflowElements": [],
+      "textClipping": [],
+      "placeholderMatches": [],
+      "literalMarkdownLinks": [],
+      "genericThemeRemnants": [],
+      "brandMastheadPresent": true,
+      "toolbar": {
+        "hintRight": 299.125,
+        "buttonLeft": 1279.828125,
+        "noOverlap": true
+      },
+      "completeMarkdownLines": 53,
+      "missingMarkdownLines": [],
+      "allSevenImagesLoaded": true,
+      "noHorizontalOverflow": true,
+      "pageErrors": [],
+      "screenshots": [
+        "preview-desktop-full.png"
+      ]
+    },
+    {
+      "viewport": 390,
+      "documentWidth": 390,
+      "bodyWidth": 390,
+      "contentWidth": 374,
+      "contentScrollWidth": 374,
+      "images": [
+        {
+          "src": "images/01-cache.png",
+          "complete": true,
+          "naturalWidth": 1280,
+          "naturalHeight": 800,
+          "width": 346,
+          "height": 216.25
+        },
+        {
+          "src": "images/02-sync.png",
+          "complete": true,
+          "naturalWidth": 1280,
+          "naturalHeight": 800,
+          "width": 346,
+          "height": 216.25
+        },
+        {
+          "src": "images/03-bilingual.png",
+          "complete": true,
+          "naturalWidth": 1586,
+          "naturalHeight": 992,
+          "width": 346,
+          "height": 216.40625
+        },
+        {
+          "src": "images/04-classroom.png",
+          "complete": true,
+          "naturalWidth": 1280,
+          "naturalHeight": 800,
+          "width": 346,
+          "height": 216.25
+        },
+        {
+          "src": "images/05-ai-explain.png",
+          "complete": true,
+          "naturalWidth": 1280,
+          "naturalHeight": 800,
+          "width": 346,
+          "height": 216.25
+        },
+        {
+          "src": "images/06-capture.png",
+          "complete": true,
+          "naturalWidth": 1280,
+          "naturalHeight": 800,
+          "width": 346,
+          "height": 216.25
+        },
+        {
+          "src": "images/07-knowledge-card.png",
+          "complete": true,
+          "naturalWidth": 1280,
+          "naturalHeight": 800,
+          "width": 346,
+          "height": 216.25
+        }
+      ],
+      "overflowElements": [],
+      "textClipping": [],
+      "placeholderMatches": [],
+      "literalMarkdownLinks": [],
+      "genericThemeRemnants": [],
+      "brandMastheadPresent": true,
+      "toolbar": {
+        "hintRight": 206,
+        "buttonLeft": 229.828125,
+        "noOverlap": true
+      },
+      "completeMarkdownLines": 53,
+      "missingMarkdownLines": [],
+      "allSevenImagesLoaded": true,
+      "noHorizontalOverflow": true,
+      "pageErrors": [],
+      "screenshots": [
+        "preview-mobile-390-full.png",
+        "preview-mobile-390-first.png",
+        "preview-mobile-390-middle.png",
+        "preview-mobile-390-bottom.png"
+      ]
+    },
+    {
+      "viewport": 320,
+      "documentWidth": 320,
+      "bodyWidth": 320,
+      "contentWidth": 304,
+      "contentScrollWidth": 304,
+      "images": [
+        {
+          "src": "images/01-cache.png",
+          "complete": true,
+          "naturalWidth": 1280,
+          "naturalHeight": 800,
+          "width": 276,
+          "height": 172.5
+        },
+        {
+          "src": "images/02-sync.png",
+          "complete": true,
+          "naturalWidth": 1280,
+          "naturalHeight": 800,
+          "width": 276,
+          "height": 172.5
+        },
+        {
+          "src": "images/03-bilingual.png",
+          "complete": true,
+          "naturalWidth": 1586,
+          "naturalHeight": 992,
+          "width": 276,
+          "height": 172.625
+        },
+        {
+          "src": "images/04-classroom.png",
+          "complete": true,
+          "naturalWidth": 1280,
+          "naturalHeight": 800,
+          "width": 276,
+          "height": 172.5
+        },
+        {
+          "src": "images/05-ai-explain.png",
+          "complete": true,
+          "naturalWidth": 1280,
+          "naturalHeight": 800,
+          "width": 276,
+          "height": 172.5
+        },
+        {
+          "src": "images/06-capture.png",
+          "complete": true,
+          "naturalWidth": 1280,
+          "naturalHeight": 800,
+          "width": 276,
+          "height": 172.5
+        },
+        {
+          "src": "images/07-knowledge-card.png",
+          "complete": true,
+          "naturalWidth": 1280,
+          "naturalHeight": 800,
+          "width": 276,
+          "height": 172.5
+        }
+      ],
+      "overflowElements": [],
+      "textClipping": [],
+      "placeholderMatches": [],
+      "literalMarkdownLinks": [],
+      "genericThemeRemnants": [],
+      "brandMastheadPresent": true,
+      "toolbar": {
+        "hintRight": 136,
+        "buttonLeft": 159.828125,
+        "noOverlap": true
+      },
+      "completeMarkdownLines": 53,
+      "missingMarkdownLines": [],
+      "allSevenImagesLoaded": true,
+      "noHorizontalOverflow": true,
+      "pageErrors": [],
+      "screenshots": [
+        "preview-mobile-320-full.png",
+        "preview-mobile-320-first.png"
+      ]
+    }
+  ],
+  "clipboardWritePrevented": true,
+  "copy": {
+    "events": [
+      {
+        "isTrusted": true,
+        "type": "copy",
+        "defaultPrevented": true,
+        "textLength": 1836,
+        "htmlLength": 17617
+      }
+    ],
+    "toast": "✅ 已复制！去公众号编辑器按 Ctrl/⌘+V 粘贴即可",
+    "selectionCleared": true,
+    "eventSummary": {
+      "isTrusted": true,
+      "defaultPrevented": true,
+      "rangeCount": 1,
+      "ancestor": "DIV",
+      "textLength": 1836,
+      "imageCount": 7,
+      "includesTitle": true,
+      "includesClosing": true,
+      "excludesToolbar": true,
+      "matchesContentHtml": true
+    }
+  },
+  "previewUnchangedDuringQa": true,
+  "layoutChecksPassed": true,
+  "toolbarChecksPassed": true,
+  "copyCheckPassed": true,
+  "verificationBoundary": {
+    "copy": "A real trusted browser copy event was captured. The capture handler prevented its default clipboard write. Captured selection matched the complete content HTML, contained 7 images, and excluded the toolbar. Actual OS clipboard persistence and WeChat editor paste were not verified.",
+    "localImages": "Copied HTML contains local relative images/... paths. This does not upload image bytes to WeChat. The publisher must upload and replace the 7 local images in the WeChat editor, then preview on mobile.",
+    "publication": "No WeChat draft upload, login, or public publication performed."
+  },
+  "visualReview": {
+    "reviewed": [
+      "preview-mobile-390-first.png",
+      "preview-mobile-390-full.png",
+      "preview-mobile-390-middle.png",
+      "preview-mobile-390-bottom.png"
+    ],
+    "passed": true,
+    "brandMastheadCorrect": true,
+    "noGenericEngagementFooter": true,
+    "allImagesPlaced": true,
+    "standaloneQuoteMarkerInMarkdown": false,
+    "standaloneQuoteMarkerInCapturedHtml": false,
+    "remainingIssues": []
+  }
+}

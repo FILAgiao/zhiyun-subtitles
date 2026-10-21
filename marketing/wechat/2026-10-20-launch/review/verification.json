@@ -1,0 +1,96 @@
+{
+  "version": "wechat-launch-v1.0",
+  "checked_at": "2026-10-20T16:00:20.134184+08:00",
+  "status": "local_only_not_uploaded_or_published",
+  "body_chars": 1548,
+  "scoring_mode": "existing_short_draft_1000_to_2200_chars_other_thresholds_unchanged",
+  "writing_checks_passed": true,
+  "default_longform_blocking_count": 1,
+  "html_validation": "passed_no_errors_no_punctuation_warnings",
+  "image_source_hashes_match": true,
+  "article_images": 7,
+  "new_covers": 2,
+  "viewports": [
+    1440,
+    390,
+    320
+  ],
+  "preview_qa_passed": true,
+  "copy_scope_passed": true,
+  "os_clipboard_write_performed": false,
+  "wechat_editor_paste_verified": false,
+  "wechat_materials_uploaded": false,
+  "chrome_public_store_version": "0.20.48",
+  "files": [
+    {
+      "file": "article.md",
+      "bytes": 5566,
+      "sha256": "cc5cf14a17afe3f9777b782ea1ab357630b83a13d9fdc32b28a253699b55f9a9"
+    },
+    {
+      "file": "article.html",
+      "bytes": 21027,
+      "sha256": "31b0fa4f17ffe853d42879898f676123394b073f8bd52ba434d02f89ae732737"
+    },
+    {
+      "file": "preview.html",
+      "bytes": 24018,
+      "sha256": "c2216dbdaa902ae600525cb2dcf9c8d499fccfae68f608a766d9d724306faec6"
+    },
+    {
+      "file": "writer-config.json",
+      "bytes": 161,
+      "sha256": "06722c7db7d53119b752a26d337784a65ce48db3cdf265184a7098b52c7d7a9d"
+    },
+    {
+      "file": "publication-profile.json",
+      "bytes": 228,
+      "sha256": "c9410acaa5427ce0974eaf4bc82069d5a9ff9808f04dc71867bd22628d38f8d1"
+    },
+    {
+      "file": "images/01-cache.png",
+      "bytes": 1434017,
+      "sha256": "88deea1188238dd7cf4fbfe0c74c336afc6ecb205bfb61a5c93463538cd91d70"
+    },
+    {
+      "file": "images/02-sync.png",
+      "bytes": 1210351,
+      "sha256": "d590766c13bb07827b840b5c6a866cb15d53fad46fdf2e92b278edeb39925bcf"
+    },
+    {
+      "file": "images/03-bilingual.png",
+      "bytes": 1649045,
+      "sha256": "7e388fed544dbf2bd8203b102a720d305b9b01e3d4a3b10ae9c015a48012b651"
+    },
+    {
+      "file": "images/04-classroom.png",
+      "bytes": 1441728,
+      "sha256": "b4a7d93d1c4747e3b0c7d8f1e86ee00b30e814f166cc06fa1c157d7b560a033e"
+    },
+    {
+      "file": "images/05-ai-explain.png",
+      "bytes": 1382021,
+      "sha256": "fd7e56334e2ef180026a2fa0d509885422951e05a7b2c864676782241bdfccd6"
+    },
+    {
+      "file": "images/06-capture.png",
+      "bytes": 1615272,
+      "sha256": "15d7994ef56852fa495c4b60dcca9e082f827b300ac003d744965e7f4d0f5331"
+    },
+    {
+      "file": "images/07-knowledge-card.png",
+      "bytes": 1519971,
+      "sha256": "8ba4a5766c9e6e08346a74305c0178630176307540701f1a8822ea08927242ef"
+    },
+    {
+      "file": "covers/generated/xiaonaiwa-cover-square-v1.png",
+      "bytes": 1851135,
+      "sha256": "8cb6a13740fab4d082f3934d0577853646fee9dc529d31e70f3432a1851a93ee"
+    },
+    {
+      "file": "covers/generated/xiaonaiwa-cover-wide-v1.png",
+      "bytes": 1727354,
+      "sha256": "e48438b061638af1bcb27f74422c1553f3d83e4e4c7ca097354fc0cd0b3ce46b"
+    }
+  ]
+}

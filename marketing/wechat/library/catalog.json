@@ -1,0 +1,200 @@
+[
+  {
+    "source": "ads/v2/image-02-1280x800.png",
+    "archive": "library/features/01-cache.png",
+    "sha256": "88deea1188238dd7cf4fbfe0c74c336afc6ecb205bfb61a5c93463538cd91d70",
+    "width": 1280,
+    "height": 800,
+    "frames": 1,
+    "role": "video cache",
+    "used_in_article": true,
+    "rights": "user-supplied project asset; third-party license not independently verified"
+  },
+  {
+    "source": "ads/v2/image-01-1280x800.png",
+    "archive": "library/features/02-sync.png",
+    "sha256": "d590766c13bb07827b840b5c6a866cb15d53fad46fdf2e92b278edeb39925bcf",
+    "width": 1280,
+    "height": 800,
+    "frames": 1,
+    "role": "subtitle and PPT sync",
+    "used_in_article": true,
+    "rights": "user-supplied project asset; third-party license not independently verified"
+  },
+  {
+    "source": "ads/v2/ChatGPT 图像 2026年10月20日 10_04_25.png",
+    "archive": "library/features/03-bilingual.png",
+    "sha256": "7e388fed544dbf2bd8203b102a720d305b9b01e3d4a3b10ae9c015a48012b651",
+    "width": 1586,
+    "height": 992,
+    "frames": 1,
+    "role": "bilingual translation illustration without real person",
+    "used_in_article": true,
+    "rights": "user-supplied project asset; third-party license not independently verified"
+  },
+  {
+    "source": "ads/v2/image-03-1280x800.png",
+    "archive": "library/features/04-classroom.png",
+    "sha256": "b4a7d93d1c4747e3b0c7d8f1e86ee00b30e814f166cc06fa1c157d7b560a033e",
+    "width": 1280,
+    "height": 800,
+    "frames": 1,
+    "role": "PPT classroom view",
+    "used_in_article": true,
+    "rights": "user-supplied project asset; third-party license not independently verified"
+  },
+  {
+    "source": "ads/v2/image-04-1280x800.png",
+    "archive": "library/features/05-ai-explain.png",
+    "sha256": "fd7e56334e2ef180026a2fa0d509885422951e05a7b2c864676782241bdfccd6",
+    "width": 1280,
+    "height": 800,
+    "frames": 1,
+    "role": "AI explanation",
+    "used_in_article": true,
+    "rights": "user-supplied project asset; third-party license not independently verified"
+  },
+  {
+    "source": "ads/v2/image-05-1280x800.png",
+    "archive": "library/features/06-capture.png",
+    "sha256": "15d7994ef56852fa495c4b60dcca9e082f827b300ac003d744965e7f4d0f5331",
+    "width": 1280,
+    "height": 800,
+    "frames": 1,
+    "role": "middle-button capture and annotation",
+    "used_in_article": true,
+    "rights": "user-supplied project asset; third-party license not independently verified"
+  },
+  {
+    "source": "ads/v2/image-06-1280x800.png",
+    "archive": "library/features/07-knowledge-card.png",
+    "sha256": "8ba4a5766c9e6e08346a74305c0178630176307540701f1a8822ea08927242ef",
+    "width": 1280,
+    "height": 800,
+    "frames": 1,
+    "role": "knowledge cards",
+    "used_in_article": true,
+    "rights": "user-supplied project asset; third-party license not independently verified"
+  },
+  {
+    "source": "ads/v2/zhiyun-banner-1400x560.png",
+    "archive": "library/covers/zhiyun-banner-1400x560.png",
+    "sha256": "44e048e9a5ca1577062541064c8a405510e6414904c3fb814cca1d6592a7fa6f",
+    "width": 1400,
+    "height": 560,
+    "frames": 1,
+    "role": "existing product cover",
+    "used_in_article": false,
+    "rights": "user-supplied project asset; third-party license not independently verified"
+  },
+  {
+    "source": "ads/v2/zhiyun-440x280.png",
+    "archive": "library/covers/zhiyun-440x280.png",
+    "sha256": "9d42d7fbdee62bff086638688148ca4c5353221d853539d69cc04ac913915b97",
+    "width": 440,
+    "height": 280,
+    "frames": 1,
+    "role": "existing product cover",
+    "used_in_article": false,
+    "rights": "user-supplied project asset; third-party license not independently verified"
+  },
+  {
+    "source": "assets/brand-logo.png",
+    "archive": "library/brand/brand-logo.png",
+    "sha256": "d032bffde2189fdb2ef7a89001b4b08d77b9598a8209bfeb7f70bdabcf778d45",
+    "width": 163,
+    "height": 153,
+    "frames": 1,
+    "role": "brand reference",
+    "used_in_article": false,
+    "rights": "user-supplied project asset; third-party license not independently verified"
+  },
+  {
+    "source": "assets/onboarding/frog-feature-actions.png",
+    "archive": "library/brand/frog-feature-actions.png",
+    "sha256": "a8cd9fcfe94546a94c84fae1dc614ab3a45fd48bf2564904b89654daf1b79ed4",
+    "width": 1774,
+    "height": 887,
+    "frames": 1,
+    "role": "brand reference",
+    "used_in_article": false,
+    "rights": "user-supplied project asset; third-party license not independently verified"
+  },
+  {
+    "source": "ads/v2/20211006141703_2e5f9.gif",
+    "archive": "library/extras/20211006141703_2e5f9.gif",
+    "sha256": "afe3ad3e67377231a44426629ed9eb35b3e36de7ff87f6b66f3708220be14d25",
+    "width": 512,
+    "height": 512,
+    "frames": 30,
+    "role": "unused project alternative",
+    "used_in_article": false,
+    "rights": "user-supplied project asset; third-party license not independently verified"
+  },
+  {
+    "source": "ads/v2/ChatGPT 图像 2026年10月20日 10_40_18.png",
+    "archive": "library/extras/bilingual-teacher-reference.png",
+    "sha256": "f55763f8a02960c619914f55481202d7d8acc87daa502a3ec37bb26c9459954d",
+    "width": 1586,
+    "height": 992,
+    "frames": 1,
+    "role": "unused project alternative",
+    "used_in_article": false,
+    "rights": "user-supplied project asset; third-party license not independently verified"
+  },
+  {
+    "source": "ads/v2/ChatGPT 图像 2026年10月20日 13_01_37.png",
+    "archive": "library/extras/bilingual-variant-13_01_37.png",
+    "sha256": "a29766379d52b14770ef369542dfb1cb6d2d9217ddb1a07e29a67d74a2dceecd",
+    "width": 1586,
+    "height": 992,
+    "frames": 1,
+    "role": "unused project alternative",
+    "used_in_article": false,
+    "rights": "user-supplied project asset; third-party license not independently verified"
+  },
+  {
+    "source": "ads/v2/ChatGPT 图像 2026年10月20日 13_01_45.png",
+    "archive": "library/extras/bilingual-variant-13_01_45.png",
+    "sha256": "adfd2930244a7b9ad135ff02fd8049a74d3ff6e85f8ed0af652f3e73df12d147",
+    "width": 1586,
+    "height": 992,
+    "frames": 1,
+    "role": "unused project alternative",
+    "used_in_article": false,
+    "rights": "user-supplied project asset; third-party license not independently verified"
+  },
+  {
+    "source": "ads/v2/ChatGPT 图像 2026年10月20日 13_01_56.png",
+    "archive": "library/extras/bilingual-variant-13_01_56.png",
+    "sha256": "2598357ff027a0b632fea9f222b8f5b4f038a4179b418b4af6252a5522a93268",
+    "width": 1586,
+    "height": 992,
+    "frames": 1,
+    "role": "unused project alternative",
+    "used_in_article": false,
+    "rights": "user-supplied project asset; third-party license not independently verified"
+  },
+  {
+    "source": "ads/v2/ChatGPT 图像 2026年10月20日 13_02_04.png",
+    "archive": "library/extras/bilingual-variant-13_02_04.png",
+    "sha256": "39444bee33454394a01c088558a2c48258ddbc805c3cc62dc9af7fc363524791",
+    "width": 1586,
+    "height": 992,
+    "frames": 1,
+    "role": "unused project alternative",
+    "used_in_article": false,
+    "rights": "user-supplied project asset; third-party license not independently verified"
+  },
+  {
+    "source": "ads/v2/t1.jpg",
+    "archive": "library/extras/t1.jpg",
+    "sha256": "9985ee284a391dfefbfe2d1713ef14afd01ae4ac332da5ec0117a9274f29333b",
+    "width": 1230,
+    "height": 1230,
+    "frames": 1,
+    "role": "unused project alternative",
+    "used_in_article": false,
+    "rights": "user-supplied project asset; third-party license not independently verified"
+  }
+]

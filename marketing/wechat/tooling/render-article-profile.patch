@@ -1,0 +1,128 @@
+--- a/.agents/skills/wechat-content-pipeline/scripts/render_article.py
++++ b/.agents/skills/wechat-content-pipeline/scripts/render_article.py
+@@ -373,7 +373,7 @@
+     return None
+ 
+ 
+-def english_tag(heading):
++def english_tag(heading, fallback="KEY INSIGHT"):
+     mapping = (
+         ("成本", "COST & VALUE"), ("效率", "EFFICIENCY"),
+         ("数据", "DATA CHECK"), ("企业", "BUSINESS"),
+@@ -381,7 +381,7 @@
+         ("流程", "WORKFLOW"), ("影响", "IMPACT"),
+         ("风险", "RISK"), ("结", "CONCLUSION"),
+     )
+-    return next((tag for keyword, tag in mapping if keyword in heading), "KEY INSIGHT")
++    return next((tag for keyword, tag in mapping if keyword in heading), fallback)
+ 
+ 
+ def render_hero(title, intro, theme):
+@@ -393,14 +393,14 @@
+             '<section style="margin:0 0 30px;background:#FFFFFF;border:1.5px solid rgba(0,0,0,0.10);border-radius:20px;overflow:hidden;box-shadow:0 4px 20px rgba(0,0,0,0.06);">'
+             '<section style="padding:26px 24px 22px;"><section style="display:flex;align-items:center;margin-bottom:20px;">'
+             f'<span style="width:7px;height:7px;background:{theme["accent"]};border-radius:50%;display:inline-block;">'
+-            f'{leaf(" ")}</span><p style="margin:0 10px;font-size:10px;color:{theme["accent"]};font-weight:700;letter-spacing:3px;">{leaf("TECH INSIGHT")}</p>'
++            f'{leaf(" ")}</span><p style="margin:0 10px;font-size:10px;color:{theme["accent"]};font-weight:700;letter-spacing:3px;">{leaf(theme.get("publication_label", "TECH INSIGHT"))}</p>'
+             f'<section style="flex:1;height:1px;background:linear-gradient(to right,{theme["line"]},transparent);">{leaf(" ")}</section></section>'
+             f'<p style="font-size:25px;font-weight:900;color:{theme["ink"]};margin:0 0 14px;line-height:1.25;letter-spacing:-0.6px;">{title_html}</p>'
+             f'<section style="width:52px;height:3px;background:linear-gradient(to right,{theme["accent"]},{theme["muted"]});border-radius:2px;margin-bottom:13px;">{leaf(" ")}</section>'
+             f'<p style="font-size:14px;color:{theme["muted"]};margin:0;line-height:1.8;">{intro_html}</p></section>'
+             f'<section style="background:#1F1F1F;padding:10px 24px;display:flex;justify-content:space-between;">'
+-            f'<p style="margin:0;font-size:11px;color:#FFFFFF;font-weight:600;">{leaf("科技 · 产业 · 人")}</p>'
+-            f'<p style="margin:0;font-size:9px;color:#CFCFCF;letter-spacing:2px;">{leaf("深度观察")}</p></section></section>'
++            f'<p style="margin:0;font-size:11px;color:#FFFFFF;font-weight:600;">{leaf(theme.get("publication_scope", "科技 · 产业 · 人"))}</p>'
++            f'<p style="margin:0;font-size:9px;color:#CFCFCF;letter-spacing:2px;">{leaf(theme.get("publication_note", "深度观察"))}</p></section></section>'
+         )
+     if layout == "journal":
+         return (
+@@ -569,7 +569,9 @@
+ 
+ def render_heading(heading, index, total, theme):
+     number = "∞" if index == total and END_HEADING_RE.search(heading) else f"{index:02d}"
+-    tag = "THE END" if number == "∞" else english_tag(heading)
++    tag = "THE END" if number == "∞" else english_tag(
++        heading, theme.get("quote_label", "KEY INSIGHT")
++    )
+     layout = theme["layout"]
+     if layout == "newswire":
+         return (
+@@ -909,6 +911,8 @@
+     restrained editorial note instead: asking for likes beside casualties or
+     unresolved allegations would undermine the entire sober theme.
+     """
++    if theme.get("show_follow_cta") is False:
++        return ""
+     layout = theme["layout"]
+     accent = theme["accent"]
+     emphasis_color = accent      # 各 layout 可覆盖（深底上必须换成浅色）
+@@ -1134,12 +1138,47 @@
+     return raw
+ 
+ 
++
++PROFILE_TEXT_FIELDS = frozenset({
++    "publication_label", "publication_scope", "publication_note", "quote_label",
++})
++PROFILE_FIELDS = PROFILE_TEXT_FIELDS | {"show_follow_cta"}
++
++
++def load_article_profile(path):
++    """Load only optional article labels and the footer switch, never CSS."""
++    if path is None:
++        return {}
++    try:
++        profile = json.loads(Path(path).read_text(encoding="utf-8-sig"))
++    except (OSError, UnicodeError, json.JSONDecodeError) as exc:
++        raise RenderError(f"文章 profile JSON 读取失败：{exc}") from exc
++    if not isinstance(profile, dict):
++        raise RenderError("文章 profile JSON 必须是对象")
++    unknown = sorted(set(profile) - PROFILE_FIELDS)
++    if unknown:
++        raise RenderError(f"文章 profile 包含未知字段：{', '.join(unknown)}")
++    for key, value in profile.items():
++        if key == "show_follow_cta":
++            if type(value) is not bool:
++                raise RenderError("文章 profile 的 show_follow_cta 必须是布尔值")
++        elif not isinstance(value, str):
++            raise RenderError(f"文章 profile 的 {key} 必须是纯文本字符串")
++        elif re.search(r"<[^>]*>|[\x00-\x1f\x7f]", value):
++            raise RenderError(f"文章 profile 的 {key} 不能包含 HTML 标记或控制字符")
++    return profile
++
++
+ def parse_args():
+     parser = argparse.ArgumentParser(description="一次生成丰富主题正文与原生信息模块")
+     parser.add_argument("--article", required=True)
+     parser.add_argument("--theme", choices=tuple(THEMES), required=True)
+     parser.add_argument("--output", required=True)
+     parser.add_argument(
++        "--profile",
++        help="可选文章刊头 JSON；仅支持纯文本标签和 show_follow_cta 布尔值",
++    )
++    parser.add_argument(
+         "--inline-plan",
+         help="可选 inline-visuals.json；无效模块自动降级为纯正文",
+     )
+@@ -1151,6 +1190,8 @@
+     started = time.monotonic()
+     article_path, output_path = map(Path, (args.article, args.output))
+     try:
++        theme = dict(THEMES[args.theme])
++        theme.update(load_article_profile(args.profile))
+         source = article_path.read_text(encoding="utf-8")
+         title, sections = parse_article(source)
+         plan = {"version": 1, "theme": args.theme, "modules": []}
+@@ -1167,10 +1208,10 @@
+                 inline_degraded = True
+                 inline_reason = str(exc)
+         try:
+-            rendered = render_document(title, sections, plan, THEMES[args.theme])
++            rendered = render_document(title, sections, plan, theme)
+         except (RenderError, KeyError, TypeError, IndexError) as exc:
+             plan = {"version": 1, "theme": args.theme, "modules": []}
+-            rendered = render_document(title, sections, plan, THEMES[args.theme])
++            rendered = render_document(title, sections, plan, theme)
+             inline_degraded = True
+             inline_reason = str(exc)
+         atomic_text(output_path, rendered + "\n")

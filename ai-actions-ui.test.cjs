@@ -17,7 +17,7 @@ const {chromium}=require('playwright');
    const canvas=document.querySelector('#picture'),ctx=canvas.getContext('2d');ctx.fillStyle='orange';ctx.fillRect(0,0,2000,1000);
   });
   const host=page.locator('#host');
-  await page.evaluate(()=>{const range=document.createRange();range.selectNodeContents(document.querySelector('#text'));getSelection().removeAllRanges();getSelection().addRange(range);});
+  await page.evaluate(()=>{document.querySelector('#text').dispatchEvent(new PointerEvent('pointerdown',{button:0,bubbles:true}));const range=document.createRange();range.selectNodeContents(document.querySelector('#text'));getSelection().removeAllRanges();getSelection().addRange(range);});
   await page.locator('#text').dispatchEvent('pointerup',{button:0,clientX:40,clientY:20});assert.equal(await host.locator('#ai-selection-menu').isVisible(),true);const menu=await host.locator('#ai-selection-menu').boundingBox();assert.ok(menu.x>=40&&menu.x<=60);assert.ok(menu.y>=20&&menu.y<=40);assert.equal(await page.evaluate(()=>calls.length),0);
   await host.getByRole('button',{name:'爽问一下'}).click();await page.waitForFunction(()=>calls.length===1);assert.match(await page.evaluate(()=>calls[0].input.at(-1).content[0].text),/selected lesson text/);
   await host.locator('#ai-close').click();const before=await page.locator('#picture').boundingBox();

@@ -19,10 +19,10 @@ function buildPublicPage(){
  for(const id of ['02','01','03','04','05','06'])fs.copyFileSync('assets/onboarding/image-'+id+'.webp','backend/landing/image-'+id+'.webp');
  fs.copyFileSync('assets/brand-logo.png','backend/landing/brand-logo.png');
  const preview=path.resolve('dist/public-page-'+version);fs.mkdirSync(path.join(preview,'landing'),{recursive:true});
- const offline=html.replaceAll('/gateway/landing/','./landing/').replaceAll('/gateway/download.css','./download.css').replaceAll('href="/gateway/"','href="./index.html"').replaceAll('href="/gateway/privacy"','href="https://47.77.182.216.sslip.io/gateway/privacy"');
- fs.writeFileSync(path.join(preview,'index.html'),offline);fs.copyFileSync('backend/download.css',path.join(preview,'download.css'));
+ const offline=html.replaceAll('/gateway/landing/','./landing/').replaceAll('/gateway/download.css','./download.css').replaceAll('/gateway/site.js','./site.js').replaceAll('href="/gateway/study','href="https://47.77.182.216.sslip.io/gateway/study').replaceAll('href="/gateway/account','href="https://47.77.182.216.sslip.io/gateway/account').replaceAll('href="/gateway/"','href="./index.html"').replaceAll('href="/gateway/privacy"','href="https://47.77.182.216.sslip.io/gateway/privacy"');
+ fs.writeFileSync(path.join(preview,'index.html'),offline);fs.copyFileSync('backend/download.css',path.join(preview,'download.css'));fs.copyFileSync('backend/site.js',path.join(preview,'site.js'));
  for(const file of fs.readdirSync('backend/landing'))fs.copyFileSync(path.join('backend/landing',file),path.join(preview,'landing',file));
- fs.writeFileSync(path.join(preview,'README.txt'),'浙大上课爽 · 本地介绍页 '+version+'\n\n解压后双击 index.html 查看。六张介绍图和样式已包含，无需登录或启动服务器。\nChrome 按钮打开已提供的商店链接，需要联网；Edge 正在审核，按钮暂不可点击。\n这是本地预览包，尚未部署到公网；不会改变现有扫码地址。\n部署源文件见仓库 backend/download.template.html、download.css、public-page.json。\n');
+ fs.writeFileSync(path.join(preview,'README.txt'),'浙大上课爽 · 本地介绍页 '+version+'\n\n解压后双击 index.html 查看。六张介绍图和样式已包含，无需登录或启动服务器。\nChrome 按钮打开已提供的商店链接，需要联网；Edge 正在审核，按钮暂不可点击。\n这是本地介绍页预览包，尚未部署到公网；不会改变现有扫码地址。账号与问答需通过同域 HTTP 预览（见完整官网验收包）；此离线文件内的账号链接指向原官网，功能待部署。\n部署源文件见仓库 backend/download.template.html、download.css、public-page.json。\n');
  const zip=path.resolve('dist/public-page-'+version+'.zip');
  cp.execFileSync('python',['-c','import pathlib,zipfile,sys; root=pathlib.Path(sys.argv[1]); z=zipfile.ZipFile(sys.argv[2],"w",zipfile.ZIP_DEFLATED); [z.write(p,p.relative_to(root).as_posix()) for p in sorted(root.rglob("*")) if p.is_file()]; z.close()',preview,zip]);
  console.log('Public introduction page ready: v'+version+'; six images; Edge '+(edge?'store linked':'under review')+'.');

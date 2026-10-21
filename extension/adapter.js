@@ -20,7 +20,7 @@ function extensionRequest(o){
    if(response instanceof Promise)response.then(value=>finish('load',{status,responseHeaders,response:value,responseText:raw}));
    else finish('load',{status,responseHeaders,response,responseText:raw});
   }
-  if(m.type==='error'||m.type==='abort')finish(m.type);
+  if(m.type==='error'||m.type==='abort'||m.type==='timeout')finish(m.type);
  });
  port.postMessage({url:o.url,method:o.method||'GET',headers:o.headers||{},data:o.data,timeout:o.timeout});
  return {abort};
@@ -70,9 +70,9 @@ async function startExtension(run){
   const grant=activation;activation=null;
   if(signal?.aborted)throw new DOMException('Cancelled','AbortError');
   if(!grant||grant.expiresAt<Date.now()||grant.url!==location.href||grant.generation!==generation)throw gestureError('BRIDGE_NO_GESTURE','请用鼠标中键拖框，或亲自点击助手的截图按钮后重试。');
-  if(grant.runtime?!available():!focused())throw gestureError('BRIDGE_NOT_ACTIVE','请回到要截图的页面再操作。');
+  if(!available())throw gestureError('BRIDGE_NOT_ACTIVE','请回到要截图的页面再操作。');
   const data=await captureExtensionTab(signal);
-  if(grant.generation!==generation||grant.url!==location.href||(grant.runtime?!available():!focused()))throw gestureError('BRIDGE_NOT_ACTIVE','截图时页面已失去焦点，请回到页面重试。');
+  if(grant.generation!==generation||grant.url!==location.href||!available())throw gestureError('BRIDGE_NOT_ACTIVE','截图期间页面已切换，请回到页面重新截图。');
   return data;
  }};
  document.addEventListener('mousedown',event=>{
@@ -94,7 +94,10 @@ async function startExtension(run){
   if(!host||!button||button.getRootNode()!==host.shadowRoot||!elementVisible(button))return;
   authorize();
  },true);
- window.addEventListener('blur',revoke);window.addEventListener('pagehide',revoke);document.addEventListener('visibilitychange',()=>{if(!focused())revoke();});
+ // Child-frame focus also emits window.blur; it does not invalidate a trusted
+ // screenshot action. The background checks the actual browser window and tab.
+ // Hidden/navigated pages still invalidate even if they become visible again.
+ window.addEventListener('pagehide',revoke);document.addEventListener('visibilitychange',()=>{if(!available())revoke();});
  globalThis.ZY_CLIENT_TYPE='chrome-extension';
  const saved=await chrome.storage.local.get(null);let pending=Promise.resolve();
  const GM_getValue=(key,fallback)=>Object.hasOwn(saved,key)?saved[key]:fallback;

@@ -1,0 +1,46 @@
+{
+  "version": "article-profile-v1",
+  "date": "2026-10-20",
+  "installed": true,
+  "published": false,
+  "renderer_upstream_sha256": "814F7D087ED5D5C17E168A98607CBB96499B6DE3786967F9D851FAEFDBDC28FE",
+  "renderer_modified_sha256": "BDD5E65A780CF318A8B866E2DC6EE2762BBEF3D49E54D5AEE2CE7E4DCAB3A55B",
+  "registered_renderer_copies_identical": true,
+  "preview_modified_sha256": "6DB49438B65641769D20C2BDBD01D086AAA4AABC2DA1016015406D24BEA8E9AC",
+  "patch_reverse_check": {
+    "renderer_exit": 0,
+    "preview_exit": 0,
+    "flags": "--check --reverse --ignore-space-change --ignore-whitespace"
+  },
+  "tests": {
+    "article_renderer": {
+      "run": 19,
+      "status": "passed"
+    },
+    "profile": {
+      "run": 11,
+      "status": "passed"
+    },
+    "theme_matrix": {
+      "themes": 12,
+      "renders": 24,
+      "errors": 0,
+      "warnings": 0,
+      "status": "passed"
+    },
+    "full_suite": {
+      "run": 227,
+      "failures": 16,
+      "errors": 45,
+      "skipped": 5,
+      "status": "failed"
+    },
+    "upstream_baseline": {
+      "run": 227,
+      "failures": 16,
+      "errors": 45,
+      "skipped": 5,
+      "status": "same_counts_as_modified"
+    }
+  }
+}

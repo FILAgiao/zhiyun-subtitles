@@ -8,20 +8,24 @@ test('store package uses MV3 and persistent screenshot access with local code an
 const {captureSenderTab}=require('./extension/background.js');
 test('native screenshot validates sender and active tab before and after capture',async()=>{
  let captureCount=0,changed=false;const sender={id:'fixture-id',frameId:0,url:'https://example.test/',tab:{id:42,windowId:901}};
- const api={runtime:{id:'fixture-id'},tabs:{get:async()=>({id:42,windowId:901,active:!changed,url:'https://example.test/'}),captureVisibleTab:async(windowId,options)=>{assert.equal(windowId,901);assert.deepEqual(options,{format:'png'});captureCount++;return 'data:image/png;base64,fixture';}}};
+ const api={runtime:{id:'fixture-id'},windows:{get:async windowId=>{assert.equal(windowId,901);return {focused:true};}},tabs:{get:async()=>({id:42,windowId:901,active:!changed,url:'https://example.test/'}),captureVisibleTab:async(windowId,options)=>{assert.equal(windowId,901);assert.deepEqual(options,{format:'png'});captureCount++;return 'data:image/png;base64,fixture';}}};
  assert.equal(await captureSenderTab(api,sender),'data:image/png;base64,fixture');assert.equal(captureCount,1);
  for(const bad of [{...sender,id:'other'},{...sender,frameId:1},{...sender,url:'chrome://settings/'},{...sender,tab:{}},{...sender,tab:{id:42}}])await assert.rejects(captureSenderTab(api,bad));assert.equal(captureCount,1);
  const get=api.tabs.get;api.tabs.get=async()=>({id:42,windowId:901,active:true,url:'https://new-origin.test/'});await assert.rejects(captureSenderTab(api,sender),/跳转/);assert.equal(captureCount,1,'persistent access cannot send a newly navigated origin back to the old page');api.tabs.get=get;
  changed=true;await assert.rejects(captureSenderTab(api,sender),/标签页/);assert.equal(captureCount,1);
  changed=false;api.tabs.captureVisibleTab=async()=>{changed=true;captureCount++;return 'data:image/png;base64,fixture';};await assert.rejects(captureSenderTab(api,sender),/切换/);
+ changed=false;api.windows.get=async()=>({focused:false});const before=captureCount;await assert.rejects(captureSenderTab(api,sender),/浏览器窗口/);assert.equal(captureCount,before,'Unfocused browser windows must not capture');
+ let windowFocused=true;api.windows.get=async()=>({focused:windowFocused});api.tabs.captureVisibleTab=async()=>{windowFocused=false;captureCount++;return 'data:image/png;base64,fixture';};await assert.rejects(captureSenderTab(api,sender),/切换了浏览器窗口/);
 });
 
 
 test('background owns client version and channel metadata; school requests cannot receive it',()=>{
- const runtime={getManifest:()=>({version:'0.20.61'})};
+ const runtime={getManifest:()=>({version:require('./package.json').version})};
  const gateway=allowedRequest({url:'https://47.77.182.216.sslip.io/gateway/v1/me',headers:{'X-Client-Version':'99.99.99','X-Client-Channel':'edge-store'}},runtime);
  assert.equal(gateway.headers['X-Client-Version'],require('./package.json').version);
  assert.equal(gateway.headers['X-Client-Channel'],'unpacked');
  const school=allowedRequest({url:'https://video.cmc.zju.edu.cn/a',headers:{'X-Client-Version':'99.99.99','X-Client-Channel':'edge-store'}},runtime);
  assert.equal(school.headers['X-Client-Version'],undefined);assert.equal(school.headers['X-Client-Channel'],undefined);
 });
+
+test('study save remains pinned to its exact gateway endpoint',()=>{const r=allowedRequest({url:'https://47.77.182.216.sslip.io/gateway/v1/study/conversations',method:'POST',data:'{}',headers:{Authorization:'Bearer current-session',Cookie:'not-forwarded'}});assert.equal(r.method,'POST');assert.equal(r.headers.Cookie,undefined);assert.equal(r.headers.Authorization,'Bearer current-session');for(const url of ['https://elsewhere.test/gateway/v1/study/conversations','https://47.77.182.216.sslip.io/gateway/v1/study/export-all','https://47.77.182.216.sslip.io/gateway/v1/study/conversations?user=someone'])assert.throws(()=>allowedRequest({url,method:'POST',data:'{}'}));});

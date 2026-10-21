@@ -1,0 +1,4 @@
+📋 公众号 HTML 合规校验: F:\all_my_code\tools\zhiyunzimu\marketing\wechat\2026-10-20-launch\article.html
+   span leaf 包裹: 107 处
+
+✅ 完全合规，可直接粘贴到公众号编辑器

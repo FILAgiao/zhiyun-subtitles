@@ -5,7 +5,7 @@ const {chromium}=require('playwright');
  try {
   const page=await browser.newPage({viewport:{width:1280,height:800}}),errors=[];page.on('pageerror',e=>errors.push(e.message));
   await page.setContent(`<style>body{margin:0;background:#202b38}#player{position:relative;margin:30px 40px;width:1000px;height:650px;background:#111}video{width:100%;height:100%}#player:fullscreen{margin:0;width:100vw;height:100vh}.vjs-control-bar{position:absolute;left:0;right:0;bottom:30px;height:85px;background:#ddd;display:flex;align-items:center;z-index:1}.vjs-control-bar input{width:95%;margin:auto}</style><div id="player"><video></video><div class="vjs-control-bar"><input id="progress" type="range" min="0" max="100" value="10" aria-label="Playback position"></div></div><div id="host"></div>`);
-  await page.addScriptTag({path:'player-interactions.js'});
+  await page.addScriptTag({path:'classroom-media.js'});await page.addScriptTag({path:'player-interactions.js'});
   await page.evaluate(()=>{
    const host=document.getElementById('host');host.style.cssText='position:fixed;inset:0;pointer-events:none;z-index:999';const shadow=host.attachShadow({mode:'open'});
    shadow.innerHTML=`<style>#caption{position:fixed;left:40px;top:665px;width:1000px;height:80px;transform:translateY(-100%);background:#14241ee8;color:white;text-align:center;font:26px sans-serif;padding:12px;box-sizing:border-box;pointer-events:none}#caption span{pointer-events:none}button{pointer-events:auto;position:fixed;top:8px;right:8px}</style><div id="caption"><span>Subtitles must leave playback controls clear.</span></div><button id="focus-fullscreen">Fullscreen</button><button id="fullscreen-recover" hidden></button><p id="slides-status"></p><div id="fullscreen-notice" hidden></div><div id="settings-dialog" hidden></div><div id="transcript" hidden></div><button id="transcript-close" hidden></button><button id="transcript-follow" hidden></button><div id="transcript-list"></div><div id="cache-transport"></div><div id="cache-status"></div>`;
@@ -17,9 +17,9 @@ const {chromium}=require('playwright');
   async function checkWebsiteControls(){
    await page.evaluate(()=>{placeCaption();controls.update();});
    const c=await caption.boundingBox();assert.equal(c.y+c.height,(await page.locator('video').boundingBox()).y+(await page.locator('video').boundingBox()).height-10,'rollback retains the original caption position');
-   await page.evaluate(()=>{videoTime=10;controls.update();});const p=await host.locator('#zy-play-seek').boundingBox();await page.mouse.move(p.x+p.width*.2,p.y+p.height/2);await page.waitForTimeout(160);
+   await page.evaluate(()=>{videoTime=10;controls.update();});const p=await page.locator('#progress').boundingBox();await page.mouse.move(p.x+p.width*.2,p.y+p.height/2);await page.waitForTimeout(160);
    assert.equal(await caption.evaluate(e=>getComputedStyle(e).opacity),'1');assert.equal(await caption.locator('span').evaluate(e=>getComputedStyle(e).pointerEvents),'none');
-   await page.mouse.down();await page.mouse.move(p.x+p.width*.75,p.y+p.height/2,{steps:8});await page.mouse.up();assert.ok(Number(await host.locator('#zy-play-seek').inputValue())>60);assert.ok(await page.evaluate(()=>progressEvents)>0);
+   await page.mouse.down();await page.mouse.move(p.x+p.width*.75,p.y+p.height/2,{steps:8});await page.mouse.up();assert.ok(Number(await page.locator('#progress').inputValue())>60);assert.ok(await page.evaluate(()=>progressEvents)>0);
    await page.mouse.move(100,100);await page.waitForTimeout(160);assert.equal(await caption.evaluate(e=>getComputedStyle(e).opacity),'1');
   }
   await checkWebsiteControls();

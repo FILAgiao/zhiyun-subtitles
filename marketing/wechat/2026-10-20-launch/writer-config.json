@@ -1,0 +1,7 @@
+{
+  "purpose": "User-supplied short article rewrite; not the long-form content pipeline",
+  "scoring": {
+    "body_min": 1000,
+    "body_max": 2200
+  }
+}

@@ -1,0 +1,289 @@
+{
+  "checkedAt": "2026-10-20T07:48:00.369Z",
+  "url": "file:///F:/all_my_code/tools/zhiyunzimu/marketing/wechat/2026-10-20-launch/preview.html",
+  "viewports": [
+    {
+      "viewport": 1440,
+      "documentWidth": 1440,
+      "bodyWidth": 1440,
+      "contentWidth": 700,
+      "contentScrollWidth": 700,
+      "images": [
+        {
+          "src": "images/01-cache.png",
+          "complete": true,
+          "naturalWidth": 1280,
+          "naturalHeight": 800,
+          "width": 649,
+          "height": 405.625
+        },
+        {
+          "src": "images/02-sync.png",
+          "complete": true,
+          "naturalWidth": 1280,
+          "naturalHeight": 800,
+          "width": 649,
+          "height": 405.625
+        },
+        {
+          "src": "images/03-bilingual.png",
+          "complete": true,
+          "naturalWidth": 1586,
+          "naturalHeight": 992,
+          "width": 649,
+          "height": 405.921875
+        },
+        {
+          "src": "images/04-classroom.png",
+          "complete": true,
+          "naturalWidth": 1280,
+          "naturalHeight": 800,
+          "width": 649,
+          "height": 405.625
+        },
+        {
+          "src": "images/05-ai-explain.png",
+          "complete": true,
+          "naturalWidth": 1280,
+          "naturalHeight": 800,
+          "width": 649,
+          "height": 405.625
+        },
+        {
+          "src": "images/06-capture.png",
+          "complete": true,
+          "naturalWidth": 1280,
+          "naturalHeight": 800,
+          "width": 649,
+          "height": 405.625
+        },
+        {
+          "src": "images/07-knowledge-card.png",
+          "complete": true,
+          "naturalWidth": 1280,
+          "naturalHeight": 800,
+          "width": 649,
+          "height": 405.625
+        }
+      ],
+      "overflowElements": [],
+      "placeholderMatches": [],
+      "anchorCount": 0,
+      "literalMarkdownLinks": [
+        "[前往 Chrome 应用商店](https://chromewebstore.google.com/detail/pjmmkpggbckfmdcfbhfgajgkbhjelafp)"
+      ],
+      "completeMarkdownLines": 57,
+      "missingMarkdownLines": [],
+      "allSevenImagesLoaded": true,
+      "noHorizontalOverflow": true,
+      "pageErrors": []
+    },
+    {
+      "viewport": 390,
+      "documentWidth": 390,
+      "bodyWidth": 390,
+      "contentWidth": 374,
+      "contentScrollWidth": 374,
+      "images": [
+        {
+          "src": "images/01-cache.png",
+          "complete": true,
+          "naturalWidth": 1280,
+          "naturalHeight": 800,
+          "width": 346,
+          "height": 216.25
+        },
+        {
+          "src": "images/02-sync.png",
+          "complete": true,
+          "naturalWidth": 1280,
+          "naturalHeight": 800,
+          "width": 346,
+          "height": 216.25
+        },
+        {
+          "src": "images/03-bilingual.png",
+          "complete": true,
+          "naturalWidth": 1586,
+          "naturalHeight": 992,
+          "width": 346,
+          "height": 216.40625
+        },
+        {
+          "src": "images/04-classroom.png",
+          "complete": true,
+          "naturalWidth": 1280,
+          "naturalHeight": 800,
+          "width": 346,
+          "height": 216.25
+        },
+        {
+          "src": "images/05-ai-explain.png",
+          "complete": true,
+          "naturalWidth": 1280,
+          "naturalHeight": 800,
+          "width": 346,
+          "height": 216.25
+        },
+        {
+          "src": "images/06-capture.png",
+          "complete": true,
+          "naturalWidth": 1280,
+          "naturalHeight": 800,
+          "width": 346,
+          "height": 216.25
+        },
+        {
+          "src": "images/07-knowledge-card.png",
+          "complete": true,
+          "naturalWidth": 1280,
+          "naturalHeight": 800,
+          "width": 346,
+          "height": 216.25
+        }
+      ],
+      "overflowElements": [
+        {
+          "tag": "SPAN",
+          "id": "",
+          "className": "",
+          "right": 541.4375,
+          "text": "[前往 Chrome 应用商店](https://chromewebstore.google.com/detail/pjmmkpggbckfmdcfbhfgaj"
+        }
+      ],
+      "placeholderMatches": [],
+      "anchorCount": 0,
+      "literalMarkdownLinks": [
+        "[前往 Chrome 应用商店](https://chromewebstore.google.com/detail/pjmmkpggbckfmdcfbhfgajgkbhjelafp)"
+      ],
+      "completeMarkdownLines": 57,
+      "missingMarkdownLines": [],
+      "allSevenImagesLoaded": true,
+      "noHorizontalOverflow": true,
+      "pageErrors": []
+    },
+    {
+      "viewport": 320,
+      "documentWidth": 320,
+      "bodyWidth": 320,
+      "contentWidth": 304,
+      "contentScrollWidth": 304,
+      "images": [
+        {
+          "src": "images/01-cache.png",
+          "complete": true,
+          "naturalWidth": 1280,
+          "naturalHeight": 800,
+          "width": 276,
+          "height": 172.5
+        },
+        {
+          "src": "images/02-sync.png",
+          "complete": true,
+          "naturalWidth": 1280,
+          "naturalHeight": 800,
+          "width": 276,
+          "height": 172.5
+        },
+        {
+          "src": "images/03-bilingual.png",
+          "complete": true,
+          "naturalWidth": 1586,
+          "naturalHeight": 992,
+          "width": 276,
+          "height": 172.625
+        },
+        {
+          "src": "images/04-classroom.png",
+          "complete": true,
+          "naturalWidth": 1280,
+          "naturalHeight": 800,
+          "width": 276,
+          "height": 172.5
+        },
+        {
+          "src": "images/05-ai-explain.png",
+          "complete": true,
+          "naturalWidth": 1280,
+          "naturalHeight": 800,
+          "width": 276,
+          "height": 172.5
+        },
+        {
+          "src": "images/06-capture.png",
+          "complete": true,
+          "naturalWidth": 1280,
+          "naturalHeight": 800,
+          "width": 276,
+          "height": 172.5
+        },
+        {
+          "src": "images/07-knowledge-card.png",
+          "complete": true,
+          "naturalWidth": 1280,
+          "naturalHeight": 800,
+          "width": 276,
+          "height": 172.5
+        }
+      ],
+      "overflowElements": [
+        {
+          "tag": "SPAN",
+          "id": "",
+          "className": "",
+          "right": 541.4375,
+          "text": "[前往 Chrome 应用商店](https://chromewebstore.google.com/detail/pjmmkpggbckfmdcfbhfgaj"
+        }
+      ],
+      "placeholderMatches": [],
+      "anchorCount": 0,
+      "literalMarkdownLinks": [
+        "[前往 Chrome 应用商店](https://chromewebstore.google.com/detail/pjmmkpggbckfmdcfbhfgajgkbhjelafp)"
+      ],
+      "completeMarkdownLines": 57,
+      "missingMarkdownLines": [],
+      "allSevenImagesLoaded": true,
+      "noHorizontalOverflow": true,
+      "pageErrors": []
+    }
+  ],
+  "clipboardWritePrevented": true,
+  "copy": {
+    "events": [
+      {
+        "isTrusted": true,
+        "type": "copy",
+        "defaultPrevented": true,
+        "textLength": 2072,
+        "htmlLength": 19342
+      }
+    ],
+    "toast": "✅ 已复制！去公众号编辑器按 Ctrl/⌘+V 粘贴即可",
+    "selectionCleared": true,
+    "eventSummary": {
+      "isTrusted": true,
+      "defaultPrevented": true,
+      "rangeCount": 1,
+      "ancestor": "DIV",
+      "textLength": 2072,
+      "imageCount": 7,
+      "includesTitle": true,
+      "includesClosing": true,
+      "excludesToolbar": true,
+      "matchesContentHtml": true
+    }
+  },
+  "layoutChecksPassed": false,
+  "copyCheckPassed": true,
+  "status": "initial-render-before-profile-fix; final recheck pending",
+  "issues": [
+    "Initial renderer left the store Markdown link as literal text. On 320px and 390px it extends past the content and is clipped by overflow-x:hidden, despite no page scrollbar.",
+    "Generic TECH INSIGHT/KEY INSIGHT masthead and engagement footer are being replaced by the parent with a reusable publication profile.",
+    "At 320px the preview-only toolbar hint is cramped beside the copy button; article content is unaffected."
+  ],
+  "verificationBoundary": {
+    "copy": "A real trusted browser copy event was captured. The handler prevented its default clipboard write. Captured selection matched the complete content HTML, contained 7 images, and excluded the toolbar. Actual OS clipboard persistence and WeChat editor paste were not verified.",
+    "localImages": "Copied HTML contains local relative images/... paths. This does not upload image bytes to WeChat. The publisher must upload and replace the 7 local images in the WeChat editor, then preview on mobile.",
+    "publication": "No WeChat draft upload, login, or public publication performed."
+  }
+}

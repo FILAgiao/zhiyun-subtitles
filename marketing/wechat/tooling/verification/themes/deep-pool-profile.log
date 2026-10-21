@@ -1,0 +1,7 @@
+$ C:\Users\hufei\.cache\codex-runtimes\codex-primary-runtime\dependencies\python\python.exe C:\Users\hufei\.codex\skills\wechat-skill\.agents\skills\wechat-content-pipeline\scripts\render_article.py --article F:\all_my_code\tools\zhiyunzimu\marketing\wechat\tooling\test-fixtures\article.md --theme deep-pool --output F:\all_my_code\tools\zhiyunzimu\marketing\wechat\tooling\verification\themes\deep-pool-profile.html --profile F:\all_my_code\tools\zhiyunzimu\marketing\wechat\tooling\test-fixtures\profile.json
+{"status": "ok", "title": "小奶蛙的上课小工具", "theme": "deep-pool", "image_count": 1, "module_count": 0, "module_kinds": [], "inline_degraded": false, "inline_degrade_reason": "", "duration_ms": 0}
+
+📋 公众号 HTML 合规校验: F:\all_my_code\tools\zhiyunzimu\marketing\wechat\tooling\verification\themes\deep-pool-profile.html
+   span leaf 包裹: 39 处
+
+✅ 完全合规，可直接粘贴到公众号编辑器

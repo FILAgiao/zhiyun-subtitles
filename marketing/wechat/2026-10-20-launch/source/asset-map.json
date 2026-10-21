@@ -1,0 +1,86 @@
+[
+  {
+    "source": "ads/v2/image-02-1280x800.png",
+    "archive": "library/features/01-cache.png",
+    "sha256": "88deea1188238dd7cf4fbfe0c74c336afc6ecb205bfb61a5c93463538cd91d70",
+    "width": 1280,
+    "height": 800,
+    "frames": 1,
+    "role": "video cache",
+    "used_in_article": true,
+    "rights": "user-supplied project asset; third-party license not independently verified",
+    "article_path": "images/01-cache.png"
+  },
+  {
+    "source": "ads/v2/image-01-1280x800.png",
+    "archive": "library/features/02-sync.png",
+    "sha256": "d590766c13bb07827b840b5c6a866cb15d53fad46fdf2e92b278edeb39925bcf",
+    "width": 1280,
+    "height": 800,
+    "frames": 1,
+    "role": "subtitle and PPT sync",
+    "used_in_article": true,
+    "rights": "user-supplied project asset; third-party license not independently verified",
+    "article_path": "images/02-sync.png"
+  },
+  {
+    "source": "ads/v2/ChatGPT 图像 2026年10月20日 10_04_25.png",
+    "archive": "library/features/03-bilingual.png",
+    "sha256": "7e388fed544dbf2bd8203b102a720d305b9b01e3d4a3b10ae9c015a48012b651",
+    "width": 1586,
+    "height": 992,
+    "frames": 1,
+    "role": "bilingual translation illustration without real person",
+    "used_in_article": true,
+    "rights": "user-supplied project asset; third-party license not independently verified",
+    "article_path": "images/03-bilingual.png"
+  },
+  {
+    "source": "ads/v2/image-03-1280x800.png",
+    "archive": "library/features/04-classroom.png",
+    "sha256": "b4a7d93d1c4747e3b0c7d8f1e86ee00b30e814f166cc06fa1c157d7b560a033e",
+    "width": 1280,
+    "height": 800,
+    "frames": 1,
+    "role": "PPT classroom view",
+    "used_in_article": true,
+    "rights": "user-supplied project asset; third-party license not independently verified",
+    "article_path": "images/04-classroom.png"
+  },
+  {
+    "source": "ads/v2/image-04-1280x800.png",
+    "archive": "library/features/05-ai-explain.png",
+    "sha256": "fd7e56334e2ef180026a2fa0d509885422951e05a7b2c864676782241bdfccd6",
+    "width": 1280,
+    "height": 800,
+    "frames": 1,
+    "role": "AI explanation",
+    "used_in_article": true,
+    "rights": "user-supplied project asset; third-party license not independently verified",
+    "article_path": "images/05-ai-explain.png"
+  },
+  {
+    "source": "ads/v2/image-05-1280x800.png",
+    "archive": "library/features/06-capture.png",
+    "sha256": "15d7994ef56852fa495c4b60dcca9e082f827b300ac003d744965e7f4d0f5331",
+    "width": 1280,
+    "height": 800,
+    "frames": 1,
+    "role": "middle-button capture and annotation",
+    "used_in_article": true,
+    "rights": "user-supplied project asset; third-party license not independently verified",
+    "article_path": "images/06-capture.png"
+  },
+  {
+    "source": "ads/v2/image-06-1280x800.png",
+    "archive": "library/features/07-knowledge-card.png",
+    "sha256": "8ba4a5766c9e6e08346a74305c0178630176307540701f1a8822ea08927242ef",
+    "width": 1280,
+    "height": 800,
+    "frames": 1,
+    "role": "knowledge cards",
+    "used_in_article": true,
+    "rights": "user-supplied project asset; third-party license not independently verified",
+    "article_path": "images/07-knowledge-card.png"
+  }
+]

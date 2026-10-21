@@ -16,8 +16,14 @@ CREATE TABLE IF NOT EXISTS attempts(key TEXT PRIMARY KEY,start INTEGER,count INT
 '''
 try:
     from .admin_api import AdminMixin, Fault, migrate
+    from .prompt_api import PromptMixin, migrate_prompts
+    from .study_api import StudyMixin, migrate_study
+    from .operations_api import OperationsMixin, migrate_operations
 except ImportError:
     from admin_api import AdminMixin, Fault, migrate
+    from prompt_api import PromptMixin, migrate_prompts
+    from study_api import StudyMixin, migrate_study
+    from operations_api import OperationsMixin, migrate_operations
 
 def month(): return time.strftime('%Y-%m',time.gmtime())
 def digest(value): return hashlib.sha256(value.encode()).hexdigest()
@@ -60,7 +66,7 @@ def official_stream(url,headers,body):
     except (urllib.error.HTTPError,urllib.error.URLError,TimeoutError,ValueError):
         raise Fault(502,'官方接口请求未完成，请稍后重试') from None
 
-class Gateway(AdminMixin):
+class Gateway(AdminMixin, PromptMixin, StudyMixin, OperationsMixin):
     hash_password=staticmethod(password_hash)
     def __init__(self,path,upstream=official,upstream_stream=official_stream):
         self.path,self.upstream,self.upstream_stream=str(path),upstream,upstream_stream
@@ -70,10 +76,14 @@ class Gateway(AdminMixin):
         with self.db() as db:
             db.executescript(SCHEMA)
             migrate(db)
+            migrate_prompts(db)
+            migrate_study(db)
+            migrate_operations(db)
     def capabilities(self):
         return {'web_search':os.environ.get('ALLOW_WEB_SEARCH')=='1',
                 'api_versions':[1],'learning_jobs':True,'speech_requires_login':True,
-                'membership':True,'guest_speech':False,'graceful_shutdown':True,
+                'prompt_catalog':True,'membership':True,'guest_speech':False,'graceful_shutdown':True,
+                'study_sync':True,'email_registration':True,'mail_configured':self.study_capabilities()['mail_configured'],
                 'compatibility':{'baseline':'0.20.48','version_header_required':False}}
     def client_metadata(self,headers):
         version=headers.get('X-Client-Version','')
@@ -135,6 +145,8 @@ class Gateway(AdminMixin):
         with self.db() as db:
             totals=dict(db.execute("SELECT COUNT(*) AS requests,COALESCE(SUM(total_tokens),0) AS total_tokens,COALESCE(SUM(input_tokens),0) AS input_tokens,COALESCE(SUM(output_tokens),0) AS output_tokens,COALESCE(SUM(web_search),0) AS web_search,COALESCE(SUM(seconds),0) AS audio_seconds,COALESCE(SUM(CASE WHEN state IN ('reserved','unknown') THEN 1 ELSE 0 END),0) AS uncertain FROM calls WHERE user=? AND app=? AND month=?",(user,app,month())).fetchone())
             limits=dict(db.execute('SELECT requests AS request_limit,audio AS audio_limit FROM grants WHERE user=? AND app=?',(user,app)).fetchone())
+            credit=self.monthly_credits(db,user,app)
+            limits['request_limit']+=credit['requests'];limits['audio_limit']+=credit['audio']
         return {'month':month(),**totals,**limits}
     def reserve(self,user,app,kind,seconds=0,feature=None):
         call=str(uuid.uuid4())
@@ -142,7 +154,8 @@ class Gateway(AdminMixin):
             db.execute('BEGIN IMMEDIATE')
             limits=self.check_grant(db,user,app,feature)
             used=db.execute('SELECT COUNT(*),COALESCE(SUM(seconds),0) FROM calls WHERE user=? AND app=? AND month=?',(user,app,month())).fetchone()
-            if used[0]>=limits['requests'] or used[1]+seconds>limits['audio']: raise Fault(429,'本月额度已用完','quota_exhausted')
+            credit=self.monthly_credits(db,user,app)
+            if used[0]>=limits['requests']+credit['requests'] or used[1]+seconds>limits['audio']+credit['audio']: raise Fault(429,'本月额度已用完','quota_exhausted')
             active=db.execute("SELECT COUNT(*) FROM calls WHERE user=? AND state='reserved' AND created>?",(user,int(time.time())-180)).fetchone()[0]
             if active>=2: raise Fault(429,'请等待当前请求完成','concurrency_limit',5)
             db.execute('INSERT INTO calls(id,user,app,month,kind,state,seconds,created) VALUES(?,?,?,?,?,?,?,?)',(call,user,app,month(),kind,'reserved',seconds,int(time.time())))
@@ -163,6 +176,10 @@ class Gateway(AdminMixin):
             with self.lifecycle:self.active_requests-=1;self.lifecycle.notify_all()
     def _handle(self,method,path,headers,body,ip,stream_sink=None):
         app=headers.get('X-App-Id','')
+        access_public=self.operations_public(method,path)
+        if access_public is not None:return access_public
+        study_public=self.study_public(method,path,headers,body,ip)
+        if study_public is not None:return study_public
         if method=='GET' and path=='/health': return 200,{}, {'ok':True,'api_version':1,'capabilities':self.capabilities(),'draining':self.draining}
         if method=='POST' and path=='/v1/auth/login':
             email,password=body.get('email',''),body.get('password','')
@@ -192,6 +209,12 @@ class Gateway(AdminMixin):
         if method=='GET' and path=='/v1/me': return 200,{}, {**user,'app':app,'server_time':int(time.time()),'usage':self.usage(user['id'],app),'capabilities':self.capabilities(),'permissions':self.permissions(user['id'],app),'membership':self.membership(user['id'],app)}
         if method=='POST' and path=='/v1/activity': return 200,{}, {'ok':True,'server_time':int(time.time())}
         if method=='GET' and path=='/v1/history': return 200,{},self.history(user['id'])
+        study_private=self.study_private(method,path,headers,body,user,app)
+        if study_private is not None:return study_private
+        if path in ('/v1/prompts','/v1/prompts/save','/v1/prompts/delete','/v1/admin/prompts','/v1/admin/prompts/save','/v1/admin/prompts/delete'):
+            return self.prompt_request(method,path,user,app,body)
+        operations=self.operations_request(method,path,user,body)
+        if operations is not None:return operations
         if path.startswith('/v1/admin/'): return self.admin_request(method,path,user,body,month())
         if method=='POST' and path=='/v1/learning/jobs/create':
             with self.db() as db: self.check_grant(db,user['id'],app,'learning')
@@ -390,7 +413,7 @@ except ImportError:
     from public_page import public_page_file
 
 
-def make_server(gateway,host='127.0.0.1',port=8080):
+def make_server(gateway,host='127.0.0.1',port=8080,allowed_web_origins=()):
     class Handler(BaseHTTPRequestHandler):
         def log_message(self,*args): pass
         def dispatch(self):
@@ -401,10 +424,10 @@ def make_server(gateway,host='127.0.0.1',port=8080):
             try:
                 self.connection.settimeout(15)
                 if origin:
-                    if not (os.environ.get('ALLOW_EXTENSION_ORIGINS')=='1' and re.fullmatch(r'chrome-extension://[a-p]{32}',origin)) and origin not in os.environ.get('ALLOWED_ORIGINS','').split(',')+[os.environ.get('PUBLIC_ORIGIN','')]: raise Fault(403,'来源未开通')
+                    if not (os.environ.get('ALLOW_EXTENSION_ORIGINS')=='1' and re.fullmatch(r'chrome-extension://[a-p]{32}',origin)) and origin not in list(allowed_web_origins)+os.environ.get('ALLOWED_ORIGINS','').split(',')+[os.environ.get('PUBLIC_ORIGIN','')]: raise Fault(403,'来源未开通')
                     extra={**extra,'Access-Control-Allow-Origin':origin,'Vary':'Origin','Access-Control-Expose-Headers':'X-Api-Status-Code, Retry-After, X-Request-Id'}
                 self.stream_headers=extra
-                if self.command=='OPTIONS': status,more,result=204,{'Access-Control-Allow-Methods':'GET,POST,OPTIONS','Access-Control-Allow-Headers':'Authorization,Content-Type,X-App-Id,X-Api-Request-Id,X-Client-Type,X-Client-Version,X-Client-Channel'},None
+                if self.command=='OPTIONS': status,more,result=204,{'Access-Control-Allow-Methods':'GET,POST,DELETE,OPTIONS','Access-Control-Allow-Headers':'Authorization,Content-Type,X-App-Id,X-Api-Request-Id,X-Client-Type,X-Client-Version,X-Client-Channel'},None
                 else:
                     public_file=public_page_file(self.path)
                     if self.command=='GET' and (public_file is not None or self.path in ('/admin','/admin/','/admin.js','/admin.css','/install.user.js','/install.meta.js','/privacy','/privacy.html','/extension.zip','/download','/download/','/download.html','/download.css','/chrome.zip','/edge.zip')):
@@ -413,7 +436,8 @@ def make_server(gateway,host='127.0.0.1',port=8080):
                         else:
                             name=public_file or ('admin.html' if self.path=='/admin' else 'privacy.html' if self.path=='/privacy' else 'download.html' if self.path in ('/download','/download/') else 'extension.zip' if self.path in ('/chrome.zip','/edge.zip') else self.path[1:])
                             mime='image/webp' if name.endswith('.webp') else 'image/png' if name.endswith('.png') else 'text/html; charset=utf-8' if name.endswith('.html') else 'text/javascript; charset=utf-8' if name.endswith('.js') else 'application/zip' if name.endswith('.zip') else 'text/css; charset=utf-8'
-                            result=(Path(__file__).parent/name).read_bytes();status,more=200,{'Content-Type':mime,'Content-Security-Policy':"default-src 'self'; script-src 'self'; style-src 'self'; connect-src 'self'; img-src 'self' data:; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",'X-Frame-Options':'DENY'}
+                            image_sources="'self' data: https:" if name=='account.html' else "'self' data:"
+                            result=(Path(__file__).parent/name).read_bytes();status,more=200,{'Content-Type':mime,'Content-Security-Policy':"default-src 'self'; script-src 'self'; style-src 'self'; connect-src 'self'; img-src "+image_sources+"; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",'X-Frame-Options':'DENY'}
                             if self.path in ('/chrome.zip','/edge.zip'):
                                 more['Content-Disposition']='attachment; filename="zhiyun-subtitles-'+self.path[1:-4]+'.zip"'
                     else:
@@ -443,7 +467,7 @@ def make_server(gateway,host='127.0.0.1',port=8080):
         def api_request(self,gateway):
             size=int(self.headers.get('Content-Length','0'))
             if self.headers.get('Transfer-Encoding') or not 0<=size<=7000000: raise Fault(413,'请求过大')
-            if self.command=='POST' and self.headers.get_content_type()!='application/json': raise Fault(415,'仅接受 JSON')
+            if (self.command=='POST' or self.command=='DELETE' and size) and self.headers.get_content_type()!='application/json': raise Fault(415,'仅接受 JSON')
             body=json.loads(self.rfile.read(size)) if size else {}
             if not isinstance(body,dict): raise Fault(400,'JSON 格式无效')
             ip=self.client_address[0]
@@ -455,7 +479,7 @@ def make_server(gateway,host='127.0.0.1',port=8080):
             self.send_response(status)
             for k,v in {'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store','X-Content-Type-Options':'nosniff',**extra,**more,'Content-Length':str(len(raw))}.items(): self.send_header(k,v)
             self.end_headers(); self.wfile.write(raw)
-        do_GET=do_POST=do_OPTIONS=dispatch
+        do_GET=do_POST=do_DELETE=do_OPTIONS=dispatch
     class BoundedServer(ThreadingHTTPServer):
         daemon_threads=True
         def __init__(self,*args):

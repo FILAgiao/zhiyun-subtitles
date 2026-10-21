@@ -1,0 +1,37 @@
+{
+  "version": 1,
+  "date": "2026-10-20",
+  "timezone": "Asia/Shanghai",
+  "generator": "built-in image_gen",
+  "publication_status": "local_only_not_uploaded_or_published",
+  "files": [
+    {
+      "file": "xiaonaiwa-cover-wide-v1.png",
+      "role": "wechat_main_cover",
+      "width": 1920,
+      "height": 819,
+      "aspect_ratio": 2.3443223443223444,
+      "bytes": 1727354,
+      "sha256": "E48438B061638AF1BCB27F74422C1553F3D83E4E4C7CA097354FC0CD0B3CE46B",
+      "source": "AI original illustration",
+      "postprocessing": "none"
+    },
+    {
+      "file": "xiaonaiwa-cover-square-v1.png",
+      "role": "wechat_square_cover",
+      "width": 1254,
+      "height": 1254,
+      "aspect_ratio": 1,
+      "bytes": 1851135,
+      "sha256": "8CB6A13740FAB4D082F3934D0577853646FEE9DC529D31E70F3432A1851A93EE",
+      "source": "AI recomposition using wide original for character and palette reference",
+      "postprocessing": "none"
+    }
+  ],
+  "visual_check": [
+    "Headline exactly matches intended Chinese text",
+    "Product name exactly matches 浙大上课爽",
+    "All key content fully visible",
+    "No commercial offer, store status or giveaway promises"
+  ]
+}

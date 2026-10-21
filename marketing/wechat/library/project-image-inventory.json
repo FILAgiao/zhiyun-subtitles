@@ -1,0 +1,386 @@
+[
+  {
+    "source": "account-login-modern-preview.png",
+    "bytes": 60837
+  },
+  {
+    "source": "account-login-narrow-preview.png",
+    "bytes": 47636
+  },
+  {
+    "source": "account-login-preview.png",
+    "bytes": 106318
+  },
+  {
+    "source": "account-trial-ai-preview.png",
+    "bytes": 42959
+  },
+  {
+    "source": "account-trial-modern-preview.png",
+    "bytes": 61782
+  },
+  {
+    "source": "ads/v1/01-main.png",
+    "bytes": 184661
+  },
+  {
+    "source": "ads/v1/02-calibration.png",
+    "bytes": 123205
+  },
+  {
+    "source": "ads/v1/03-knowledge-card.png",
+    "bytes": 176084
+  },
+  {
+    "source": "ads/v1/04-account.png",
+    "bytes": 145541
+  },
+  {
+    "source": "ads/v1/05-classroom.png",
+    "bytes": 475277
+  },
+  {
+    "source": "ads/v1/promotional-large-1400x560.png",
+    "bytes": 116010
+  },
+  {
+    "source": "ads/v1/promotional-small-440x280.png",
+    "bytes": 15494
+  },
+  {
+    "source": "ads/v2/20211006141703_2e5f9.gif",
+    "bytes": 778017
+  },
+  {
+    "source": "ads/v2/ChatGPT 图像 2026年10月20日 10_04_25.png",
+    "bytes": 1649045
+  },
+  {
+    "source": "ads/v2/ChatGPT 图像 2026年10月20日 10_40_18.png",
+    "bytes": 1724399
+  },
+  {
+    "source": "ads/v2/ChatGPT 图像 2026年10月20日 13_01_37.png",
+    "bytes": 1844392
+  },
+  {
+    "source": "ads/v2/ChatGPT 图像 2026年10月20日 13_01_45.png",
+    "bytes": 1728968
+  },
+  {
+    "source": "ads/v2/ChatGPT 图像 2026年10月20日 13_01_56.png",
+    "bytes": 1822164
+  },
+  {
+    "source": "ads/v2/ChatGPT 图像 2026年10月20日 13_02_04.png",
+    "bytes": 1762009
+  },
+  {
+    "source": "ads/v2/image-01-1280x800.png",
+    "bytes": 1210351
+  },
+  {
+    "source": "ads/v2/image-02-1280x800.png",
+    "bytes": 1434017
+  },
+  {
+    "source": "ads/v2/image-03-1280x800.png",
+    "bytes": 1441728
+  },
+  {
+    "source": "ads/v2/image-04-1280x800.png",
+    "bytes": 1382021
+  },
+  {
+    "source": "ads/v2/image-05-1280x800.png",
+    "bytes": 1615272
+  },
+  {
+    "source": "ads/v2/image-06-1280x800.png",
+    "bytes": 1519971
+  },
+  {
+    "source": "ads/v2/t1.jpg",
+    "bytes": 330595
+  },
+  {
+    "source": "ads/v2/teacher/17-bilingual-teacher-v2.png",
+    "bytes": 1721343
+  },
+  {
+    "source": "ads/v2/teacher/20-style1-brunette.png",
+    "bytes": 1715782
+  },
+  {
+    "source": "ads/v2/teacher/21-style1-blonde.png",
+    "bytes": 1763772
+  },
+  {
+    "source": "ads/v2/teacher/22-style2-auburn.png",
+    "bytes": 1680460
+  },
+  {
+    "source": "ads/v2/teacher/23-style2-blonde.png",
+    "bytes": 1724251
+  },
+  {
+    "source": "ads/v2/teacher/25-young-teacher-brunette.png",
+    "bytes": 1870776
+  },
+  {
+    "source": "ads/v2/teacher/26-young-teacher-blonde.png",
+    "bytes": 1905197
+  },
+  {
+    "source": "ads/v2/teacher/27-young-teacher-latina.png",
+    "bytes": 1967959
+  },
+  {
+    "source": "ads/v2/teacher/28-young-teacher-glasses.png",
+    "bytes": 1872990
+  },
+  {
+    "source": "ads/v2/zhiyun-440x280.png",
+    "bytes": 167812
+  },
+  {
+    "source": "ads/v2/zhiyun-banner-1400x560.png",
+    "bytes": 1076693
+  },
+  {
+    "source": "ai-compact-selected-preview.png",
+    "bytes": 56505
+  },
+  {
+    "source": "ai-conversation-modern-preview.png",
+    "bytes": 49253
+  },
+  {
+    "source": "ai-conversation-narrow-preview.png",
+    "bytes": 33770
+  },
+  {
+    "source": "ai-integrated-preview.png",
+    "bytes": 104443
+  },
+  {
+    "source": "ai-learning-preview.png",
+    "bytes": 66222
+  },
+  {
+    "source": "ai-settings-0.20.15-preview.png",
+    "bytes": 44272
+  },
+  {
+    "source": "ai-stream-scroll-preview.png",
+    "bytes": 63755
+  },
+  {
+    "source": "cache-controls-expanded-preview.png",
+    "bytes": 45902
+  },
+  {
+    "source": "cache-list-mobile-preview.png",
+    "bytes": 47847
+  },
+  {
+    "source": "cache-list-preview.png",
+    "bytes": 71168
+  },
+  {
+    "source": "cache-settings-preview.png",
+    "bytes": 53219
+  },
+  {
+    "source": "download-page-classroom-preview.png",
+    "bytes": 637966
+  },
+  {
+    "source": "download-page-desktop-preview.png",
+    "bytes": 2304595
+  },
+  {
+    "source": "download-page-hero-preview.png",
+    "bytes": 264195
+  },
+  {
+    "source": "download-page-mobile-preview.png",
+    "bytes": 648480
+  },
+  {
+    "source": "guide-cache-mobile-preview.png",
+    "bytes": 31028
+  },
+  {
+    "source": "guide-calibration-preview.png",
+    "bytes": 30926
+  },
+  {
+    "source": "knowledge-card-avatar-preview.png",
+    "bytes": 24882
+  },
+  {
+    "source": "knowledge-card-blue-preview.png",
+    "bytes": 176146
+  },
+  {
+    "source": "knowledge-card-compact-preview.png",
+    "bytes": 110649
+  },
+  {
+    "source": "knowledge-card-full-preview.png",
+    "bytes": 485331
+  },
+  {
+    "source": "knowledge-card-layout-preview.png",
+    "bytes": 145949
+  },
+  {
+    "source": "knowledge-card-long-title-preview.png",
+    "bytes": 155448
+  },
+  {
+    "source": "knowledge-card-markdown-preview.png",
+    "bytes": 208149
+  },
+  {
+    "source": "knowledge-card-mv3-dialog-preview.png",
+    "bytes": 97537
+  },
+  {
+    "source": "knowledge-card-preview.png",
+    "bytes": 107393
+  },
+  {
+    "source": "knowledge-card-sentence-selection-preview.png",
+    "bytes": 87498
+  },
+  {
+    "source": "knowledge-card-share-preview.png",
+    "bytes": 228256
+  },
+  {
+    "source": "learning-preview.png",
+    "bytes": 91411
+  },
+  {
+    "source": "manual-accounts-preview.png",
+    "bytes": 44368
+  },
+  {
+    "source": "modern-workspace-preview.png",
+    "bytes": 63387
+  },
+  {
+    "source": "onboarding-desktop-preview.png",
+    "bytes": 122303
+  },
+  {
+    "source": "onboarding-mobile-preview.png",
+    "bytes": 101593
+  },
+  {
+    "source": "onboarding-second-page-preview.png",
+    "bytes": 135131
+  },
+  {
+    "source": "ppt-independent-sync-preview.png",
+    "bytes": 85086
+  },
+  {
+    "source": "ppt-thumbnails-preview.png",
+    "bytes": 77680
+  },
+  {
+    "source": "progressive-preview.png",
+    "bytes": 163609
+  },
+  {
+    "source": "prompt-dialog-0.20.15-preview.png",
+    "bytes": 95704
+  },
+  {
+    "source": "question-workspace-preview.png",
+    "bytes": 35166
+  },
+  {
+    "source": "quota-mobile-preview.png",
+    "bytes": 42850
+  },
+  {
+    "source": "quota-preview.png",
+    "bytes": 58026
+  },
+  {
+    "source": "screenshot-annotation-preview.png",
+    "bytes": 26446
+  },
+  {
+    "source": "settings-ai-0.20.15-preview.png",
+    "bytes": 56260
+  },
+  {
+    "source": "settings-preview.png",
+    "bytes": 122816
+  },
+  {
+    "source": "simple-ui-mobile-preview.png",
+    "bytes": 30510
+  },
+  {
+    "source": "simple-ui-preview.png",
+    "bytes": 63227
+  },
+  {
+    "source": "theme-blue-preview.png",
+    "bytes": 38273
+  },
+  {
+    "source": "theme-glass-local-preview.png",
+    "bytes": 81287
+  },
+  {
+    "source": "theme-glass-preview.png",
+    "bytes": 74593
+  },
+  {
+    "source": "theme-glass-transparent-preview.png",
+    "bytes": 107363
+  },
+  {
+    "source": "theme-settings-mobile-preview.png",
+    "bytes": 142929
+  },
+  {
+    "source": "theme-settings-preview.png",
+    "bytes": 210486
+  },
+  {
+    "source": "theme-warm-preview.png",
+    "bytes": 34868
+  },
+  {
+    "source": "ui-preview.png",
+    "bytes": 81748
+  },
+  {
+    "source": "warm-knowledge-card-preview.png",
+    "bytes": 152736
+  },
+  {
+    "source": "warm-main-preview.png",
+    "bytes": 34197
+  },
+  {
+    "source": "warm-questions-preview.png",
+    "bytes": 15724
+  },
+  {
+    "source": "warm-settings-preview.png",
+    "bytes": 62872
+  },
+  {
+    "source": "warm-share-preview.png",
+    "bytes": 42737
+  }
+]

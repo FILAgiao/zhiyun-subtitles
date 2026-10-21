@@ -1,0 +1,2 @@
+✓ 已生成带「复制」按钮的预览页: F:\all_my_code\tools\zhiyunzimu\marketing\wechat\2026-10-20-launch\preview.html
+  用浏览器打开它，点右上角「复制到公众号」，再去公众号编辑器 Ctrl/⌘+V 粘贴。

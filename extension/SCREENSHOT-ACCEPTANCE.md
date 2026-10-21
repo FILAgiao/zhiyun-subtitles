@@ -1,9 +1,9 @@
-# 0.20.46 完整扩展截图测试
+# 0.20.65 完整扩展截图测试
 
 ## 安装
 
 1. 停用上课爽油猴脚本和旧的上课爽扩展；本次只使用一个完整扩展，不需要截图辅助桥。
-2. 解压 `dist/zhiyun-subtitles-0.20.46.zip`。Chrome / Edge 的扩展管理页开启开发者模式，点击“加载已解压的扩展”，选择包含 `manifest.json` 的解压目录，允许网站访问。
+2. 解压 `dist/zhiyun-subtitles-0.20.65-screenshot-focus-fixed.zip`。Chrome / Edge 的扩展管理页开启开发者模式，点击“加载已解压的扩展”，选择包含 `manifest.json` 的解压目录，允许网站访问。
 3. 刷新课堂和其他已打开的测试网页。扩展本机存储与油猴独立，首次需重新登录助手服务账号。
 
 ## 必须验证的实际使用路径
@@ -17,8 +17,15 @@
 - 连续截图、退出 / 再进全屏、缩放时 PPT 与视频正常重排，无白边 / 旧截图 / 白卡遮罩；截图不显示共享选择器和分享栏，不改变视频进度和倍速。
 - 扩展被限制网站访问时显示权限 / 重试提示，不后备共享。浏览器禁止注入的页面可用系统截图粘贴。
 
+## 焦点误报回归
+
+- 原生截图响应等待期间让焦点转入页面内 iframe；顶层窗口 blur 不应导致成功截图丢失，原中键矩形与跨域实际像素应保持。
+- 真实切到其他标签页后应拒绝原截图；返回并点击“重试截图”仍使用原选区。页面隐藏 / 离开后，即使返回也不可复用旧授权。
+- 后台在原生截图前后核对 `chrome.windows.get(windowId).focused`；参考 [Chrome windows API](https://developer.chrome.com/docs/extensions/reference/api/windows#method-get)。窗口失焦的前 / 后拒绝由单元测试验证；无头浏览器无法可靠验证操作系统 Alt+Tab，仍需真实课程人工确认。
+- 新增 `node extension-focus-ui.test.cjs`：加载实际 MV3 扩展，真实 iframe blur、模拟渲染器瞬间 hasFocus=false、真实切页拦截与保留选区重试；不替换 captureVisibleTab，不调用屏幕共享。
+
 ## 自动化与发布记录
 
 运行 `npm test`、`npm run test:screenshot`、`npm run test:extension`、`npm run test:fullscreen`、`npm run test:release`。真实 MV3 测试在隔离浏览器资料目录加载完整扩展，不替换 captureVisibleTab；AI 使用本地测试服务。实际用户课程尚需上述安装测试。
 
-当前最终验证结果见 README 的 0.20.46 修改记录。本次仅本地构建，未上传服务器或提交商店；线上版本以实际核验为准。正式包不包含临时桥接。
+当前最终验证结果见 README 的 0.20.65 修改记录。本次仅本地构建，未上传服务器或提交商店；线上版本以实际核验为准。正式包不包含临时桥接。

@@ -1,9 +1,13 @@
 const fs=require('fs');
+const releaseVersion=JSON.parse(fs.readFileSync('package.json','utf8')).version;
+const gatewaySource=fs.readFileSync('gateway-client.js','utf8');
+const versionedGateway=gatewaySource.replace(/const CLIENT_VERSION='[^']+';/,"const CLIENT_VERSION='"+releaseVersion+"';");
+if(versionedGateway!==gatewaySource)fs.writeFileSync('gateway-client.js',versionedGateway);
 const cardQuotes=require('./load-card-quotes.cjs')();
 const onboardingArtwork=require('./load-onboarding-assets.cjs')();
 let s=fs.readFileSync('zhiyun-subtitles.user.js','utf8').replace(/\r\n/g,'\n');
 const begin='// BEGIN BUNDLED LEARNING MODULES',end='// END BUNDLED LEARNING MODULES';
-const files=['warm-theme.js','appearance-theme.js','progressive-cache.bundle.js','cache-storage.js','study-ui.js','player-interactions.js','math-render.bundle.js','card-render.bundle.js','capture-bridge-client.js','ai-learning.js','translation-request.js','gateway-client.js','web-assistant.js'];
+const files=['warm-theme.js','appearance-theme.js','progressive-cache.bundle.js','cache-storage.js','study-ui.js','classroom-media.js','speech-alignment.js','player-interactions.js','math-render.bundle.js','card-render.bundle.js','capture-bridge-client.js','ai-learning.js','translation-request.js','gateway-client.js','web-assistant.js'];
 const configuredGateway=process.env.GATEWAY_ORIGIN??(fs.existsSync('gateway.config.json')?JSON.parse(fs.readFileSync('gateway.config.json','utf8')).url:'');
 const gatewayOrigin=configuredGateway?require('./gateway-client.js').baseURL(configuredGateway):'';
 const code=begin+'\n'+files.map(p=>{let value=fs.readFileSync(p,'utf8');if(p==='gateway-client.js'&&gatewayOrigin)value=value.replace("const DEFAULT_ORIGIN='';",'const DEFAULT_ORIGIN='+JSON.stringify(gatewayOrigin)+';');return value;}).join('\n')+'\nconst ZY_STUDY_MASCOT='+JSON.stringify('data:image/png;base64,'+fs.readFileSync('assets/brand-logo.png').toString('base64'))+';\nconst ZY_BRAND_EAGLE='+JSON.stringify('data:image/svg+xml;base64,'+fs.readFileSync('assets/qiushi-eagle.svg').toString('base64'))+';\nconst ZY_SHARE_QR='+JSON.stringify('data:image/png;base64,'+fs.readFileSync('assets/share-qr.png').toString('base64'))+';\nconst ZY_KNOWLEDGE_CARD_QUOTES='+JSON.stringify(cardQuotes)+';\nconst ZY_ONBOARDING_ARTWORK='+JSON.stringify(onboardingArtwork)+';\n'+end;

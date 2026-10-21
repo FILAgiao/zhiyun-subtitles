@@ -1,0 +1,21 @@
+{
+  "date": "2026-10-20",
+  "command": "bundled-python marketing/wechat/tooling/test_article_profile.py",
+  "tests_run": 11,
+  "failures": 0,
+  "errors": 0,
+  "status": "OK",
+  "duration_seconds": 0.298,
+  "coverage": [
+    "default output byte-equivalent in all 12 themes",
+    "plain-text profile label escaping",
+    "disable footer in every layout",
+    "strict whitelist and field types",
+    "reject HTML tags and control characters",
+    "reject invalid JSON and non-object JSON",
+    "UTF-8 BOM support",
+    "CLI profile retained through inline-plan degrade",
+    "global THEMES unchanged",
+    "invalid CLI profile writes no output"
+  ]
+}

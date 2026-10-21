@@ -1,0 +1,53 @@
+{
+  "source": "https://github.com/843645440/wechat-skill",
+  "branch": "release",
+  "installed_date": "2026-10-20",
+  "method": "Codex system skill-installer install-skill-from-github.py",
+  "complete_toolkit": true,
+  "profile_extension": "tooling/render-article-profile.patch",
+  "credentials_configured": false,
+  "skills": [
+    {
+      "name": "wechat-skill",
+      "path": "C:\\Users\\hufei\\.codex\\skills\\wechat-skill",
+      "skill_md_sha256": "4eec347fd3bcf19f4221ff7f5054d47f98f0f8a2050e1644462cd219ac0b3f3f",
+      "exists": true
+    },
+    {
+      "name": "humanizer-zh",
+      "path": "C:\\Users\\hufei\\.codex\\skills\\humanizer-zh",
+      "skill_md_sha256": "23317b3dfe6a09e038eb99d7298f3680a88307bdb086bd8dea355e632539d893",
+      "exists": true
+    },
+    {
+      "name": "wechat-viral-writer",
+      "path": "C:\\Users\\hufei\\.codex\\skills\\wechat-viral-writer",
+      "skill_md_sha256": "50797424a8400068ac9313d1fa45cf924a11726b10c8053b872b09cb319e7ed3",
+      "exists": true
+    },
+    {
+      "name": "wechat-content-pipeline",
+      "path": "C:\\Users\\hufei\\.codex\\skills\\wechat-content-pipeline",
+      "skill_md_sha256": "43b39ba13257c624abcab05e6103d38027b2654db0858c084a2a29e906772533",
+      "exists": true
+    },
+    {
+      "name": "wechat-tech-insight-writer",
+      "path": "C:\\Users\\hufei\\.codex\\skills\\wechat-tech-insight-writer",
+      "skill_md_sha256": "313530f650d0db3964b596dc8bda3f1f5b095d542b203b701b49f306b4fe2b75",
+      "exists": true
+    },
+    {
+      "name": "wechat-public-event-archive",
+      "path": "C:\\Users\\hufei\\.codex\\skills\\wechat-public-event-archive",
+      "skill_md_sha256": "c7b0558d2f3d55cb81cbe503749a51d60d526f1554f813c6f52069d4cfd8ef12",
+      "exists": true
+    },
+    {
+      "name": "xiaohu-gen",
+      "path": "C:\\Users\\hufei\\.codex\\skills\\xiaohu-gen",
+      "skill_md_sha256": "1f2924a3c5b7b68ce20a1e9fead724ffaa2ca86dd6ca42685b899472598bbd76",
+      "exists": true
+    }
+  ]
+}

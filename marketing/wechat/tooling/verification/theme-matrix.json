@@ -1,0 +1,247 @@
+{
+  "theme_count": 12,
+  "render_count": 24,
+  "all_passed": true,
+  "results": [
+    {
+      "theme": "moyu-green",
+      "mode": "default",
+      "render_exit": 0,
+      "validator_exit": 0,
+      "errors": [],
+      "warnings": [],
+      "leaf_count": 53,
+      "html": "F:\\all_my_code\\tools\\zhiyunzimu\\marketing\\wechat\\tooling\\verification\\themes\\moyu-green-default.html"
+    },
+    {
+      "theme": "moyu-green",
+      "mode": "profile",
+      "render_exit": 0,
+      "validator_exit": 0,
+      "errors": [],
+      "warnings": [],
+      "leaf_count": 44,
+      "html": "F:\\all_my_code\\tools\\zhiyunzimu\\marketing\\wechat\\tooling\\verification\\themes\\moyu-green-profile.html"
+    },
+    {
+      "theme": "olive-journal",
+      "mode": "default",
+      "render_exit": 0,
+      "validator_exit": 0,
+      "errors": [],
+      "warnings": [],
+      "leaf_count": 53,
+      "html": "F:\\all_my_code\\tools\\zhiyunzimu\\marketing\\wechat\\tooling\\verification\\themes\\olive-journal-default.html"
+    },
+    {
+      "theme": "olive-journal",
+      "mode": "profile",
+      "render_exit": 0,
+      "validator_exit": 0,
+      "errors": [],
+      "warnings": [],
+      "leaf_count": 44,
+      "html": "F:\\all_my_code\\tools\\zhiyunzimu\\marketing\\wechat\\tooling\\verification\\themes\\olive-journal-profile.html"
+    },
+    {
+      "theme": "plain-white",
+      "mode": "default",
+      "render_exit": 0,
+      "validator_exit": 0,
+      "errors": [],
+      "warnings": [],
+      "leaf_count": 45,
+      "html": "F:\\all_my_code\\tools\\zhiyunzimu\\marketing\\wechat\\tooling\\verification\\themes\\plain-white-default.html"
+    },
+    {
+      "theme": "plain-white",
+      "mode": "profile",
+      "render_exit": 0,
+      "validator_exit": 0,
+      "errors": [],
+      "warnings": [],
+      "leaf_count": 36,
+      "html": "F:\\all_my_code\\tools\\zhiyunzimu\\marketing\\wechat\\tooling\\verification\\themes\\plain-white-profile.html"
+    },
+    {
+      "theme": "ink-rule",
+      "mode": "default",
+      "render_exit": 0,
+      "validator_exit": 0,
+      "errors": [],
+      "warnings": [],
+      "leaf_count": 49,
+      "html": "F:\\all_my_code\\tools\\zhiyunzimu\\marketing\\wechat\\tooling\\verification\\themes\\ink-rule-default.html"
+    },
+    {
+      "theme": "ink-rule",
+      "mode": "profile",
+      "render_exit": 0,
+      "validator_exit": 0,
+      "errors": [],
+      "warnings": [],
+      "leaf_count": 40,
+      "html": "F:\\all_my_code\\tools\\zhiyunzimu\\marketing\\wechat\\tooling\\verification\\themes\\ink-rule-profile.html"
+    },
+    {
+      "theme": "deep-pool",
+      "mode": "default",
+      "render_exit": 0,
+      "validator_exit": 0,
+      "errors": [],
+      "warnings": [],
+      "leaf_count": 48,
+      "html": "F:\\all_my_code\\tools\\zhiyunzimu\\marketing\\wechat\\tooling\\verification\\themes\\deep-pool-default.html"
+    },
+    {
+      "theme": "deep-pool",
+      "mode": "profile",
+      "render_exit": 0,
+      "validator_exit": 0,
+      "errors": [],
+      "warnings": [],
+      "leaf_count": 39,
+      "html": "F:\\all_my_code\\tools\\zhiyunzimu\\marketing\\wechat\\tooling\\verification\\themes\\deep-pool-profile.html"
+    },
+    {
+      "theme": "color-block",
+      "mode": "default",
+      "render_exit": 0,
+      "validator_exit": 0,
+      "errors": [],
+      "warnings": [],
+      "leaf_count": 47,
+      "html": "F:\\all_my_code\\tools\\zhiyunzimu\\marketing\\wechat\\tooling\\verification\\themes\\color-block-default.html"
+    },
+    {
+      "theme": "color-block",
+      "mode": "profile",
+      "render_exit": 0,
+      "validator_exit": 0,
+      "errors": [],
+      "warnings": [],
+      "leaf_count": 38,
+      "html": "F:\\all_my_code\\tools\\zhiyunzimu\\marketing\\wechat\\tooling\\verification\\themes\\color-block-profile.html"
+    },
+    {
+      "theme": "news-wire",
+      "mode": "default",
+      "render_exit": 0,
+      "validator_exit": 0,
+      "errors": [],
+      "warnings": [],
+      "leaf_count": 42,
+      "html": "F:\\all_my_code\\tools\\zhiyunzimu\\marketing\\wechat\\tooling\\verification\\themes\\news-wire-default.html"
+    },
+    {
+      "theme": "news-wire",
+      "mode": "profile",
+      "render_exit": 0,
+      "validator_exit": 0,
+      "errors": [],
+      "warnings": [],
+      "leaf_count": 39,
+      "html": "F:\\all_my_code\\tools\\zhiyunzimu\\marketing\\wechat\\tooling\\verification\\themes\\news-wire-profile.html"
+    },
+    {
+      "theme": "solemn-gray",
+      "mode": "default",
+      "render_exit": 0,
+      "validator_exit": 0,
+      "errors": [],
+      "warnings": [],
+      "leaf_count": 43,
+      "html": "F:\\all_my_code\\tools\\zhiyunzimu\\marketing\\wechat\\tooling\\verification\\themes\\solemn-gray-default.html"
+    },
+    {
+      "theme": "solemn-gray",
+      "mode": "profile",
+      "render_exit": 0,
+      "validator_exit": 0,
+      "errors": [],
+      "warnings": [],
+      "leaf_count": 40,
+      "html": "F:\\all_my_code\\tools\\zhiyunzimu\\marketing\\wechat\\tooling\\verification\\themes\\solemn-gray-profile.html"
+    },
+    {
+      "theme": "formal-brief",
+      "mode": "default",
+      "render_exit": 0,
+      "validator_exit": 0,
+      "errors": [],
+      "warnings": [],
+      "leaf_count": 41,
+      "html": "F:\\all_my_code\\tools\\zhiyunzimu\\marketing\\wechat\\tooling\\verification\\themes\\formal-brief-default.html"
+    },
+    {
+      "theme": "formal-brief",
+      "mode": "profile",
+      "render_exit": 0,
+      "validator_exit": 0,
+      "errors": [],
+      "warnings": [],
+      "leaf_count": 38,
+      "html": "F:\\all_my_code\\tools\\zhiyunzimu\\marketing\\wechat\\tooling\\verification\\themes\\formal-brief-profile.html"
+    },
+    {
+      "theme": "aurora-violet",
+      "mode": "default",
+      "render_exit": 0,
+      "validator_exit": 0,
+      "errors": [],
+      "warnings": [],
+      "leaf_count": 51,
+      "html": "F:\\all_my_code\\tools\\zhiyunzimu\\marketing\\wechat\\tooling\\verification\\themes\\aurora-violet-default.html"
+    },
+    {
+      "theme": "aurora-violet",
+      "mode": "profile",
+      "render_exit": 0,
+      "validator_exit": 0,
+      "errors": [],
+      "warnings": [],
+      "leaf_count": 42,
+      "html": "F:\\all_my_code\\tools\\zhiyunzimu\\marketing\\wechat\\tooling\\verification\\themes\\aurora-violet-profile.html"
+    },
+    {
+      "theme": "peach-soft",
+      "mode": "default",
+      "render_exit": 0,
+      "validator_exit": 0,
+      "errors": [],
+      "warnings": [],
+      "leaf_count": 49,
+      "html": "F:\\all_my_code\\tools\\zhiyunzimu\\marketing\\wechat\\tooling\\verification\\themes\\peach-soft-default.html"
+    },
+    {
+      "theme": "peach-soft",
+      "mode": "profile",
+      "render_exit": 0,
+      "validator_exit": 0,
+      "errors": [],
+      "warnings": [],
+      "leaf_count": 40,
+      "html": "F:\\all_my_code\\tools\\zhiyunzimu\\marketing\\wechat\\tooling\\verification\\themes\\peach-soft-profile.html"
+    },
+    {
+      "theme": "noir-gold",
+      "mode": "default",
+      "render_exit": 0,
+      "validator_exit": 0,
+      "errors": [],
+      "warnings": [],
+      "leaf_count": 52,
+      "html": "F:\\all_my_code\\tools\\zhiyunzimu\\marketing\\wechat\\tooling\\verification\\themes\\noir-gold-default.html"
+    },
+    {
+      "theme": "noir-gold",
+      "mode": "profile",
+      "render_exit": 0,
+      "validator_exit": 0,
+      "errors": [],
+      "warnings": [],
+      "leaf_count": 43,
+      "html": "F:\\all_my_code\\tools\\zhiyunzimu\\marketing\\wechat\\tooling\\verification\\themes\\noir-gold-profile.html"
+    }
+  ]
+}

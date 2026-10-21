@@ -25,7 +25,7 @@ const {chromium}=require(process.env.PLAYWRIGHT_MODULE||'playwright');
   await page.evaluate(()=>document.getElementById('host').shadowRoot.getElementById('study-sync').open=false);
   const widths=await ui.locator('#study-actions').evaluate(e=>[...e.children].map(n=>n.getBoundingClientRect().width));assert.ok(Math.abs(widths[0]/widths[1]-2)<.03);assert.equal(await ui.locator('#study-actions button').count(),2);assert.ok(await ui.locator('#reset-offset').isHidden());
   assert.equal(await ui.locator('#study-actions #transcript-open').count(),1);assert.equal(await ui.locator('#study-tools button').count(),2);assert.equal(await ui.locator('#panel #ai-capture').count(),0);assert.match(await ui.locator('#study-capture-hint').textContent(),/中键/);
-  assert.equal(await ui.locator('#panel button:visible').count(),9,'only essential actions appear by default');
+  assert.equal(await ui.locator('#panel button:visible').count(),10,'essential actions and the separate free manual + appear by default');
   assert.ok(await ui.locator('#auto-align').isHidden());assert.ok(await ui.locator('#cache-download').isVisible());
   assert.ok(await ui.locator('#ai-open').isVisible());assert.ok(await ui.locator('#show-slides').isVisible());
   await ui.locator('#mode').selectOption('both');assert.equal(await ui.locator('#mode').inputValue(),'both');

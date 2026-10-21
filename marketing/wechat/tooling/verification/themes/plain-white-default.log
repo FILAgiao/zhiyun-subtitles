@@ -1,0 +1,7 @@
+$ C:\Users\hufei\.cache\codex-runtimes\codex-primary-runtime\dependencies\python\python.exe C:\Users\hufei\.codex\skills\wechat-skill\.agents\skills\wechat-content-pipeline\scripts\render_article.py --article F:\all_my_code\tools\zhiyunzimu\marketing\wechat\tooling\test-fixtures\article.md --theme plain-white --output F:\all_my_code\tools\zhiyunzimu\marketing\wechat\tooling\verification\themes\plain-white-default.html
+{"status": "ok", "title": "小奶蛙的上课小工具", "theme": "plain-white", "image_count": 1, "module_count": 0, "module_kinds": [], "inline_degraded": false, "inline_degrade_reason": "", "duration_ms": 0}
+
+📋 公众号 HTML 合规校验: F:\all_my_code\tools\zhiyunzimu\marketing\wechat\tooling\verification\themes\plain-white-default.html
+   span leaf 包裹: 45 处
+
+✅ 完全合规，可直接粘贴到公众号编辑器
