@@ -5,7 +5,7 @@ const GATEWAY='https://47.77.182.216.sslip.io/gateway';
 function allowedRequest(o,runtime=globalThis.chrome?.runtime){
  const u=new URL(o.url),method=(o.method||'GET').toUpperCase();
  if(u.protocol!=='https:'||u.username||u.password||u.hash)throw Error('Request denied');
- const gateway=u.origin===new URL(GATEWAY).origin&&/^\/gateway\/v1\/(?:auth\/(?:login|logout)|me|activity|history|study\/(?:conversations|capabilities)|prompts(?:\/(?:save|delete))?|ark\/responses|speech\/(?:submit|query)|learning\/jobs\/(?:create|poll|cancel))$/.test(u.pathname)&&!u.search;
+ const gateway=u.origin===new URL(GATEWAY).origin&&/^\/gateway\/v1\/(?:auth\/(?:login|logout)|me|activity|history|study\/(?:conversations|capabilities)|prompts(?:\/(?:save|delete))?|ark\/responses|speech\/(?:submit|query|stream\/(?:create|push|poll|finish|cancel))|learning\/jobs\/(?:create|poll|cancel))$/.test(u.pathname)&&!u.search;
  const school=(u.hostname==='cmc.zju.edu.cn'||u.hostname.endsWith('.cmc.zju.edu.cn'))&&method==='GET';
  if(!gateway&&!school||!['GET','POST'].includes(method)||school&&o.data)throw Error('Request denied');
  if(o.data!==undefined&&(typeof o.data!=='string'||o.data.length>7000000))throw Error('Request too large');

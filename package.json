@@ -1,16 +1,19 @@
 {
   "name": "zhiyun-subtitles",
-  "version": "0.20.72",
+  "version": "0.20.76",
   "private": true,
   "description": "浙大上课爽：网课不硬扛，浙大上课爽！同步字幕、PPT 讲解与本机缓存。",
   "scripts": {
-    "test": "node --test subtitle.test.cjs translation-sync.test.cjs cache-close.test.cjs ai-learning.test.cjs translation-reliability.test.cjs speech-alignment.test.cjs",
+    "test": "node --test subtitle.test.cjs translation-sync.test.cjs cache-close.test.cjs ai-learning.test.cjs translation-reliability.test.cjs speech-alignment.test.cjs speech-stream.test.cjs",
+    "test:sync:button": "node sync-button-ui.test.cjs && node sync-button-ui.test.cjs --extension",
+    "test:speech": "node --test subtitle.test.cjs speech-alignment.test.cjs speech-stream.test.cjs gateway-client.test.cjs && python -m unittest backend.test_speech_stream && node speech-sync-ui.test.cjs && node speech-sync-ui.test.cjs --extension",
     "test:ui": "node ui.test.cjs && node playback-ui.test.cjs && node player-edge-ui.test.cjs && node translation-sync-ui.test.cjs && node course-route-ui.test.cjs && node ai-learning-ui.test.cjs && node simple-ui.test.cjs && node question-history-ui.test.cjs && node ppt-thumbnails-ui.test.cjs && node ppt-sync-ui.test.cjs",
     "build:stream": "node build-stream.cjs",
     "test:media": "node generate-test-media.cjs",
     "test:stream": "node progressive.test.cjs && node progressive.test.cjs .test-media/tail.mp4 && node progressive-ui.test.cjs",
     "test:cache": "node cache-flow.test.cjs && node cache-source-race.test.cjs && node cache-playback-switch.test.cjs",
-    "build": "node build-stream.cjs && node build-math.cjs && node build-card.cjs && node build-userscript.cjs",
+    "build": "node build-stream.cjs && node build-math.cjs && node build-card.cjs && node build-speech.cjs && node build-userscript.cjs",
+    "build:speech": "node build-speech.cjs",
     "test:release": "node release.test.cjs",
     "test:storage": "node chrome-cache.test.cjs && node cache-storage-ui.test.cjs",
     "test:gateway": "python -m unittest backend.test_server backend.test_accounts backend.test_compatibility -v && node --test gateway-client.test.cjs compatibility.test.cjs",
@@ -48,7 +51,10 @@
     "test:compatibility": "python -m unittest backend.test_compatibility -v && node --test compatibility.test.cjs",
     "test:prompts": "python -m unittest backend.test_prompts -v && node --test cloud-prompts.test.cjs && node cloud-prompts-ui.test.cjs && node cloud-prompts-admin-ui.test.cjs",
     "test:study": "python -m unittest backend.test_study -q && node study-sync-ui.test.cjs",
-    "test:study:portal": "node study-portal-ui.test.cjs"
+    "test:study:portal": "node study-portal-ui.test.cjs",
+    "test:speech:benchmark": "node speech-alignment-benchmark.cjs",
+    "build:speech:release": "node build-userscript.cjs && node build-extension.cjs && node build-speech-release.cjs",
+    "test:speech:source": "node speech-stream-native-smoke.test.cjs"
   },
   "engines": {
     "node": ">=20.8"
@@ -62,6 +68,7 @@
   "dependencies": {
     "html2canvas": "^1.4.1",
     "katex": "0.19.0",
-    "mp4box": "2.4.1"
+    "mp4box": "2.4.1",
+    "pinyin-pro": "3.29.5"
   }
 }

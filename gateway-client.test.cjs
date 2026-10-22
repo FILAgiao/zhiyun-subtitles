@@ -9,7 +9,7 @@ test('production build pins gateway domain and cannot use vendor key while logge
  const fs=require('node:fs'),path=require('node:path'),os=require('node:os'),vm=require('node:vm'),{execFileSync}=require('node:child_process');
  const dir=fs.mkdtempSync(path.join(os.tmpdir(),'gateway-build-'));
  try{
-  for(const f of ['package.json','load-onboarding-assets.cjs','load-card-quotes.cjs','build-userscript.cjs','zhiyun-subtitles.user.js','progressive-cache.bundle.js','cache-storage.js','study-ui.js','warm-theme.js','appearance-theme.js','card-render.bundle.js','classroom-media.js','speech-alignment.js','player-interactions.js','math-render.bundle.js','ai-learning.js','capture-bridge-client.js','translation-request.js','gateway-client.js','web-assistant.js'])fs.copyFileSync(f,path.join(dir,f));
+  for(const f of ['package.json','load-onboarding-assets.cjs','load-card-quotes.cjs','build-userscript.cjs','zhiyun-subtitles.user.js','progressive-cache.bundle.js','cache-storage.js','study-ui.js','warm-theme.js','appearance-theme.js','card-render.bundle.js','classroom-media.js','speech-phonetics.bundle.js','speech-alignment.js','speech-stream.js','player-interactions.js','math-render.bundle.js','ai-learning.js','capture-bridge-client.js','translation-request.js','gateway-client.js','web-assistant.js'])fs.copyFileSync(f,path.join(dir,f));
   fs.mkdirSync(path.join(dir,'assets'));for(const asset of ['study-eagle.png','qiushi-eagle.svg','brand-logo.png','share-qr.png'])fs.copyFileSync('assets/'+asset,path.join(dir,'assets',asset));
   fs.cpSync('assets/onboarding',path.join(dir,'assets/onboarding'),{recursive:true});
   fs.mkdirSync(path.join(dir,'assets/quotes'));fs.copyFileSync('assets/quotes/quotes.json',path.join(dir,'assets/quotes/quotes.json'));
@@ -67,4 +67,70 @@ test('trial status separates expiry from usage, never invents a deadline, and re
  summary=accessSummary({membership:{plan:'trial',active:true},usage:{}},now);assert.equal(summary.remaining,null);assert.equal(summary.quota,'额度待刷新');
  assert.equal(accessSummary({membership:{plan:'free'}},now),null);
  assert.ok(!accessSummary({...data,membership:{plan:'pro',active:true}},now).text.includes('免费'));
+});
+
+async function authenticatedStream(extra={}){
+ const context=setup();const pending=context.api.login('https://api.test','a@test','password');context.calls.at(-1).onload({status:200,responseText:JSON.stringify({token:'stream-account',membership:{plan:'pro',active:true},permissions:{speech:true},capabilities:{speech_stream:true},...extra})});await pending;return context;
+}
+
+test('stream support uses the live authenticated account profile, never globally cached capabilities',async()=>{
+ const context=setup({url:'https://api.test',token:'saved-session'});context.storage['gateway-capabilities-v1']={speech_stream:true};assert.equal(context.api.speechStream.supported(),false);
+ const refresh=context.api.call('/v1/me');context.calls.at(-1).onload({status:200,responseText:JSON.stringify({membership:{active:true},permissions:{speech:true},capabilities:{speech_stream:true}})});await refresh;assert.equal(context.api.speechStream.supported(),true);
+ context.storage['gateway-account-v1'].token='someone-else';assert.equal(context.api.speechStream.supported(),false);
+});
+
+test('stream support respects explicit account speech permission and current service capability',async()=>{
+ for(const extra of [{permissions:{speech:false}},{membership:{plan:'free',active:false}},{capabilities:{}},{capabilities:{speech_stream:false}}]){const context=await authenticatedStream(extra);assert.equal(context.api.speechStream.supported(),false);}
+});
+
+test('bound stream transport sends only account credentials to fixed HTTPS routes',async()=>{
+ const {api,calls}=await authenticatedStream();const transport=api.speechStream.bindTransport();
+ for(const action of ['create','push','poll','finish','cancel']){
+  const payload=action==='create'?{request_id:'d7c96f78-d974-4c28-8656-7a555366d226'}:{id:'one-session'};const pending=transport(action,payload);const call=calls.at(-1);assert.equal(call.method,'POST');assert.equal(call.url,'https://api.test/v1/speech/stream/'+action);assert.equal(call.headers.Authorization,'Bearer stream-account');assert.equal(call.headers['Content-Type'],'application/json');assert.equal(call.headers['X-App-Id'],'zhiyun-subtitles');assert.equal(call.headers['X-Api-Key'],undefined);assert.deepEqual(JSON.parse(call.data),payload);if(action==='create')assert.equal(call.headers['X-Api-Request-Id'],payload.request_id);call.onload({status:action==='create'?202:200,responseText:'{"id":"one-session","state":"listening"}'});assert.equal((await pending).id,'one-session');
+ }
+ const count=calls.length;await assert.rejects(transport('../ark/responses',{}),{code:'invalid_stream_action'});assert.equal(calls.length,count);
+});
+
+test('stream transport cannot start for an unauthenticated cached session',async()=>{
+ const {api,calls,storage}=setup({url:'https://api.test',token:'old-session'});storage['gateway-capabilities-v1']={speech_stream:true};await assert.rejects(api.speechStream.bindTransport()('create',{request_id:'new-session'}),{code:'speech_stream_unsupported'});assert.equal(calls.length,0);
+});
+
+test('account changes block uploads while cleanup still uses the original session token',async()=>{
+ const {api,calls,storage}=await authenticatedStream();const transport=api.speechStream.bindTransport(),before=calls.length;storage['gateway-account-v1']={url:'https://api.test',token:'new-account'};await assert.rejects(transport('push',{id:'one',sequence:0,audio:'AA=='}),{code:'account_changed'});assert.equal(calls.length,before);
+ const cancel=transport('cancel',{id:'one'});assert.equal(calls.at(-1).headers.Authorization,'Bearer stream-account');calls.at(-1).onload({status:200,responseText:'{"state":"cancelled"}'});await cancel;assert.equal(storage['gateway-account-v1'].token,'new-account');
+});
+
+test('a response after an account switch cannot deliver old account recognition results',async()=>{
+ const {api,calls,storage}=await authenticatedStream();const transport=api.speechStream.bindTransport(),pending=transport('poll',{id:'one'});storage['gateway-account-v1'].token='new-account';calls.at(-1).onload({status:200,responseText:'{"result":{"text":"private old words"}}'});await assert.rejects(pending,{code:'account_changed'});
+});
+
+test('stream HTTP errors retain status and code for safe fallback and retry decisions',async()=>{
+ const {api,calls}=await authenticatedStream(),transport=api.speechStream.bindTransport();const pending=transport('create',{request_id:'one'});calls.at(-1).onload({status:503,responseText:'{"error":"stream missing","error_code":"speech_stream_unavailable"}'});await assert.rejects(pending,{status:503,code:'speech_stream_unavailable',message:'stream missing'});
+});
+
+test('a matching token HTTP 401 clears the current profile and prevents further stream use',async()=>{
+ const {api,calls,storage}=await authenticatedStream(),transport=api.speechStream.bindTransport(),pending=transport('poll',{id:'one'});calls.at(-1).onload({status:401,responseText:'{"error":"expired"}'});await assert.rejects(pending,{status:401});assert.equal(storage['gateway-account-v1'].token,'');assert.equal(api.speechStream.supported(),false);
+});
+
+test('old-account cleanup HTTP 401 cannot clear a newly signed-in account',async()=>{
+ const {api,calls,storage}=await authenticatedStream(),transport=api.speechStream.bindTransport();storage['gateway-account-v1'].token='new-account';const pending=transport('cancel',{id:'one'});calls.at(-1).onload({status:401,responseText:'{"error":"old session expired"}'});await assert.rejects(pending,{status:401});assert.equal(storage['gateway-account-v1'].token,'new-account');
+});
+
+test('AbortSignal stops the actual GM request and rejects the stream operation exactly once',async()=>{
+ const {api,calls}=await authenticatedStream();let aborted=0;const transport=api.speechStream.bindTransport(),controller=new AbortController(),pending=transport('push',{id:'one',sequence:0,audio:'AA=='},{signal:controller.signal});const request=calls.at(-1);request.abort=()=>aborted++;
+ // setup's handle is intentionally separate from options; verify through a purpose-built adapter below.
+ controller.abort();await assert.rejects(pending,{code:'cancelled'});request.onload({status:200,responseText:'{}'});
+ const storage={'gateway-account-v1':{url:'https://api.test',token:'one'}},requests=[];let handleAborts=0;const second=create({getValue:(k,d)=>storage[k]??d,setValue:(k,v)=>storage[k]=v,request:o=>{requests.push(o);return{abort(){handleAborts++;o.onabort?.();}};}});const refresh=second.call('/v1/me');requests.at(-1).onload({status:200,responseText:'{"permissions":{"speech":true},"capabilities":{"speech_stream":true}}'});await refresh;const abortController=new AbortController(),upload=second.speechStream.bindTransport()('push',{id:'one',sequence:0,audio:'AA=='},{signal:abortController.signal});abortController.abort();await assert.rejects(upload,{code:'cancelled'});assert.equal(handleAborts,1);
+});
+
+test('pre-aborted stream operations never send network requests',async()=>{
+ const {api,calls}=await authenticatedStream(),controller=new AbortController();controller.abort();const before=calls.length;await assert.rejects(api.speechStream.bindTransport()('poll',{id:'one'},{signal:controller.signal}),{code:'cancelled'});assert.equal(calls.length,before);
+});
+
+test('stream transport reports malformed successful JSON and network failures explicitly',async()=>{
+ const {api,calls}=await authenticatedStream(),transport=api.speechStream.bindTransport();let pending=transport('poll',{id:'one'});calls.at(-1).onload({status:200,responseText:'not json'});await assert.rejects(pending,{code:'invalid_stream_response',status:200});pending=transport('push',{id:'one',sequence:0,audio:'AA=='});calls.at(-1).onerror();await assert.rejects(pending,{code:'stream_network_error'});
+});
+
+test('stream transport exposes GM timeout as a bounded stream timeout and aborts its request',async()=>{
+ const {api,calls}=await authenticatedStream(),transport=api.speechStream.bindTransport(),pending=transport('push',{id:'one',sequence:0,audio:'AA=='});calls.at(-1).ontimeout();await assert.rejects(pending,{code:'stream_timeout'});
 });

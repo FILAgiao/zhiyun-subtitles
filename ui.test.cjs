@@ -13,7 +13,7 @@ const {chromium}=require(process.env.PLAYWRIGHT_MODULE || 'playwright');
   window.saved={'ppt-free-window-v2':{x:0,y:0,w:.2,h:.2},'ark-api-key':'fake','speech-credentials':{apiKey:'fake'}};
   window.GM_getValue=(k,d)=>saved[k]??d; window.GM_setValue=(k,v)=>saved[k]=v;window.GM_deleteValue=k=>delete saved[k];window.GM_registerMenuCommand=()=>{};
   window.requests=[];window.jobs=0;
-  window.GM_xmlhttpRequest=o=>{if(o.method==='GET'){window.videoRequests=(window.videoRequests||0)+1;setTimeout(()=>o.onload({status:206,responseHeaders:'Content-Range: bytes 0-15/16',response:new Blob([new Uint8Array([0,0,0,16,102,116,121,112,105,115,111,109,0,0,0,0])],{type:'video/mp4'})}),10);return{abort(){o.onabort?.();}};}requests.push(o.url);let aborted=false;setTimeout(()=>{if(aborted)return; if(o.url.includes('responses'))o.onload({status:200,responseText:JSON.stringify({output:[{type:'message',content:[{type:'output_text',text:'金融市场使用多种不同的交易策略'}]}]})});else {if(o.url.endsWith('submit'))jobs++;o.onload({status:200,responseHeaders:'X-Api-Status-Code: 20000000',responseText:JSON.stringify({result:{utterances:[{text:jobs<3?'this text has no match at all here':'the financial market uses several different trading strategies',start_time:0}]}})});}},10);return{abort(){aborted=true;o.onabort?.();}};};
+  window.GM_xmlhttpRequest=o=>{if(o.method==='GET'){window.videoRequests=(window.videoRequests||0)+1;setTimeout(()=>o.onload({status:206,responseHeaders:'Content-Range: bytes 0-15/16',response:new Blob([new Uint8Array([0,0,0,16,102,116,121,112,105,115,111,109,0,0,0,0])],{type:'video/mp4'})}),10);return{abort(){o.onabort?.();}};}requests.push(o.url);let aborted=false;setTimeout(()=>{if(aborted)return; if(o.url.includes('responses'))o.onload({status:200,responseText:JSON.stringify({output:[{type:'message',content:[{type:'output_text',text:'金融市场使用多种不同的交易策略'}]}]})});else {if(o.url.endsWith('submit'))jobs++;o.onload({status:200,responseHeaders:'X-Api-Status-Code: 20000000',responseText:JSON.stringify({result:{utterances:[{text:'the financial market uses several different trading strategies',start_time:0}]}})});}},10);return{abort(){aborted=true;o.onabort?.();}};};
   const video=document.querySelector('video');Object.defineProperties(video,{paused:{get:()=>window.testPaused??false},duration:{get:()=>3600},currentTime:{get:()=>window.videoTime??12,set:v=>{window.videoTime=v;}},playbackRate:{get:()=>window.testRate??1,set:v=>{window.testRate=v;setTimeout(()=>video.dispatchEvent(new Event('ratechange')),0);}}});
   video.captureStream=()=>({getAudioTracks:()=>[],getTracks:()=>[]});
  });
@@ -100,7 +100,7 @@ const {chromium}=require(process.env.PLAYWRIGHT_MODULE || 'playwright');
  assert.equal(await ui.locator('#caption').evaluate(e=>getComputedStyle(e).overflowY),'hidden');
  // Mock captured audio and speed up only recording/poll delays. Never contact cloud services.
  await page.evaluate(()=>{
-  const timeout=window.setTimeout;window.setTimeout=(fn,ms,...args)=>timeout(fn,ms===12000?120:ms===2000?10:ms,...args);
+  const timeout=window.setTimeout;window.setTimeout=(fn,ms,...args)=>timeout(fn,(ms===12000||ms===20000)?120:ms===2000?10:ms,...args);
   const track={stop(){}};document.querySelector('video').captureStream=()=>({getAudioTracks:()=>[track],getTracks:()=>[track]});
   window.MediaStream=class{};
   window.MediaRecorder=class{constructor(){this.mimeType='audio/webm';this.state='inactive';}start(){this.state='recording';}stop(){this.state='inactive';this.ondataavailable({data:new Blob(['audio'])});this.onstop();}};
@@ -109,11 +109,11 @@ const {chromium}=require(process.env.PLAYWRIGHT_MODULE || 'playwright');
  });
  await openSettings('sync');await ui.locator('#sync-toggle').click();await page.waitForTimeout(60);assert.ok(await ui.locator('#align-progress').isVisible());
  await page.waitForTimeout(1000);
- assert.equal(await page.evaluate(()=>jobs),3);assert.match(await ui.locator('#align-label').textContent(),/匹配成功/);
+ assert.equal(await page.evaluate(()=>jobs),1);assert.match(await ui.locator('#align-label').textContent(),/匹配成功/);
  assert.equal(await ui.locator('#offset').inputValue(),'2');
- // A reliable first match must stop immediately; explicit cancellation must not submit.
+ // A reliable first match completes a single audio job. Cancellation must not submit.
  await page.evaluate(()=>jobs=2);
- await ui.locator('#sync-toggle').click(); await page.waitForTimeout(400);
+ await ui.locator('#sync-toggle').click();await page.waitForFunction(()=>document.getElementById('zy-subtitle-host').shadowRoot.getElementById('auto-align').textContent==='开始匹配');
  assert.equal(await page.evaluate(()=>jobs),3);
  await ui.locator('#sync-toggle').click(); await ui.locator('#sync-toggle').click();
  await page.waitForTimeout(200);assert.equal(await page.evaluate(()=>jobs),3);
@@ -163,7 +163,7 @@ const {chromium}=require(process.env.PLAYWRIGHT_MODULE || 'playwright');
  await page.evaluate(()=>document.querySelector('video').dispatchEvent(new Event('waiting')));
  await page.waitForTimeout(160);assert.equal(await page.evaluate(()=>jobs),2);
  await page.evaluate(()=>document.querySelector('video').dispatchEvent(new Event('playing')));
- await page.waitForTimeout(500);assert.equal(await page.evaluate(()=>jobs),3);assert.equal(await page.evaluate(()=>window.testRate),2);
+ await page.waitForFunction(()=>document.getElementById('zy-subtitle-host').shadowRoot.getElementById('auto-align').textContent==='开始匹配');assert.equal(await page.evaluate(()=>jobs),3);assert.equal(await page.evaluate(()=>window.testRate),2);
  // Cancelling while waiting prevents the next playing event from restarting recognition.
  await page.evaluate(()=>jobs=2);await ui.locator('#sync-toggle').click();await page.waitForTimeout(30);
  await page.evaluate(()=>document.querySelector('video').dispatchEvent(new Event('waiting')));await page.waitForTimeout(30);
@@ -267,7 +267,7 @@ const {chromium}=require(process.env.PLAYWRIGHT_MODULE || 'playwright');
  assert.equal(await ui.locator('#translation').textContent(),'');
  assert.equal(await ui.locator('#original').textContent(),'我们现在继续讲下一页的内容');
  assert.deepEqual(errors,[]);
- console.log('PASS: badges, presentation state, direction state, scroll, PPT pages, fullscreen, progress, three attempts, offset.');
+ console.log('PASS: badges, presentation state, direction state, scroll, PPT pages, fullscreen, progress, single recording match, offset.');
  await browser.close();
 })().catch(e=>{console.error(e);process.exit(1);});
 

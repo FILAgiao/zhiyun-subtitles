@@ -301,3 +301,36 @@ test('PPT independent clock and page calibration do not inherit speech anchors o
  assert.equal(pptOffsetForPage(30,60),-30);assert.equal(pptOffsetForPage(90,60),30);
  assert.equal(pptOffsetForPage(30,NaN),null);assert.equal(pptOffsetForPage(Infinity,60),null);assert.equal(pptOffsetForPage(4000,0),null);
 });
+
+test('standard ASR uses a completed submit result immediately without querying again',async()=>{
+ const calls=[],events=[],utterances=[{text:'recognized immediately',start_time:250}];
+ const result=await recognizeStandard(async action=>{calls.push(action);return asrResponse(20000000,utterances);},async()=>assert.fail('must not wait'),'audio','key','same',()=>false,e=>events.push(e.stage));
+ assert.deepEqual(result,utterances);assert.deepEqual(calls,['submit']);assert.deepEqual(events,['submit','recognized']);
+});
+
+test('a lost submit acknowledgement recovers by querying the same task without a second submit',async()=>{
+ const calls=[],events=[];
+ const result=await recognizeStandard(async(action,headers,body,options)=>{calls.push({action,id:headers['X-Api-Request-Id'],timeout:options.timeout});if(action==='submit')throw Object.assign(Error('submit timeout'),{code:'speech_timeout'});return asrResponse(20000000,[{text:'recovered',start_time:0}]);},async()=>{},'audio','key','recover-id',()=>false,e=>events.push(e.stage));
+ assert.equal(result[0].text,'recovered');assert.deepEqual(calls.map(c=>c.action),['submit','query']);assert.ok(calls.every(c=>c.id==='recover-id'));assert.equal(calls[0].timeout,45000);assert.ok(calls[1].timeout<=30000);assert.ok(events.includes('recover'));
+});
+
+test('transient query failures retry only the existing UUID and stop after three consecutive failures',async()=>{
+ for(const recover of [true,false]){
+  const calls=[],events=[];let queries=0;
+  const run=()=>recognizeStandard(async(action,headers)=>{calls.push([action,headers['X-Api-Request-Id']]);if(action==='submit')return asrResponse(20000000);if(++queries<3||!recover)throw Object.assign(Error('query timeout'),{code:'speech_timeout'});return asrResponse(20000000,[{text:'ready',start_time:0}]);},async()=>{},'audio','key','query-id',()=>false,e=>events.push(e.stage));
+  if(recover)assert.equal((await run())[0].text,'ready');else await assert.rejects(run(),/query timeout/);
+  assert.equal(calls.filter(c=>c[0]==='submit').length,1);assert.equal(queries,3);assert.ok(calls.every(c=>c[1]==='query-id'));assert.equal(events.filter(s=>s==='retry').length,2);
+ }
+});
+
+test('HTTP rejection after submit never retries or creates another paid speech job',async()=>{
+ const calls=[];
+ await assert.rejects(recognizeStandard(async action=>{calls.push(action);return action==='submit'?asrResponse(20000000):{...asrResponse(45000000),status:401};},async()=>{},'audio','key','id'),/HTTP 401/);
+ assert.deepEqual(calls,['submit','query']);
+});
+
+test('cancellation during submit recovery prevents querying or displaying a late transcript',async()=>{
+ let cancelled=false;const calls=[],events=[];
+ await assert.rejects(recognizeStandard(async action=>{calls.push(action);throw Object.assign(Error('timeout'),{code:'speech_timeout'});},async()=>{cancelled=true;},'audio','key','id',()=>cancelled,e=>events.push(e.stage)),/取消/);
+ assert.deepEqual(calls,['submit']);assert.ok(!events.includes('recognized'));
+});

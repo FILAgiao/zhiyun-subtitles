@@ -8,7 +8,7 @@ root=Path(__file__).resolve().parent.parent
 origin='https://47.77.182.216.sslip.io/gateway';remote='/opt/zhiyun-gateway/backend'
 version=json.loads((root/'package.json').read_text(encoding='utf-8'))['version']
 stamp=datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')
-files=['study_api.py','operations_api.py','prompt_api.py','official-prompts.json','public_page.py','server.py','admin_api.py','admin.html','admin.css','admin.js','privacy.html','download.html','download.css','site.js','portal.css','portal.js','study.html','study.css','study.js','account.html','account.css','account.js','install.user.js','install.meta.js','extension.zip']
+files=['speech_stream.py','study_api.py','operations_api.py','prompt_api.py','official-prompts.json','public_page.py','server.py','admin_api.py','admin.html','admin.css','admin.js','privacy.html','download.html','download.css','site.js','portal.css','portal.js','study.html','study.css','study.js','account.html','account.css','account.js','install.user.js','install.meta.js','extension.zip']
 files += ['landing/'+name for name in ['brand-logo.png','image-02.webp','image-01.webp','image-03.webp','image-04.webp','image-05.webp','image-06.webp']]
 content={name:(root/'backend'/name).read_bytes() if name!='extension.zip' else (root/'dist'/('zhiyun-subtitles-'+version+'.zip')).read_bytes() for name in files}
 client=paramiko.SSHClient();client.load_host_keys(str(root/'backend/.known_hosts'));client.set_missing_host_key_policy(paramiko.RejectPolicy())
@@ -41,7 +41,7 @@ try:
  config=json.loads(command("docker inspect zhiyun-gateway"))[0]
  assert config['Config']['WorkingDir']=='/app' and config['Config']['User']=='10001:10001'
  assert {m['Source']:m['Destination'] for m in config['Mounts'] if m['Type']=='bind'}=={'/opt/zhiyun-gateway/backend':'/app/backend','/opt/zhiyun-gateway/data':'/data'}
- for name in ['server.py','admin_api.py','prompt_api.py','study_api.py','operations_api.py','public_page.py']:
+ for name in ['speech_stream.py','server.py','admin_api.py','prompt_api.py','study_api.py','operations_api.py','public_page.py']:
   code="compile(open('/app/backend/"+name+".candidate-"+stamp+"').read(), '"+name+"', 'exec')"
   command('docker exec zhiyun-gateway python -c '+q(code))
  snapshot='/data/gateway-before-'+version+'-'+stamp+'.sqlite3'

@@ -1,0 +1,136 @@
+{
+  "version": "0.20.76",
+  "backup": "/opt/zhiyun-gateway/backend/.rollback-release-0.20.76-20261022T053655Z",
+  "database_backup": "/data/gateway-before-0.20.76-20261022T053655Z.sqlite3",
+  "changed": [
+    "speech_stream.py",
+    "study_api.py",
+    "operations_api.py",
+    "prompt_api.py",
+    "official-prompts.json",
+    "public_page.py",
+    "server.py",
+    "admin.html",
+    "admin.css",
+    "admin.js",
+    "privacy.html",
+    "download.html",
+    "download.css",
+    "site.js",
+    "portal.css",
+    "portal.js",
+    "study.html",
+    "study.css",
+    "study.js",
+    "account.html",
+    "account.css",
+    "account.js",
+    "install.user.js",
+    "install.meta.js",
+    "extension.zip"
+  ],
+  "public_files": {
+    "install.user.js": {
+      "bytes": 2705753,
+      "sha256": "20a615cbbf35bbd12b546a2408fcff13c250b5a9112e26b5825886ba8a8b591f"
+    },
+    "install.meta.js": {
+      "bytes": 1058,
+      "sha256": "1e05fbb1eee1194ad922eaab4fc6c2b7bc326e41d56d196133e5e581fa4399f0"
+    },
+    "admin.html": {
+      "bytes": 17730,
+      "sha256": "2fe8172a9c0d8a3d64d3934df469a88adc3595043f45b591f2b22b3f05093ee2"
+    },
+    "admin.js": {
+      "bytes": 30097,
+      "sha256": "b25bf706d8751cb44d0aaa5effb56bd43385541b47427afc9ca468205b0abd3d"
+    },
+    "admin.css": {
+      "bytes": 14787,
+      "sha256": "f61a28da1664fd015784f7c52582d80e1e6fd4397aa1c69d59873247f085db05"
+    },
+    "privacy.html": {
+      "bytes": 5713,
+      "sha256": "e2c35a15cc05b78a5d332b07efdaa81df6d27dde48cea33dd1238355e0f4bb9b"
+    },
+    "download.html": {
+      "bytes": 12426,
+      "sha256": "67536d2e8333d28789c3400d7ceeaa3a419e8e1f94ea9e28797b8ed29a7f413f"
+    },
+    "download.css": {
+      "bytes": 17081,
+      "sha256": "8baa3fe424d4d10ffdefeb8eab73837da081575159bec5476427100501d044fc"
+    },
+    "site.js": {
+      "bytes": 1352,
+      "sha256": "e5c18347c04e3fd0f2a6ff7c1ef2462c7ea67ecd4cf9ae3eeada8028b92a027c"
+    },
+    "portal.css": {
+      "bytes": 6538,
+      "sha256": "d7249624d509c74703624938f6b9f9e82c039ad690d1b0ff9b8473c350bd0ef4"
+    },
+    "portal.js": {
+      "bytes": 6384,
+      "sha256": "10f7552f9c277bd3cf5a3367c25ac349249a310d931778f60e0f264a96d4513a"
+    },
+    "study.html": {
+      "bytes": 6063,
+      "sha256": "66c097e9f0b8b3ce56d499784af8b5518b29b12c8a815e2a99da51700c7795bd"
+    },
+    "study.css": {
+      "bytes": 4763,
+      "sha256": "a0a16a4a11da5bc8eb803c28e4deebb3930c43b8a22acbefb933158c551b8894"
+    },
+    "study.js": {
+      "bytes": 7739,
+      "sha256": "22970d462c365c4f23450008064d6787d0fc6c9bfcaa8eb65ed0ab53ba9ee321"
+    },
+    "account.html": {
+      "bytes": 5633,
+      "sha256": "42711aff270a55b97ef5f34371868a487360e0ac8e6e631b9729d3d2b3f336c0"
+    },
+    "account.css": {
+      "bytes": 5009,
+      "sha256": "7d72ea2b77bc6ba5ceedc2846f26193ab3ebe396bb3b3e98d36f8f445c991e69"
+    },
+    "account.js": {
+      "bytes": 4399,
+      "sha256": "25b4c65184c148af234045c466e5da9943b61c35e8bf87ca82fecc207a884bf2"
+    },
+    "extension.zip": {
+      "bytes": 1307014,
+      "sha256": "abf9a63b7118fc93f0e30fc9ed66a228dab4d463b7621ef897c6ef746a8357ce"
+    },
+    "landing/brand-logo.png": {
+      "bytes": 16647,
+      "sha256": "d032bffde2189fdb2ef7a89001b4b08d77b9598a8209bfeb7f70bdabcf778d45"
+    },
+    "landing/image-02.webp": {
+      "bytes": 93362,
+      "sha256": "c388a454b1ee80469940adf0e0601fd91d3190696fcc126ecd2a282eceade995"
+    },
+    "landing/image-01.webp": {
+      "bytes": 80220,
+      "sha256": "118129817c6bc3eebec6fbf285fe4cff766b896870f760be3c943d75cb941027"
+    },
+    "landing/image-03.webp": {
+      "bytes": 110046,
+      "sha256": "489f400e9367dc74a209917e462bfb03e1af3265c92b12f1920239f99aa120a8"
+    },
+    "landing/image-04.webp": {
+      "bytes": 101578,
+      "sha256": "491b18d1d15ff3ca864e19f95b635876cb9be136eea04b8e7300e53a4b4197cb"
+    },
+    "landing/image-05.webp": {
+      "bytes": 126906,
+      "sha256": "4178877027782200c8af3031a4984d322ff939b49e4203dfaca145bc1dcb44a9"
+    },
+    "landing/image-06.webp": {
+      "bytes": 111354,
+      "sha256": "c3d55abed0b877a07ea89fc2e3fb158b0dfe0b77f3170f291ca8c64a0e3916a7"
+    }
+  },
+  "health": "ok",
+  "url": "https://47.77.182.216.sslip.io/gateway/install.user.js"
+}

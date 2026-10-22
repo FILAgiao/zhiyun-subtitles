@@ -1,0 +1,1581 @@
+{
+  "kind": "real_provider_generated_sample",
+  "audio_seconds": 7.79,
+  "websocket_accepted": true,
+  "event_count": 17,
+  "first_text_seconds": 1.17,
+  "first_stable_seconds": 2.34,
+  "final_received": true,
+  "known_phrase_recognized": true,
+  "errors": [],
+  "events": [
+    {
+      "seconds": 0.2,
+      "text": "",
+      "stable": 0,
+      "utterances": [],
+      "final": false
+    },
+    {
+      "seconds": 1.17,
+      "text": "Hello.",
+      "stable": 0,
+      "utterances": [
+        {
+          "additions": {
+            "all_matched_hotwords": "",
+            "fixed_prefix_result": "",
+            "source": "stream"
+          },
+          "definite": false,
+          "end_time": 999,
+          "text": "Hello.",
+          "words": [
+            {
+              "end_time": 580,
+              "start_time": 500,
+              "text": "Hello"
+            }
+          ]
+        }
+      ],
+      "final": false
+    },
+    {
+      "seconds": 1.39,
+      "text": "Hello, world.",
+      "stable": 0,
+      "utterances": [
+        {
+          "additions": {
+            "all_matched_hotwords": "",
+            "fixed_prefix_result": "",
+            "source": "stream"
+          },
+          "definite": false,
+          "end_time": 1199,
+          "text": "Hello, world.",
+          "words": [
+            {
+              "end_time": 440,
+              "start_time": 360,
+              "text": "Hello"
+            },
+            {
+              "end_time": -1,
+              "start_time": -1,
+              "text": " "
+            },
+            {
+              "end_time": 980,
+              "start_time": 900,
+              "text": "world"
+            }
+          ]
+        }
+      ],
+      "final": false
+    },
+    {
+      "seconds": 1.77,
+      "text": "Hello, world.",
+      "stable": 0,
+      "utterances": [
+        {
+          "additions": {
+            "all_matched_hotwords": "",
+            "fixed_prefix_result": "",
+            "source": "stream"
+          },
+          "definite": false,
+          "end_time": 1599,
+          "text": "Hello, world.",
+          "words": [
+            {
+              "end_time": 440,
+              "start_time": 360,
+              "text": "Hello"
+            },
+            {
+              "end_time": -1,
+              "start_time": -1,
+              "text": " "
+            },
+            {
+              "end_time": 980,
+              "start_time": 900,
+              "text": "world"
+            }
+          ]
+        }
+      ],
+      "final": false
+    },
+    {
+      "seconds": 2.34,
+      "text": "Hello World.",
+      "stable": 1,
+      "utterances": [
+        {
+          "additions": {
+            "all_matched_hotwords": "",
+            "fixed_prefix_result": "",
+            "invoke_type": "hard_vad",
+            "source": "two_pass",
+            "use_bigasr_post_process": "true"
+          },
+          "definite": true,
+          "end_time": 1852,
+          "text": "Hello World.",
+          "words": [
+            {
+              "end_time": 400,
+              "start_time": 200,
+              "text": "Hello"
+            },
+            {
+              "end_time": -1,
+              "start_time": -1,
+              "text": " "
+            },
+            {
+              "end_time": 840,
+              "start_time": 640,
+              "text": "World"
+            }
+          ]
+        }
+      ],
+      "final": false
+    },
+    {
+      "seconds": 2.55,
+      "text": "Hello World. This.",
+      "stable": 1,
+      "utterances": [
+        {
+          "additions": {
+            "all_matched_hotwords": "",
+            "fixed_prefix_result": "",
+            "invoke_type": "hard_vad",
+            "source": "two_pass",
+            "use_bigasr_post_process": "true"
+          },
+          "definite": true,
+          "end_time": 1852,
+          "text": "Hello World.",
+          "words": [
+            {
+              "end_time": 400,
+              "start_time": 200,
+              "text": "Hello"
+            },
+            {
+              "end_time": -1,
+              "start_time": -1,
+              "text": " "
+            },
+            {
+              "end_time": 840,
+              "start_time": 640,
+              "text": "World"
+            }
+          ]
+        },
+        {
+          "additions": {
+            "all_matched_hotwords": "",
+            "fixed_prefix_result": "",
+            "source": "stream"
+          },
+          "definite": false,
+          "end_time": 2402,
+          "start_time": 1852,
+          "text": "This.",
+          "words": [
+            {
+              "end_time": -1,
+              "start_time": -1,
+              "text": " "
+            },
+            {
+              "end_time": 2192,
+              "start_time": 2112,
+              "text": "This"
+            }
+          ]
+        }
+      ],
+      "final": false
+    },
+    {
+      "seconds": 2.99,
+      "text": "Hello World. This is.",
+      "stable": 1,
+      "utterances": [
+        {
+          "additions": {
+            "all_matched_hotwords": "",
+            "fixed_prefix_result": "",
+            "invoke_type": "hard_vad",
+            "source": "two_pass",
+            "use_bigasr_post_process": "true"
+          },
+          "definite": true,
+          "end_time": 1852,
+          "text": "Hello World.",
+          "words": [
+            {
+              "end_time": 400,
+              "start_time": 200,
+              "text": "Hello"
+            },
+            {
+              "end_time": -1,
+              "start_time": -1,
+              "text": " "
+            },
+            {
+              "end_time": 840,
+              "start_time": 640,
+              "text": "World"
+            }
+          ]
+        },
+        {
+          "additions": {
+            "all_matched_hotwords": "",
+            "fixed_prefix_result": "",
+            "source": "stream"
+          },
+          "definite": false,
+          "end_time": 2801,
+          "start_time": 1852,
+          "text": "This is.",
+          "words": [
+            {
+              "end_time": -1,
+              "start_time": -1,
+              "text": " "
+            },
+            {
+              "end_time": 2052,
+              "start_time": 1972,
+              "text": "This"
+            },
+            {
+              "end_time": -1,
+              "start_time": -1,
+              "text": " "
+            },
+            {
+              "end_time": 2432,
+              "start_time": 2352,
+              "text": "is"
+            }
+          ]
+        }
+      ],
+      "final": false
+    },
+    {
+      "seconds": 3.21,
+      "text": "Hello World. This is a.",
+      "stable": 1,
+      "utterances": [
+        {
+          "additions": {
+            "all_matched_hotwords": "",
+            "fixed_prefix_result": "",
+            "invoke_type": "hard_vad",
+            "source": "two_pass",
+            "use_bigasr_post_process": "true"
+          },
+          "definite": true,
+          "end_time": 1852,
+          "text": "Hello World.",
+          "words": [
+            {
+              "end_time": 400,
+              "start_time": 200,
+              "text": "Hello"
+            },
+            {
+              "end_time": -1,
+              "start_time": -1,
+              "text": " "
+            },
+            {
+              "end_time": 840,
+              "start_time": 640,
+              "text": "World"
+            }
+          ]
+        },
+        {
+          "additions": {
+            "all_matched_hotwords": "",
+            "fixed_prefix_result": "",
+            "source": "stream"
+          },
+          "definite": false,
+          "end_time": 3001,
+          "start_time": 1852,
+          "text": "This is a.",
+          "words": [
+            {
+              "end_time": -1,
+              "start_time": -1,
+              "text": " "
+            },
+            {
+              "end_time": 2052,
+              "start_time": 1972,
+              "text": "This"
+            },
+            {
+              "end_time": -1,
+              "start_time": -1,
+              "text": " "
+            },
+            {
+              "end_time": 2292,
+              "start_time": 2212,
+              "text": "is"
+            },
+            {
+              "end_time": -1,
+              "start_time": -1,
+              "text": " "
+            },
+            {
+              "end_time": 2672,
+              "start_time": 2592,
+              "text": "a"
+            }
+          ]
+        }
+      ],
+      "final": false
+    },
+    {
+      "seconds": 3.62,
+      "text": "Hello World. This is a speech.",
+      "stable": 1,
+      "utterances": [
+        {
+          "additions": {
+            "all_matched_hotwords": "",
+            "fixed_prefix_result": "",
+            "invoke_type": "hard_vad",
+            "source": "two_pass",
+            "use_bigasr_post_process": "true"
+          },
+          "definite": true,
+          "end_time": 1852,
+          "text": "Hello World.",
+          "words": [
+            {
+              "end_time": 400,
+              "start_time": 200,
+              "text": "Hello"
+            },
+            {
+              "end_time": -1,
+              "start_time": -1,
+              "text": " "
+            },
+            {
+              "end_time": 840,
+              "start_time": 640,
+              "text": "World"
+            }
+          ]
+        },
+        {
+          "additions": {
+            "all_matched_hotwords": "",
+            "fixed_prefix_result": "",
+            "source": "stream"
+          },
+          "definite": false,
+          "end_time": 3401,
+          "start_time": 1852,
+          "text": "This is a speech.",
+          "words": [
+            {
+              "end_time": -1,
+              "start_time": -1,
+              "text": " "
+            },
+            {
+              "end_time": 2052,
+              "start_time": 1972,
+              "text": "This"
+            },
+            {
+              "end_time": -1,
+              "start_time": -1,
+              "text": " "
+            },
+            {
+              "end_time": 2292,
+              "start_time": 2212,
+              "text": "is"
+            },
+            {
+              "end_time": -1,
+              "start_time": -1,
+              "text": " "
+            },
+            {
+              "end_time": 2532,
+              "start_time": 2452,
+              "text": "a"
+            },
+            {
+              "end_time": -1,
+              "start_time": -1,
+              "text": " "
+            },
+            {
+              "end_time": 3152,
+              "start_time": 3072,
+              "text": "speech"
+            }
+          ]
+        }
+      ],
+      "final": false
+    },
+    {
+      "seconds": 4.2,
+      "text": "Hello World. This is a speech alignment.",
+      "stable": 1,
+      "utterances": [
+        {
+          "additions": {
+            "all_matched_hotwords": "",
+            "fixed_prefix_result": "",
+            "invoke_type": "hard_vad",
+            "source": "two_pass",
+            "use_bigasr_post_process": "true"
+          },
+          "definite": true,
+          "end_time": 1852,
+          "text": "Hello World.",
+          "words": [
+            {
+              "end_time": 400,
+              "start_time": 200,
+              "text": "Hello"
+            },
+            {
+              "end_time": -1,
+              "start_time": -1,
+              "text": " "
+            },
+            {
+              "end_time": 840,
+              "start_time": 640,
+              "text": "World"
+            }
+          ]
+        },
+        {
+          "additions": {
+            "all_matched_hotwords": "",
+            "fixed_prefix_result": "",
+            "source": "stream"
+          },
+          "definite": false,
+          "end_time": 4001,
+          "start_time": 1852,
+          "text": "This is a speech alignment.",
+          "words": [
+            {
+              "end_time": -1,
+              "start_time": -1,
+              "text": " "
+            },
+            {
+              "end_time": 2052,
+              "start_time": 1972,
+              "text": "This"
+            },
+            {
+              "end_time": -1,
+              "start_time": -1,
+              "text": " "
+            },
+            {
+              "end_time": 2292,
+              "start_time": 2212,
+              "text": "is"
+            },
+            {
+              "end_time": -1,
+              "start_time": -1,
+              "text": " "
+            },
+            {
+              "end_time": 2532,
+              "start_time": 2452,
+              "text": "a"
+            },
+            {
+              "end_time": -1,
+              "start_time": -1,
+              "text": " "
+            },
+            {
+              "end_time": 3012,
+              "start_time": 2932,
+              "text": "speech"
+            },
+            {
+              "end_time": -1,
+              "start_time": -1,
+              "text": " "
+            },
+            {
+              "end_time": 3632,
+              "start_time": 3552,
+              "text": "alignment"
+            }
+          ]
+        }
+      ],
+      "final": false
+    },
+    {
+      "seconds": 4.6,
+      "text": "Hello World. This is a speech alignment test.",
+      "stable": 1,
+      "utterances": [
+        {
+          "additions": {
+            "all_matched_hotwords": "",
+            "fixed_prefix_result": "",
+            "invoke_type": "hard_vad",
+            "source": "two_pass",
+            "use_bigasr_post_process": "true"
+          },
+          "definite": true,
+          "end_time": 1852,
+          "text": "Hello World.",
+          "words": [
+            {
+              "end_time": 400,
+              "start_time": 200,
+              "text": "Hello"
+            },
+            {
+              "end_time": -1,
+              "start_time": -1,
+              "text": " "
+            },
+            {
+              "end_time": 840,
+              "start_time": 640,
+              "text": "World"
+            }
+          ]
+        },
+        {
+          "additions": {
+            "all_matched_hotwords": "",
+            "fixed_prefix_result": "",
+            "source": "stream"
+          },
+          "definite": false,
+          "end_time": 4402,
+          "start_time": 1852,
+          "text": "This is a speech alignment test.",
+          "words": [
+            {
+              "end_time": -1,
+              "start_time": -1,
+              "text": " "
+            },
+            {
+              "end_time": 2052,
+              "start_time": 1972,
+              "text": "This"
+            },
+            {
+              "end_time": -1,
+              "start_time": -1,
+              "text": " "
+            },
+            {
+              "end_time": 2292,
+              "start_time": 2212,
+              "text": "is"
+            },
+            {
+              "end_time": -1,
+              "start_time": -1,
+              "text": " "
+            },
+            {
+              "end_time": 2532,
+              "start_time": 2452,
+              "text": "a"
+            },
+            {
+              "end_time": -1,
+              "start_time": -1,
+              "text": " "
+            },
+            {
+              "end_time": 3012,
+              "start_time": 2932,
+              "text": "speech"
+            },
+            {
+              "end_time": -1,
+              "start_time": -1,
+              "text": " "
+            },
+            {
+              "end_time": 3492,
+              "start_time": 3412,
+              "text": "alignment"
+            },
+            {
+              "end_time": -1,
+              "start_time": -1,
+              "text": " "
+            },
+            {
+              "end_time": 4032,
+              "start_time": 3952,
+              "text": "test"
+            }
+          ]
+        }
+      ],
+      "final": false
+    },
+    {
+      "seconds": 5.39,
+      "text": "Hello World.  This is a speech alignment test.",
+      "stable": 2,
+      "utterances": [
+        {
+          "additions": {
+            "all_matched_hotwords": "",
+            "fixed_prefix_result": "",
+            "invoke_type": "hard_vad",
+            "source": "two_pass",
+            "use_bigasr_post_process": "true"
+          },
+          "definite": true,
+          "end_time": 1852,
+          "text": "Hello World.",
+          "words": [
+            {
+              "end_time": 400,
+              "start_time": 200,
+              "text": "Hello"
+            },
+            {
+              "end_time": -1,
+              "start_time": -1,
+              "text": " "
+            },
+            {
+              "end_time": 840,
+              "start_time": 640,
+              "text": "World"
+            }
+          ]
+        },
+        {
+          "additions": {
+            "all_matched_hotwords": "",
+            "fixed_prefix_result": "",
+            "invoke_type": "hard_vad",
+            "source": "two_pass",
+            "use_bigasr_post_process": "true"
+          },
+          "definite": true,
+          "end_time": 4932,
+          "start_time": 1852,
+          "text": " This is a speech alignment test.",
+          "words": [
+            {
+              "end_time": -1,
+              "start_time": -1,
+              "text": " "
+            },
+            {
+              "end_time": 2132,
+              "start_time": 1892,
+              "text": "This"
+            },
+            {
+              "end_time": -1,
+              "start_time": -1,
+              "text": " "
+            },
+            {
+              "end_time": 2292,
+              "start_time": 2132,
+              "text": "is"
+            },
+            {
+              "end_time": -1,
+              "start_time": -1,
+              "text": " "
+            },
+            {
+              "end_time": 2532,
+              "start_time": 2292,
+              "text": "a"
+            },
+            {
+              "end_time": -1,
+              "start_time": -1,
+              "text": " "
+            },
+            {
+              "end_time": 2772,
+              "start_time": 2652,
+              "text": "speech"
+            },
+            {
+              "end_time": -1,
+              "start_time": -1,
+              "text": " "
+            },
+            {
+              "end_time": 3492,
+              "start_time": 3212,
+              "text": "alignment"
+            },
+            {
+              "end_time": -1,
+              "start_time": -1,
+              "text": " "
+            },
+            {
+              "end_time": 3932,
+              "start_time": 3732,
+              "text": "test"
+            }
+          ]
+        }
+      ],
+      "final": false
+    },
+    {
+      "seconds": 6.04,
+      "text": "Hello World.  This is a speech alignment test. We are.",
+      "stable": 2,
+      "utterances": [
+        {
+          "additions": {
+            "all_matched_hotwords": "",
+            "fixed_prefix_result": "",
+            "invoke_type": "hard_vad",
+            "source": "two_pass",
+            "use_bigasr_post_process": "true"
+          },
+          "definite": true,
+          "end_time": 1852,
+          "text": "Hello World.",
+          "words": [
+            {
+              "end_time": 400,
+              "start_time": 200,
+              "text": "Hello"
+            },
+            {
+              "end_time": -1,
+              "start_time": -1,
+              "text": " "
+            },
+            {
+              "end_time": 840,
+              "start_time": 640,
+              "text": "World"
+            }
+          ]
+        },
+        {
+          "additions": {
+            "all_matched_hotwords": "",
+            "fixed_prefix_result": "",
+            "invoke_type": "hard_vad",
+            "source": "two_pass",
+            "use_bigasr_post_process": "true"
+          },
+          "definite": true,
+          "end_time": 4932,
+          "start_time": 1852,
+          "text": " This is a speech alignment test.",
+          "words": [
+            {
+              "end_time": -1,
+              "start_time": -1,
+              "text": " "
+            },
+            {
+              "end_time": 2132,
+              "start_time": 1892,
+              "text": "This"
+            },
+            {
+              "end_time": -1,
+              "start_time": -1,
+              "text": " "
+            },
+            {
+              "end_time": 2292,
+              "start_time": 2132,
+              "text": "is"
+            },
+            {
+              "end_time": -1,
+              "start_time": -1,
+              "text": " "
+            },
+            {
+              "end_time": 2532,
+              "start_time": 2292,
+              "text": "a"
+            },
+            {
+              "end_time": -1,
+              "start_time": -1,
+              "text": " "
+            },
+            {
+              "end_time": 2772,
+              "start_time": 2652,
+              "text": "speech"
+            },
+            {
+              "end_time": -1,
+              "start_time": -1,
+              "text": " "
+            },
+            {
+              "end_time": 3492,
+              "start_time": 3212,
+              "text": "alignment"
+            },
+            {
+              "end_time": -1,
+              "start_time": -1,
+              "text": " "
+            },
+            {
+              "end_time": 3932,
+              "start_time": 3732,
+              "text": "test"
+            }
+          ]
+        },
+        {
+          "additions": {
+            "all_matched_hotwords": "",
+            "fixed_prefix_result": "",
+            "source": "stream"
+          },
+          "definite": false,
+          "end_time": 5802,
+          "start_time": 4932,
+          "text": "We are.",
+          "words": [
+            {
+              "end_time": -1,
+              "start_time": -1,
+              "text": " "
+            },
+            {
+              "end_time": 5132,
+              "start_time": 5052,
+              "text": "We"
+            },
+            {
+              "end_time": -1,
+              "start_time": -1,
+              "text": " "
+            },
+            {
+              "end_time": 5672,
+              "start_time": 5592,
+              "text": "are"
+            }
+          ]
+        }
+      ],
+      "final": false
+    },
+    {
+      "seconds": 6.65,
+      "text": "Hello World.  This is a speech alignment test. We are testing.",
+      "stable": 2,
+      "utterances": [
+        {
+          "additions": {
+            "all_matched_hotwords": "",
+            "fixed_prefix_result": "",
+            "invoke_type": "hard_vad",
+            "source": "two_pass",
+            "use_bigasr_post_process": "true"
+          },
+          "definite": true,
+          "end_time": 1852,
+          "text": "Hello World.",
+          "words": [
+            {
+              "end_time": 400,
+              "start_time": 200,
+              "text": "Hello"
+            },
+            {
+              "end_time": -1,
+              "start_time": -1,
+              "text": " "
+            },
+            {
+              "end_time": 840,
+              "start_time": 640,
+              "text": "World"
+            }
+          ]
+        },
+        {
+          "additions": {
+            "all_matched_hotwords": "",
+            "fixed_prefix_result": "",
+            "invoke_type": "hard_vad",
+            "source": "two_pass",
+            "use_bigasr_post_process": "true"
+          },
+          "definite": true,
+          "end_time": 4932,
+          "start_time": 1852,
+          "text": " This is a speech alignment test.",
+          "words": [
+            {
+              "end_time": -1,
+              "start_time": -1,
+              "text": " "
+            },
+            {
+              "end_time": 2132,
+              "start_time": 1892,
+              "text": "This"
+            },
+            {
+              "end_time": -1,
+              "start_time": -1,
+              "text": " "
+            },
+            {
+              "end_time": 2292,
+              "start_time": 2132,
+              "text": "is"
+            },
+            {
+              "end_time": -1,
+              "start_time": -1,
+              "text": " "
+            },
+            {
+              "end_time": 2532,
+              "start_time": 2292,
+              "text": "a"
+            },
+            {
+              "end_time": -1,
+              "start_time": -1,
+              "text": " "
+            },
+            {
+              "end_time": 2772,
+              "start_time": 2652,
+              "text": "speech"
+            },
+            {
+              "end_time": -1,
+              "start_time": -1,
+              "text": " "
+            },
+            {
+              "end_time": 3492,
+              "start_time": 3212,
+              "text": "alignment"
+            },
+            {
+              "end_time": -1,
+              "start_time": -1,
+              "text": " "
+            },
+            {
+              "end_time": 3932,
+              "start_time": 3732,
+              "text": "test"
+            }
+          ]
+        },
+        {
+          "additions": {
+            "all_matched_hotwords": "",
+            "fixed_prefix_result": "",
+            "source": "stream"
+          },
+          "definite": false,
+          "end_time": 6402,
+          "start_time": 4932,
+          "text": "We are testing.",
+          "words": [
+            {
+              "end_time": -1,
+              "start_time": -1,
+              "text": " "
+            },
+            {
+              "end_time": 5132,
+              "start_time": 5052,
+              "text": "We"
+            },
+            {
+              "end_time": -1,
+              "start_time": -1,
+              "text": " "
+            },
+            {
+              "end_time": 5532,
+              "start_time": 5452,
+              "text": "are"
+            },
+            {
+              "end_time": -1,
+              "start_time": -1,
+              "text": " "
+            },
+            {
+              "end_time": 6072,
+              "start_time": 5992,
+              "text": "testing"
+            }
+          ]
+        }
+      ],
+      "final": false
+    },
+    {
+      "seconds": 7.05,
+      "text": "Hello World.  This is a speech alignment test. We are testing sub.",
+      "stable": 2,
+      "utterances": [
+        {
+          "additions": {
+            "all_matched_hotwords": "",
+            "fixed_prefix_result": "",
+            "invoke_type": "hard_vad",
+            "source": "two_pass",
+            "use_bigasr_post_process": "true"
+          },
+          "definite": true,
+          "end_time": 1852,
+          "text": "Hello World.",
+          "words": [
+            {
+              "end_time": 400,
+              "start_time": 200,
+              "text": "Hello"
+            },
+            {
+              "end_time": -1,
+              "start_time": -1,
+              "text": " "
+            },
+            {
+              "end_time": 840,
+              "start_time": 640,
+              "text": "World"
+            }
+          ]
+        },
+        {
+          "additions": {
+            "all_matched_hotwords": "",
+            "fixed_prefix_result": "",
+            "invoke_type": "hard_vad",
+            "source": "two_pass",
+            "use_bigasr_post_process": "true"
+          },
+          "definite": true,
+          "end_time": 4932,
+          "start_time": 1852,
+          "text": " This is a speech alignment test.",
+          "words": [
+            {
+              "end_time": -1,
+              "start_time": -1,
+              "text": " "
+            },
+            {
+              "end_time": 2132,
+              "start_time": 1892,
+              "text": "This"
+            },
+            {
+              "end_time": -1,
+              "start_time": -1,
+              "text": " "
+            },
+            {
+              "end_time": 2292,
+              "start_time": 2132,
+              "text": "is"
+            },
+            {
+              "end_time": -1,
+              "start_time": -1,
+              "text": " "
+            },
+            {
+              "end_time": 2532,
+              "start_time": 2292,
+              "text": "a"
+            },
+            {
+              "end_time": -1,
+              "start_time": -1,
+              "text": " "
+            },
+            {
+              "end_time": 2772,
+              "start_time": 2652,
+              "text": "speech"
+            },
+            {
+              "end_time": -1,
+              "start_time": -1,
+              "text": " "
+            },
+            {
+              "end_time": 3492,
+              "start_time": 3212,
+              "text": "alignment"
+            },
+            {
+              "end_time": -1,
+              "start_time": -1,
+              "text": " "
+            },
+            {
+              "end_time": 3932,
+              "start_time": 3732,
+              "text": "test"
+            }
+          ]
+        },
+        {
+          "additions": {
+            "all_matched_hotwords": "",
+            "fixed_prefix_result": "",
+            "source": "stream"
+          },
+          "definite": false,
+          "end_time": 6802,
+          "start_time": 4932,
+          "text": "We are testing sub.",
+          "words": [
+            {
+              "end_time": -1,
+              "start_time": -1,
+              "text": " "
+            },
+            {
+              "end_time": 5132,
+              "start_time": 5052,
+              "text": "We"
+            },
+            {
+              "end_time": -1,
+              "start_time": -1,
+              "text": " "
+            },
+            {
+              "end_time": 5532,
+              "start_time": 5452,
+              "text": "are"
+            },
+            {
+              "end_time": -1,
+              "start_time": -1,
+              "text": " "
+            },
+            {
+              "end_time": 5932,
+              "start_time": 5852,
+              "text": "testing"
+            },
+            {
+              "end_time": -1,
+              "start_time": -1,
+              "text": " "
+            },
+            {
+              "end_time": 6632,
+              "start_time": 6552,
+              "text": "sub"
+            }
+          ]
+        }
+      ],
+      "final": false
+    },
+    {
+      "seconds": 7.64,
+      "text": "Hello World.  This is a speech alignment test. We are testing sub titles.",
+      "stable": 2,
+      "utterances": [
+        {
+          "additions": {
+            "all_matched_hotwords": "",
+            "fixed_prefix_result": "",
+            "invoke_type": "hard_vad",
+            "source": "two_pass",
+            "use_bigasr_post_process": "true"
+          },
+          "definite": true,
+          "end_time": 1852,
+          "text": "Hello World.",
+          "words": [
+            {
+              "end_time": 400,
+              "start_time": 200,
+              "text": "Hello"
+            },
+            {
+              "end_time": -1,
+              "start_time": -1,
+              "text": " "
+            },
+            {
+              "end_time": 840,
+              "start_time": 640,
+              "text": "World"
+            }
+          ]
+        },
+        {
+          "additions": {
+            "all_matched_hotwords": "",
+            "fixed_prefix_result": "",
+            "invoke_type": "hard_vad",
+            "source": "two_pass",
+            "use_bigasr_post_process": "true"
+          },
+          "definite": true,
+          "end_time": 4932,
+          "start_time": 1852,
+          "text": " This is a speech alignment test.",
+          "words": [
+            {
+              "end_time": -1,
+              "start_time": -1,
+              "text": " "
+            },
+            {
+              "end_time": 2132,
+              "start_time": 1892,
+              "text": "This"
+            },
+            {
+              "end_time": -1,
+              "start_time": -1,
+              "text": " "
+            },
+            {
+              "end_time": 2292,
+              "start_time": 2132,
+              "text": "is"
+            },
+            {
+              "end_time": -1,
+              "start_time": -1,
+              "text": " "
+            },
+            {
+              "end_time": 2532,
+              "start_time": 2292,
+              "text": "a"
+            },
+            {
+              "end_time": -1,
+              "start_time": -1,
+              "text": " "
+            },
+            {
+              "end_time": 2772,
+              "start_time": 2652,
+              "text": "speech"
+            },
+            {
+              "end_time": -1,
+              "start_time": -1,
+              "text": " "
+            },
+            {
+              "end_time": 3492,
+              "start_time": 3212,
+              "text": "alignment"
+            },
+            {
+              "end_time": -1,
+              "start_time": -1,
+              "text": " "
+            },
+            {
+              "end_time": 3932,
+              "start_time": 3732,
+              "text": "test"
+            }
+          ]
+        },
+        {
+          "additions": {
+            "all_matched_hotwords": "",
+            "fixed_prefix_result": "",
+            "source": "stream"
+          },
+          "definite": false,
+          "end_time": 7402,
+          "start_time": 4932,
+          "text": "We are testing sub titles.",
+          "words": [
+            {
+              "end_time": -1,
+              "start_time": -1,
+              "text": " "
+            },
+            {
+              "end_time": 5132,
+              "start_time": 5052,
+              "text": "We"
+            },
+            {
+              "end_time": -1,
+              "start_time": -1,
+              "text": " "
+            },
+            {
+              "end_time": 5532,
+              "start_time": 5452,
+              "text": "are"
+            },
+            {
+              "end_time": -1,
+              "start_time": -1,
+              "text": " "
+            },
+            {
+              "end_time": 5932,
+              "start_time": 5852,
+              "text": "testing"
+            },
+            {
+              "end_time": -1,
+              "start_time": -1,
+              "text": " "
+            },
+            {
+              "end_time": 6492,
+              "start_time": 6412,
+              "text": "sub"
+            },
+            {
+              "end_time": -1,
+              "start_time": -1,
+              "text": " "
+            },
+            {
+              "end_time": 7032,
+              "start_time": 6952,
+              "text": "titles"
+            }
+          ]
+        }
+      ],
+      "final": false
+    },
+    {
+      "seconds": 8.49,
+      "text": "Hello World.  This is a speech alignment test.  We are testing subtitles.",
+      "stable": 3,
+      "utterances": [
+        {
+          "additions": {
+            "all_matched_hotwords": "",
+            "fixed_prefix_result": "",
+            "invoke_type": "hard_vad",
+            "source": "two_pass",
+            "use_bigasr_post_process": "true"
+          },
+          "definite": true,
+          "end_time": 1852,
+          "text": "Hello World.",
+          "words": [
+            {
+              "end_time": 400,
+              "start_time": 200,
+              "text": "Hello"
+            },
+            {
+              "end_time": -1,
+              "start_time": -1,
+              "text": " "
+            },
+            {
+              "end_time": 840,
+              "start_time": 640,
+              "text": "World"
+            }
+          ]
+        },
+        {
+          "additions": {
+            "all_matched_hotwords": "",
+            "fixed_prefix_result": "",
+            "invoke_type": "hard_vad",
+            "source": "two_pass",
+            "use_bigasr_post_process": "true"
+          },
+          "definite": true,
+          "end_time": 4932,
+          "start_time": 1852,
+          "text": " This is a speech alignment test.",
+          "words": [
+            {
+              "end_time": -1,
+              "start_time": -1,
+              "text": " "
+            },
+            {
+              "end_time": 2132,
+              "start_time": 1892,
+              "text": "This"
+            },
+            {
+              "end_time": -1,
+              "start_time": -1,
+              "text": " "
+            },
+            {
+              "end_time": 2292,
+              "start_time": 2132,
+              "text": "is"
+            },
+            {
+              "end_time": -1,
+              "start_time": -1,
+              "text": " "
+            },
+            {
+              "end_time": 2532,
+              "start_time": 2292,
+              "text": "a"
+            },
+            {
+              "end_time": -1,
+              "start_time": -1,
+              "text": " "
+            },
+            {
+              "end_time": 2772,
+              "start_time": 2652,
+              "text": "speech"
+            },
+            {
+              "end_time": -1,
+              "start_time": -1,
+              "text": " "
+            },
+            {
+              "end_time": 3492,
+              "start_time": 3212,
+              "text": "alignment"
+            },
+            {
+              "end_time": -1,
+              "start_time": -1,
+              "text": " "
+            },
+            {
+              "end_time": 3932,
+              "start_time": 3732,
+              "text": "test"
+            }
+          ]
+        },
+        {
+          "additions": {
+            "all_matched_hotwords": "",
+            "fixed_prefix_result": "",
+            "invoke_type": "hard_vad",
+            "source": "two_pass",
+            "use_bigasr_post_process": "true"
+          },
+          "definite": true,
+          "end_time": 7792,
+          "start_time": 4932,
+          "text": " We are testing subtitles.",
+          "words": [
+            {
+              "end_time": -1,
+              "start_time": -1,
+              "text": " "
+            },
+            {
+              "end_time": 5212,
+              "start_time": 4972,
+              "text": "We"
+            },
+            {
+              "end_time": -1,
+              "start_time": -1,
+              "text": " "
+            },
+            {
+              "end_time": 5372,
+              "start_time": 5212,
+              "text": "are"
+            },
+            {
+              "end_time": -1,
+              "start_time": -1,
+              "text": " "
+            },
+            {
+              "end_time": 5732,
+              "start_time": 5572,
+              "text": "testing"
+            },
+            {
+              "end_time": -1,
+              "start_time": -1,
+              "text": " "
+            },
+            {
+              "end_time": 6772,
+              "start_time": 6172,
+              "text": "subtitles"
+            }
+          ]
+        }
+      ],
+      "final": true
+    }
+  ]
+}

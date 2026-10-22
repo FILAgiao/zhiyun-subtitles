@@ -12,7 +12,7 @@ assert.equal(field('updateURL'),'https://raw.githubusercontent.com/FILAgiao/zhiy
 assert.equal(field('downloadURL'),'https://raw.githubusercontent.com/FILAgiao/zhiyun-subtitles/main/zhiyun-subtitles.user.js');
 assert.match(field('description'),/网课不硬扛，浙大上课爽！/);
 assert.ok(!/^\/\/ @require\s/m.test(metadata),'Release must include its modules without remote code dependencies');
-for(const file of ['warm-theme.js','appearance-theme.js','progressive-cache.bundle.js','cache-storage.js','study-ui.js','classroom-media.js','speech-alignment.js','player-interactions.js','math-render.bundle.js','card-render.bundle.js','capture-bridge-client.js','ai-learning.js','translation-request.js'])assert.ok(source.includes(fs.readFileSync(file,'utf8')),file+' needs rebuilding');
+for(const file of ['warm-theme.js','appearance-theme.js','progressive-cache.bundle.js','cache-storage.js','study-ui.js','classroom-media.js','speech-phonetics.bundle.js','speech-alignment.js','speech-stream.js','player-interactions.js','math-render.bundle.js','card-render.bundle.js','capture-bridge-client.js','ai-learning.js','translation-request.js'])assert.ok(source.includes(fs.readFileSync(file,'utf8')),file+' needs rebuilding');
 assert.equal(source.split('// BEGIN BUNDLED LEARNING MODULES').length,2);
 assert.equal(source.split('// END BUNDLED LEARNING MODULES').length,2);
 console.log('PASS: release name, version, update/download URLs, metadata and bundled modules agree.');

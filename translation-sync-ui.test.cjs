@@ -23,7 +23,7 @@ const {chromium}=require(process.env.PLAYWRIGHT_MODULE||'playwright');
     return {abort(){options.onabort?.();}};
    };
    window.playing=false;window.playCalls=0;window.rejectPlay=true;const video=document.querySelector('video');video.play=async()=>{playCalls++;if(rejectPlay)throw Error('blocked');playing=true;video.dispatchEvent(new Event('playing'));};Object.defineProperties(video,{paused:{get:()=>!playing},readyState:{get:()=>3},duration:{get:()=>3600},currentTime:{get:()=>window.videoTime??12,set(){ }},playbackRate:{get:()=>1,set(){}}});
-   const timeout=window.setTimeout;window.setTimeout=(fn,ms,...args)=>timeout(fn,ms===12000?20:ms===2000?10:ms,...args);
+   const timeout=window.setTimeout;window.setTimeout=(fn,ms,...args)=>timeout(fn,(ms===12000||ms===20000)?20:ms===2000?10:ms,...args);
    const track={stop(){}};video.captureStream=()=>({getAudioTracks:()=>[track],getTracks:()=>[track]});
    window.MediaStream=class{};window.MediaRecorder=class{constructor(){this.mimeType='audio/webm';this.state='inactive';}start(){this.state='recording';}stop(){this.state='inactive';this.ondataavailable({data:new Blob(['audio'])});this.onstop();}};
    window.AudioContext=class{async decodeAudioData(){return {duration:12};}async close(){}};
@@ -51,7 +51,7 @@ const {chromium}=require(process.env.PLAYWRIGHT_MODULE||'playwright');
   await ui.locator('#auto-sync').uncheck();assert.equal(await ui.locator('#sync-auto-indicator').isHidden(),true);await ui.locator('#auto-sync').check();
 
   await ui.locator('#settings-close').click();assert.equal(await ui.locator('#sync-auto-indicator').isVisible(),true);await ui.locator('#panel').screenshot({path:'.test-media/sync-timer-preview.png'});await ui.locator('#sync-toggle').click();await page.waitForTimeout(100);assert.match(await ui.locator('#align-status').textContent(),/无法自动播放/);assert.equal(await page.evaluate(()=>requests.filter(r=>r.url.endsWith('submit')).length),0);await page.evaluate(()=>rejectPlay=false);await ui.locator('#sync-toggle').click();await page.waitForFunction(()=>!!window.releaseQuery);assert.equal(await page.evaluate(()=>playing),true);assert.equal(await page.evaluate(()=>playCalls),2);
-  if(await ui.locator('#offset').isHidden())await ui.locator('#sync-manual-toggle').click();
+  if(await ui.locator('#offset').isHidden()){if(await ui.locator('#sync-manual-toggle').getAttribute('aria-expanded')==='true')await ui.locator('#sync-manual-toggle').click();await ui.locator('#sync-manual-toggle').click();}
   await ui.locator('#offset').fill('5');
   await page.evaluate(()=>releaseQuery());await page.waitForTimeout(100);
   assert.equal(await ui.locator('#offset').inputValue(),'5');assert.equal(await ui.locator('#auto-sync').isChecked(),false);assert.equal(await ui.locator('#sync-auto-indicator').isHidden(),true);

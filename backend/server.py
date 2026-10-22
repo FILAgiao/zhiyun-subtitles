@@ -19,11 +19,13 @@ try:
     from .prompt_api import PromptMixin, migrate_prompts
     from .study_api import StudyMixin, migrate_study
     from .operations_api import OperationsMixin, migrate_operations
+    from .speech_stream import SpeechStreams
 except ImportError:
     from admin_api import AdminMixin, Fault, migrate
     from prompt_api import PromptMixin, migrate_prompts
     from study_api import StudyMixin, migrate_study
     from operations_api import OperationsMixin, migrate_operations
+    from speech_stream import SpeechStreams
 
 def month(): return time.strftime('%Y-%m',time.gmtime())
 def digest(value): return hashlib.sha256(value.encode()).hexdigest()
@@ -79,10 +81,12 @@ class Gateway(AdminMixin, PromptMixin, StudyMixin, OperationsMixin):
             migrate_prompts(db)
             migrate_study(db)
             migrate_operations(db)
+        self.speech_streams=SpeechStreams(self)
     def capabilities(self):
         return {'web_search':os.environ.get('ALLOW_WEB_SEARCH')=='1',
                 'api_versions':[1],'learning_jobs':True,'speech_requires_login':True,
                 'prompt_catalog':True,'membership':True,'guest_speech':False,'graceful_shutdown':True,
+                'speech_stream':self.speech_streams.available(),'speech_stream_pcm':True,
                 'study_sync':True,'email_registration':True,'mail_configured':self.study_capabilities()['mail_configured'],
                 'compatibility':{'baseline':'0.20.48','version_header_required':False}}
     def client_metadata(self,headers):
@@ -98,8 +102,9 @@ class Gateway(AdminMixin, PromptMixin, StudyMixin, OperationsMixin):
         while True:
             with self.learning_lock:
                 pending=any(not j.get('worker_done') or j['state'] in ('pending','generating') or (not j.get('delivered') and time.monotonic()-j['created']<300) for j in self.learning_jobs.values())
+            speech_pending=self.speech_streams.active()
             with self.lifecycle:
-                if not pending and self.active_requests==0:return True
+                if not pending and not speech_pending and self.active_requests==0:return True
                 remaining=deadline-time.monotonic()
                 if remaining<=0:return False
                 self.lifecycle.wait(min(.1,remaining))
@@ -167,7 +172,7 @@ class Gateway(AdminMixin, PromptMixin, StudyMixin, OperationsMixin):
             db.execute('UPDATE calls SET state=?,input_tokens=?,output_tokens=?,total_tokens=?,web_search=?,finished=? WHERE id=?',(state,number(usage.get('input_tokens')),number(usage.get('output_tokens')),number(usage.get('total_tokens')),number((usage.get('tool_usage') or {}).get('web_search')),int(time.time()),call))
     def handle(self,method,path,headers,body,ip,stream_sink=None):
         # Gate only new paid work; login, account reads and task polling stay available.
-        paid=method=='POST' and path in ('/v1/ark/responses','/v1/learning/jobs/create','/v1/speech/submit')
+        paid=method=='POST' and path in ('/v1/ark/responses','/v1/learning/jobs/create','/v1/speech/submit','/v1/speech/stream/create')
         with self.lifecycle:
             if paid and self.draining:raise Fault(503,'服务正在更新，请稍后重试；本次请求未扣额度。','server_updating',5)
             self.active_requests+=1
@@ -196,11 +201,17 @@ class Gateway(AdminMixin, PromptMixin, StudyMixin, OperationsMixin):
             self.open_activity(digest(token),row['id'],app,headers.get('X-Client-Type','api'),int(time.time())+604800,*self.client_metadata(headers))
             return 200,{}, {'token':token,'expires_in':604800,'server_time':int(time.time()),'permissions':self.permissions(row['id'],app),'membership':self.membership(row['id'],app),'capabilities':self.capabilities()}
         token=headers.get('Authorization','').removeprefix('Bearer ')
-        if not token and method=='POST' and path in ('/v1/speech/submit','/v1/speech/query'):
+        if not token and method=='POST' and (path in ('/v1/speech/submit','/v1/speech/query') or path.startswith('/v1/speech/stream/')):
             raise Fault(401,'语音识别现需登录并开通有效体验或套餐；请在设置的“我的账号”中登录。','authentication_required')
         user=self.auth(token,app,headers)
         if method=='POST' and path in ('/v1/learning/jobs/poll','/v1/learning/jobs/cancel'):
             return self.learning_job(user['id'],app,path,body)
+        if method=='POST' and path.startswith('/v1/speech/stream/'):
+            action=path.rsplit('/',1)[1]
+            # Expiry blocks new paid audio, never cleanup of an owned session.
+            if action in ('create','push'):
+                with self.db() as db: self.check_grant(db,user['id'],app,'speech')
+            return self.speech_streams.handle(user['id'],app,action,body,headers)
         self.throttle('user:'+str(user['id']),90)
         if method=='POST' and path=='/v1/auth/logout':
             with self.db() as db: db.execute('DELETE FROM sessions WHERE hash=?',(digest(token),))

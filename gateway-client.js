@@ -2,7 +2,7 @@
 (function(root,factory){const api=factory();if(typeof module==='object'&&module.exports)module.exports=api;else root.ZYGateway=api;})(globalThis,function(){
 'use strict';
 const DEFAULT_ORIGIN='';
-const CLIENT_VERSION='0.20.72';
+const CLIENT_VERSION='0.20.76';
 function clientHeaders(){return {'X-Client-Version':CLIENT_VERSION,'X-Client-Channel':'userscript'};}
 const KEY='gateway-account-v1',APP='zhiyun-subtitles',CLIENT=globalThis.ZY_CLIENT_TYPE||'userscript';
 function baseURL(value){const u=new URL(String(value).trim());if(u.username||u.password||u.search||u.hash||!['/','/gateway','/gateway/'].includes(u.pathname)||(u.protocol!=='https:'&&!(u.protocol==='http:'&&['localhost','127.0.0.1'].includes(u.hostname))))throw Error('请填写 HTTPS 服务地址；本机调试可使用 http://127.0.0.1:8080');return u.origin+(u.pathname==='/'?'':'/gateway');}
@@ -75,6 +75,40 @@ function create({request,getValue,setValue}){
   if(path==='/v1/ark/responses'&&options.responseType==='stream')return incremental(options,a,headers);
   return request({...options,url:baseURL(a.url)+path,headers,anonymous:true,onload:r=>{if(r.status===401&&a.token&&a.token===credential()){setValue(KEY,{url:a.url,token:''});refreshUI?.();changeListener?.();}if(path==='/v1/ark/responses'||path==='/v1/speech/submit')queueUsageRefresh();options.onload?.(r);}});
  }
+ function streamSupported(){return configured()&&!!credential()&&accessToken===credential()&&accessProfile?.capabilities?.speech_stream===true&&canUse('speech');}
+ function bindSpeechStreamTransport(){
+  const bound=account(),origin=bound.url?baseURL(bound.url):'',token=bound.token||'';
+  const sameAccount=()=>!!origin&&!!token&&credential()===token&&configured()&&baseURL(account().url)===origin;
+  const streamError=(code,message,extra={})=>Object.assign(new Error(message),{code,...extra});
+  const initiallySupported=streamSupported();
+  return (action,payload={},settings={})=>new Promise((resolve,reject)=>{
+   if(!['create','push','poll','finish','cancel'].includes(action)){reject(streamError('invalid_stream_action','不支持的语音请求'));return;}
+   const cleanup=action==='cancel';
+   if(!origin||!token){reject(streamError('speech_stream_unsupported','请先登录可用的语音服务',{status:401}));return;}
+   if(!cleanup&&!sameAccount()){reject(streamError('account_changed','学习账号已切换，请重新同步'));return;}
+   if(!cleanup&&(!initiallySupported||!streamSupported())){reject(streamError('speech_stream_unsupported','当前服务未启用流式识别'));return;}
+   const signal=settings.signal,timeout=action==='create'?12000:action==='cancel'?3000:8000;
+   if(signal?.aborted){reject(streamError('cancelled','语音请求已取消'));return;}
+   let settled=false,handle,timer;
+   const finish=(error,value)=>{if(settled)return;settled=true;clearTimeout(timer);signal?.removeEventListener('abort',abort);error?reject(error):resolve(value);};
+   const abort=()=>{if(settled)return;finish(streamError('cancelled','语音请求已取消'));try{handle?.abort?.();}catch(_){}};
+   const timedOut=()=>{if(settled)return;finish(streamError('stream_timeout','流式语音连接超时'));try{handle?.abort?.();}catch(_){}};
+   signal?.addEventListener('abort',abort,{once:true});timer=setTimeout(timedOut,timeout);
+   const headers={Authorization:'Bearer '+token,'Content-Type':'application/json','X-App-Id':APP,'X-Client-Type':CLIENT,...clientHeaders()};
+   if(action==='create'&&typeof payload.request_id==='string')headers['X-Api-Request-Id']=payload.request_id;
+   try{handle=request({method:'POST',url:origin+'/v1/speech/stream/'+action,headers,anonymous:true,timeout,data:JSON.stringify(payload),
+    onload:response=>{if(settled)return;
+     if(!cleanup&&!sameAccount()){finish(streamError('account_changed','学习账号已切换，请重新同步'));return;}
+     let data;try{data=JSON.parse(response.responseText);}catch(_){finish(streamError('invalid_stream_response','流式语音服务响应格式异常',{status:response.status}));return;}
+     if(response.status<200||response.status>=300){
+      if(response.status===401&&sameAccount()){setValue(KEY,{url:bound.url,token:''});accessProfile=null;accessToken='';refreshUI?.();changeListener?.();}
+      finish(streamError(data.error_code||'stream_http_error',typeof data.error==='string'?data.error:'语音服务请求失败（HTTP '+response.status+'）',{status:response.status}));return;
+     }
+     if(action==='finish'||action==='cancel')queueUsageRefresh();finish(null,data);
+    },onerror:()=>finish(streamError('stream_network_error','无法连接流式语音服务，请检查网络')),ontimeout:timedOut,onabort:()=>finish(streamError('cancelled','语音请求已取消'))});
+   }catch(error){finish(error);}
+  });
+ }
  function call(path,body,token=account().token,url=account().url){return new Promise((resolve,reject)=>{
   const loginRequest=path==='/v1/auth/login',timeout=loginRequest?30000:15000;
   const timeoutMessage=loginRequest?'登录连接超时（30 秒），请稍后重新点击登录。':path==='/v1/me'?'额度读取超时，请点击「查看额度」重试。':'服务请求超时，请稍后重试。';
@@ -83,7 +117,7 @@ function create({request,getValue,setValue}){
   const timedOut=()=>{if(settled)return;finish(Error(timeoutMessage));try{handle?.abort?.();}catch(_){}};
   const target=baseURL(url)+path;
   timer=setTimeout(timedOut,timeout);
-  try{handle=request({method:body===undefined?'GET':'POST',url:target,anonymous:true,timeout,headers:{'Content-Type':'application/json','X-App-Id':APP,'X-Client-Type':CLIENT,...clientHeaders(),...(token?{Authorization:'Bearer '+token}:{})},...(body===undefined?{}:{data:JSON.stringify(body)}),onload:r=>{if(settled)return;try{const data=JSON.parse(r.responseText);if(r.status<200||r.status>=300){if(r.status===401&&token&&token===credential()){setValue(KEY,{url:account().url,token:''});refreshUI?.();changeListener?.();}const error=Error(data.error||'服务请求失败');error.status=r.status;error.code=data.error_code||'';throw error;}if(data.capabilities)setValue('gateway-capabilities-v1',data.capabilities);finish(null,data);}catch(e){finish(e);}},onerror:()=>finish(Error('无法连接服务，请检查网络后重试；若启用了代理，请检查该服务地址的代理规则。')),ontimeout:timedOut,onabort:()=>finish(Error(loginRequest?'登录连接已中断，请重新点击登录。':'服务连接已中断，请重试。'))});}catch(e){finish(e);}
+  try{handle=request({method:body===undefined?'GET':'POST',url:target,anonymous:true,timeout,headers:{'Content-Type':'application/json','X-App-Id':APP,'X-Client-Type':CLIENT,...clientHeaders(),...(token?{Authorization:'Bearer '+token}:{})},...(body===undefined?{}:{data:JSON.stringify(body)}),onload:r=>{if(settled)return;try{const data=JSON.parse(r.responseText);if(r.status<200||r.status>=300){if(r.status===401&&token&&token===credential()){setValue(KEY,{url:account().url,token:''});refreshUI?.();changeListener?.();}const error=Error(data.error||'服务请求失败');error.status=r.status;error.code=data.error_code||'';throw error;}if(data.capabilities)setValue('gateway-capabilities-v1',data.capabilities);if(path==='/v1/me'&&token&&token===credential()&&baseURL(url)===baseURL(account().url))rememberAccess(data,token);finish(null,data);}catch(e){finish(e);}},onerror:()=>finish(Error('无法连接服务，请检查网络后重试；若启用了代理，请检查该服务地址的代理规则。')),ontimeout:timedOut,onabort:()=>finish(Error(loginRequest?'登录连接已中断，请重新点击登录。':'服务连接已中断，请重试。'))});}catch(e){finish(e);}
  });}
  async function login(url,email,password){url=baseURL(DEFAULT_ORIGIN||url);const data=await call('/v1/auth/login',{email,password},null,url);if(typeof data.token!=='string'||!data.token)throw Error('登录响应异常');setValue(KEY,{url,token:data.token});if(data.permissions||data.membership)rememberAccess(data,data.token);return data;}
  async function logout(){try{if(credential())await call('/v1/auth/logout',{});}finally{setValue(KEY,{url:account().url||'',token:''});accessProfile=null;accessToken='';}}
@@ -229,7 +263,7 @@ function create({request,getValue,setValue}){
 
  }
 
- return{study:{account:credential,save:body=>call('/v1/study/conversations',body)},prompts:{account:credential,list:()=>call('/v1/prompts'),save:body=>call('/v1/prompts/save',body),remove:body=>call('/v1/prompts/delete',body)},transport,configured,credential,login,logout,call,mount,destroy:()=>cleanupMounted(),canUse,requireFeature,statusSummary,openAccount:(message='')=>showAccount(message),features:()=>({webSearch:!configured()||getValue('gateway-capabilities-v1',{}).web_search===true})};
+ return{speechStream:{supported:streamSupported,bindTransport:bindSpeechStreamTransport},study:{account:credential,save:body=>call('/v1/study/conversations',body)},prompts:{account:credential,list:()=>call('/v1/prompts'),save:body=>call('/v1/prompts/save',body),remove:body=>call('/v1/prompts/delete',body)},transport,configured,credential,login,logout,call,mount,destroy:()=>cleanupMounted(),canUse,requireFeature,statusSummary,openAccount:(message='')=>showAccount(message),features:()=>({webSearch:!configured()||getValue('gateway-capabilities-v1',{}).web_search===true})};
 }
 return{create,baseURL,accessSummary};
 });
