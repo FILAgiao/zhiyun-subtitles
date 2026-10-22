@@ -16,8 +16,10 @@ from urllib.parse import parse_qs, urlsplit, urlunsplit
 
 try:
     from .admin_api import Fault
+    from .clips_api import ClipsMixin, migrate_clips
 except ImportError:
     from admin_api import Fault
+    from clips_api import ClipsMixin, migrate_clips
 
 STUDY_APP = 'zhiyun-subtitles'
 CODE_TTL = 600
@@ -29,6 +31,7 @@ PAGE_SIZE = 50
 
 
 def migrate_study(db):
+    migrate_clips(db)
     db.executescript("""
 CREATE TABLE IF NOT EXISTS registration_codes(
     app TEXT NOT NULL,email TEXT NOT NULL,salt TEXT NOT NULL,code_hash TEXT NOT NULL,
@@ -156,7 +159,7 @@ def _serialize(row, detail=False):
     return result
 
 
-class StudyMixin:
+class StudyMixin(ClipsMixin):
     def study_capabilities(self):
         ready = bool(getattr(self, 'study_mailer', None))
         if not ready:
@@ -251,6 +254,9 @@ class StudyMixin:
         return 200, {}, {'ok': True, 'next': 'login', 'message': '邮箱验证完成，请使用邮箱和密码登录。'}
 
     def study_private(self, method, path, headers, body, user, app):
+        clips = self.clips_private(method, path, body, user, app)
+        if clips is not None:
+            return clips
         parsed = urlsplit(path)
         if parsed.path != '/v1/study/conversations':
             return None

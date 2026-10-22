@@ -643,7 +643,7 @@
       });}finally{layer.remove();}
     }
     async function startCapture(event,wholePage=false,direct=false,retry=null){
-      if(!ensureAccess())return;if(controller)stop();cleanupCapture?.();
+      if(!studyStore?.account()&&!ensureAccess())return;if(controller)stop();cleanupCapture?.();
       const initial=event?.button===1?{x:event.clientX,y:event.clientY}:null,gestureViewport=captureViewport();
       // composedPath is cleared when dispatch ends. Save the actual painted target
       // before waiting for mouseup; a video may cover the PPT's rectangle.
@@ -686,19 +686,24 @@
       const serial=requestSerial,viewport=sourceViewport||captureViewport();
       if(gesture){const from=gesture.viewport||viewport,convert=p=>({x:Math.max(0,Math.min(viewport.w,p.x*viewport.w/from.w)),y:Math.max(0,Math.min(viewport.h,p.y*viewport.h/from.h))});gesture={...gesture,start:convert(gesture.start),end:convert(gesture.end)};}
       const layer=make('section',{id:'ai-crop',role:'dialog','aria-label':'截图与批注'});
-      layer.innerHTML='<div id="ai-crop-stage"><img id="ai-crop-image" alt="当前标签页本地截图"><div id="ai-crop-selection"></div></div><div class="ai-crop-head"><strong>拖框选择 · Esc 取消</strong><div id="ai-crop-tools" hidden><button id="ai-crop-pen" aria-pressed="true">画笔</button><button id="ai-crop-circle" aria-pressed="false">圈选</button><button id="ai-crop-undo" disabled>撤销</button><button id="ai-crop-reset">清除批注</button></div><div class="ai-crop-actions"><select id="ai-crop-conversation" aria-label="截图添加到哪个对话"></select><button id="ai-crop-use" disabled>添加到对话</button><button id="ai-crop-send" disabled>提问</button><button id="ai-crop-cancel">取消</button></div></div>';
+      layer.innerHTML='<div id="ai-crop-stage"><img id="ai-crop-image" alt="当前标签页本地截图"><div id="ai-crop-selection"></div></div><div class="ai-crop-head"><strong>拖框选择 · Esc 取消</strong><button id="ai-crop-cancel" type="button" aria-label="关闭截图" style="position:absolute;right:8px;top:6px">×</button><div class="ai-crop-actions"><select id="ai-crop-conversation" aria-label="截图添加到哪个对话" hidden></select><button id="ai-crop-draw" disabled aria-expanded="false" aria-controls="ai-crop-tools">圈画</button><button id="ai-crop-use" disabled>继续上次对话</button><button id="ai-crop-send" disabled>圈画新对话</button><button id="ai-crop-save" disabled title="保存截图和批注到自己的账号，不调用 AI">收藏</button></div><div id="ai-crop-tools" hidden><button id="ai-crop-pen" aria-pressed="true">画笔</button><button id="ai-crop-circle" aria-pressed="false">圈选</button><button id="ai-crop-undo" disabled>撤销</button><button id="ai-crop-reset">清除批注</button></div><details id="ai-clip-details" hidden><summary>添加标题 / 笔记</summary><input id="ai-clip-title" maxlength="200" aria-label="收藏标题" placeholder="收藏标题"><textarea id="ai-clip-note" maxlength="4000" aria-label="收藏笔记" placeholder="记下这一张的重点（可选）"></textarea></details><p id="ai-clip-status" role="status" aria-live="polite"></p></div>';
       shadow.append(layer);const img=layer.querySelector('img'),stage=layer.querySelector('#ai-crop-stage'),selection=layer.querySelector('#ai-crop-selection'),use=layer.querySelector('#ai-crop-use'),submit=layer.querySelector('#ai-crop-send');
       const destination=layer.querySelector('#ai-crop-conversation');
       destination.append(make('option',{value:'new',text:'新对话'}));
       if(history.length||pendingImage||$('ai-question').value)destination.append(make('option',{value:'current',text:'继续上次对话'}));
       else {const last=records().find(r=>r.origin===String(getCourseId()));if(last)destination.append(make('option',{value:last.id,text:'继续上次对话：'+last.title.slice(0,22)}));}
       destination.value=!panel.hidden&&destination.querySelector('[value="current"]')?'current':'new';
-      let start=gesture?.start||null,rect=null,canvas=null,base=null,tool='pen',active=null,strokes=[];
+      let start=gesture?.start||null,rect=null,canvas=null,base=null,tool='pen',active=null,strokes=[],clipBusy=false,clipId='',clipSnapshot=null;
+      const captureCourse=String(getCourseId()),captureUrl=win.location.href;
+      const draw=layer.querySelector('#ai-crop-draw'),favorite=layer.querySelector('#ai-crop-save'),clipStatus=layer.querySelector('#ai-clip-status');
+      layer.querySelector('#ai-clip-title').value=String(getCourseTitle()||doc.title||'截图收藏').slice(0,200);
+      const clipStyle=make('style');clipStyle.textContent='#ai-crop .ai-crop-head{max-height:calc(100vh - 16px);overflow:auto;padding-top:32px}#ai-crop .ai-crop-actions{display:flex;flex-wrap:wrap;gap:6px}#ai-crop .ai-crop-actions button{flex:1;white-space:nowrap;padding:8px}#ai-crop #ai-crop-save{background:#b94e29;color:#fff}#ai-crop #ai-crop-tools[hidden],#ai-crop #ai-crop-conversation{display:none!important}#ai-crop #ai-crop-tools{margin-top:10px}#ai-clip-details{font-size:12px;margin-top:8px}#ai-clip-details input,#ai-clip-details textarea{display:block;box-sizing:border-box;width:100%;margin-top:6px;padding:8px;font:inherit}#ai-clip-note{max-height:90px}#ai-clip-status{font-size:12px;margin:8px 0 0}';layer.append(clipStyle);
+      draw.onclick=()=>{const tools=layer.querySelector('#ai-crop-tools');tools.hidden=!tools.hidden;draw.setAttribute('aria-expanded',String(!tools.hidden));layoutPreview();};
       const cancel=()=>{img.onload=null;win.removeEventListener('resize',layoutPreview);doc.removeEventListener('fullscreenchange',layoutPreview);layer.remove();doc.removeEventListener('keydown',onKey,true);if(cleanupCapture===cancel)cleanupCapture=null;};cleanupCapture=cancel;
       const onKey=e=>{if(e.key==='Escape'){e.preventDefault();e.stopImmediatePropagation();cancel();}};doc.addEventListener('keydown',onKey,true);
       const point=e=>({x:Math.max(0,Math.min(viewport.w,e.clientX*viewport.w/win.innerWidth)),y:Math.max(0,Math.min(viewport.h,e.clientY*viewport.h/win.innerHeight))});
       const update=p=>{if(!start)return;rect={x:Math.min(start.x,p.x),y:Math.min(start.y,p.y),w:Math.abs(start.x-p.x),h:Math.abs(start.y-p.y)};Object.assign(selection.style,{display:'block',left:rect.x*win.innerWidth/viewport.w+'px',top:rect.y*win.innerHeight/viewport.h+'px',width:rect.w*win.innerWidth/viewport.w+'px',height:rect.h*win.innerHeight/viewport.h+'px'});};
-      const redraw=()=>{const ctx=canvas.getContext('2d');ctx.drawImage(base,0,0);ctx.strokeStyle='#e53935';ctx.lineWidth=Math.max(3,canvas.width/220);ctx.lineCap=ctx.lineJoin='round';for(const stroke of [...strokes,...(active?[active]:[])]){ctx.beginPath();const a=stroke.points[0],b=stroke.points.at(-1);if(stroke.tool==='circle')ctx.ellipse((a.x+b.x)/2,(a.y+b.y)/2,Math.max(1,Math.abs(a.x-b.x)/2),Math.max(1,Math.abs(a.y-b.y)/2),0,0,Math.PI*2);else{ctx.moveTo(a.x,a.y);for(const p of stroke.points)ctx.lineTo(p.x,p.y);if(stroke.points.length===1)ctx.lineTo(a.x+.1,a.y+.1);}ctx.stroke();}layer.querySelector('#ai-crop-undo').disabled=!strokes.length;};
+      const redraw=()=>{if(!clipBusy)clipSnapshot=null;const ctx=canvas.getContext('2d');ctx.drawImage(base,0,0);ctx.strokeStyle='#e53935';ctx.lineWidth=Math.max(3,canvas.width/220);ctx.lineCap=ctx.lineJoin='round';for(const stroke of [...strokes,...(active?[active]:[])]){ctx.beginPath();const a=stroke.points[0],b=stroke.points.at(-1);if(stroke.tool==='circle')ctx.ellipse((a.x+b.x)/2,(a.y+b.y)/2,Math.max(1,Math.abs(a.x-b.x)/2),Math.max(1,Math.abs(a.y-b.y)/2),0,0,Math.PI*2);else{ctx.moveTo(a.x,a.y);for(const p of stroke.points)ctx.lineTo(p.x,p.y);if(stroke.points.length===1)ctx.lineTo(a.x+.1,a.y+.1);}ctx.stroke();}layer.querySelector('#ai-crop-undo').disabled=!strokes.length;};
       function layoutPreview(){
         if(!canvas||!rect)return;
         const width=win.innerWidth,height=win.innerHeight;
@@ -721,12 +726,12 @@
         // glass card must not cover it when sharing ends or fullscreen changes.
         img.style.setProperty('display','none','important');stage.style.pointerEvents='none';
         for(const [key,value] of Object.entries({background:centered?'#071519b3':'transparent',border:'0',borderRadius:'0',boxShadow:'none',backdropFilter:'none',pointerEvents:'none'}))layer.style.setProperty(key.replace(/[A-Z]/g,c=>'-'+c.toLowerCase()),value,'important');
-        layer.querySelector('strong').textContent='截图预览 · 可圈画批注';layer.querySelector('#ai-crop-tools').hidden=false;use.disabled=submit.disabled=false;
+        layer.querySelector('strong').textContent='随意摘 · 截图预览';layer.querySelector('#ai-crop-tools').hidden=true;draw.disabled=favorite.disabled=submit.disabled=false;use.disabled=!destination.querySelector('option[value="current"]')&&destination.options.length<2;layer.querySelector('#ai-clip-details').hidden=false;
         layoutPreview();redraw();
         const canvasPoint=e=>{const r=canvas.getBoundingClientRect();return{x:(e.clientX-r.left)*canvas.width/r.width,y:(e.clientY-r.top)*canvas.height/r.height};};
-        canvas.onpointerdown=e=>{if(e.button!==0)return;e.preventDefault();active={tool,points:[canvasPoint(e)]};canvas.setPointerCapture(e.pointerId);redraw();};
+        canvas.onpointerdown=e=>{if(e.button!==0||clipBusy||layer.querySelector('#ai-crop-tools').hidden)return;e.preventDefault();active={tool,points:[canvasPoint(e)]};canvas.setPointerCapture(e.pointerId);redraw();};
         canvas.onpointermove=e=>{if(active){active.points.push(canvasPoint(e));redraw();}};
-        canvas.onpointerup=e=>{if(!active)return;active.points.push(canvasPoint(e));strokes.push(active);active=null;redraw();};
+        canvas.onpointerup=e=>{if(!active)return;active.points.push(canvasPoint(e));strokes.push(active);active=null;favorite.disabled=false;favorite.textContent='收藏';redraw();};
         canvas.onpointercancel=()=>{active=null;redraw();};
       };
       img.onload=()=>{
@@ -738,9 +743,41 @@
       stage.onpointerup=e=>{if(canvas||e.button!==0&&e.button!==1)return;if(start)update(point(e));start=null;ready();};stage.onpointercancel=()=>{start=null;};
       if(gesture){update(gesture.end);if(!gesture.held){start=null;ready();}}
       for(const name of ['pen','circle'])layer.querySelector('#ai-crop-'+name).onclick=()=>{tool=name;for(const n of ['pen','circle'])layer.querySelector('#ai-crop-'+n).setAttribute('aria-pressed',String(n===tool));};
-      layer.querySelector('#ai-crop-undo').onclick=()=>{strokes.pop();redraw();};layer.querySelector('#ai-crop-reset').onclick=()=>{strokes=[];redraw();};
-      const choose=immediate=>{if(serial!==requestSerial){cancel();return;}try{if(!canvas)return;const data=canvas.toDataURL('image/jpeg',.85);if(!validImage(data))throw Error('选区过大，请选择更小区域。');const target=destination.value;cancel();if(target==='new')clear();else if(target!=='current')loadConversation(target);conversationSource='截图提问';attach(data);open();if(immediate)send($('ai-question').value.trim()||'请解释截图中的内容。');else status(target==='new'?'截图已添加到新对话，可补充问题后发送。':'截图已添加到上次对话，可补充问题后发送。');}catch(e){status(e.message||'选区读取失败，请重试。');cancel();}};
-      layer.querySelector('#ai-crop-cancel').onclick=cancel;use.onclick=()=>choose(false);submit.onclick=()=>choose(true);
+      layer.querySelector('#ai-crop-undo').onclick=()=>{strokes.pop();favorite.disabled=false;favorite.textContent='收藏';redraw();};layer.querySelector('#ai-crop-reset').onclick=()=>{strokes=[];favorite.disabled=false;favorite.textContent='收藏';redraw();};
+      const choose=immediate=>{if(clipBusy)return;if(!ensureAccess())return;if(serial!==requestSerial){cancel();return;}try{if(!canvas)return;const data=canvas.toDataURL('image/jpeg',.85);if(!validImage(data))throw Error('选区过大，请选择更小区域。');const target=destination.value;cancel();if(target==='new')clear();else if(target!=='current')loadConversation(target);conversationSource='截图提问';attach(data);open();if(immediate)send($('ai-question').value.trim()||'请解释截图中的内容。');else status(target==='new'?'截图已添加到新对话，可补充问题后发送。':'截图已添加到上次对话，可补充问题后发送。');}catch(e){status(e.message||'选区读取失败，请重试。');cancel();}};
+      layer.querySelector('#ai-crop-cancel').onclick=cancel;
+      use.onclick=()=>{destination.value=destination.querySelector('option[value="current"]')?'current':destination.options[1]?.value;choose(false);};
+      submit.onclick=()=>{destination.value='new';choose(false);};
+      // Collect only on an explicit click. Retries reuse the same ID and frozen payload.
+
+      for(const id of ['ai-clip-title','ai-clip-note'])layer.querySelector('#'+id).addEventListener('input',()=>{if(!clipBusy){clipSnapshot=null;favorite.disabled=false;favorite.textContent='收藏';}});
+      favorite.onclick=async()=>{
+        if(clipBusy||!canvas)return;
+        if(!studyStore?.saveClip){clipStatus.textContent='当前连接未开放图片收藏，请使用完整扩展和新版后端。';return;}
+        const owner=studyStore.account();if(!owner){onOpenAccount();return;}
+        if(serial!==requestSerial||captureCourse!==String(getCourseId())||captureUrl!==win.location.href){clipStatus.textContent='页面已变化，请重新截图。';return;}
+        clipBusy=true;favorite.disabled=true;favorite.textContent='收藏中…';for(const id of ['ai-clip-title','ai-clip-note','ai-crop-pen','ai-crop-circle','ai-crop-reset','ai-crop-undo'])layer.querySelector('#'+id).disabled=true;
+        const current=()=>!destroyed&&layer.isConnected&&serial===requestSerial&&owner===studyStore.account()&&captureCourse===String(getCourseId());
+        try{
+          if(!clipSnapshot){
+            const encode=edge=>{const c=make('canvas'),scale=Math.min(1,edge/canvas.width,edge/canvas.height);c.width=Math.max(1,Math.round(canvas.width*scale));c.height=Math.max(1,Math.round(canvas.height*scale));c.getContext('2d').drawImage(canvas,0,0,c.width,c.height);return c.toDataURL('image/png');};
+            let image=encode(1600);if(image.length>2000022)image=encode(1100);if(image.length>2000022)throw Error('图片超过 1.5 MB，请缩小选区再收藏。');
+            let thumbnail=encode(280);if(thumbnail.length>106688)thumbnail=encode(160);
+            if(thumbnail.length>106688)thumbnail=encode(96);
+            clipId=clipId||(win.crypto.randomUUID?.()||'clip-'+Date.now().toString(36)+'-'+Math.random().toString(36).slice(2));
+            const digest=win.crypto.subtle?await win.crypto.subtle.digest('SHA-256',new TextEncoder().encode(captureCourse)):null;if(!current())return;
+            const fallbackKey=()=>[2166136261,2246822507,3266489909,668265263].map(seed=>{for(const char of captureCourse)seed=Math.imul(seed^char.codePointAt(0),16777619);return (seed>>>0).toString(16).padStart(8,'0');}).join('');
+            const origin=new URL(win.location.href);origin.search='';origin.hash='';origin.username='';origin.password='';
+            const video=doc.querySelector('video'),seconds=video&&!video.srcObject&&Number.isFinite(video.duration)?Math.floor(video.currentTime):null;
+            clipSnapshot={id:clipId,title:layer.querySelector('#ai-clip-title').value.trim()||'截图收藏',note:layer.querySelector('#ai-clip-note').value,course:String(getCourseTitle()||doc.title||'网页摘录').slice(0,200),courseKey:digest?Array.from(new Uint8Array(digest),b=>b.toString(16).padStart(2,'0')).join(''):fallbackKey(),origin:origin.href,position:seconds===null?'':Math.floor(seconds/60)+':'+String(seconds%60).padStart(2,'0'),image,thumbnail};
+          }
+          clipStatus.textContent='正在保存图片和批注，仅当前账号可见…';
+          await studyStore.saveClip(clipSnapshot);if(!current())return;
+          favorite.textContent='已收藏';favorite.disabled=true;
+          clipStatus.replaceChildren(make('span',{text:'已保存。手机登录同一账号即可回看。 '}),make('a',{text:'打开收藏夹 ↗',href:'https://47.77.182.216.sslip.io/gateway/study#clips',target:'_blank',rel:'noopener noreferrer'}));
+        }catch(error){if(!current())return;clipStatus.replaceChildren(make('span',{text:(error.status===404?'服务器尚未部署图片收藏。':error.message||'收藏失败。')+' 当前截图仍在预览中，可重试或先下载。 '}));const download=make('a',{text:'下载截图',href:clipSnapshot?.image||canvas.toDataURL('image/png'),download:'随意摘.png'});clipStatus.append(download);favorite.textContent='重试收藏';favorite.disabled=false;}
+        finally{clipBusy=false;if(current()){for(const id of ['ai-clip-title','ai-clip-note','ai-crop-pen','ai-crop-circle','ai-crop-reset'])layer.querySelector('#'+id).disabled=false;layer.querySelector('#ai-crop-undo').disabled=!strokes.length;if(favorite.textContent!=='已收藏'){favorite.disabled=false;if(favorite.textContent==='收藏中…')favorite.textContent='收藏';}layoutPreview();}}
+      };
     }
     let cardDialog=null,cardExporting=false;cleanups.push(()=>cardDialog?.dismiss());
     function resetCardChoices(){cardDialog?.dismiss();}

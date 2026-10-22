@@ -1,4 +1,4 @@
-/* Website online controls, cached transport, keyboard and classroom fullscreen. */
+/* Website replay controls, native live controls, cached transport and classroom fullscreen. */
 (function(root){
 'use strict';
 function isEditing(target){return !!target?.closest?.('textarea,select,input,[contenteditable]:not([contenteditable="false"]),[role="textbox"]');}
@@ -111,12 +111,14 @@ function mount({shadow,host,getVideo,getLocal,getCues,getCourse,getClock,getSeek
   controlRoot=next;extraControlRoot=localRoot;
   const ownedVideos=new Set([localVideo?.isConnected?localVideo:null,live?video:null].filter(Boolean));
   for(const [owned,original] of nativeOwners){if(!ownedVideos.has(owned)){owned.controls=original;nativeOwners.delete(owned);}}
-  for(const owned of ownedVideos){if(!nativeOwners.has(owned))nativeOwners.set(owned,(owned===localVideo?local?.controls:undefined)??owned.controls);if(owned.controls)owned.controls=false;}
-  updateTransport(video,cached||live);
+  // Keep live transport on the actual video. Chromium then owns its live/DVR
+  // timeline, volume and pause UI instead of a second fixed toolbar.
+  for(const owned of ownedVideos){if(!nativeOwners.has(owned))nativeOwners.set(owned,(owned===localVideo?local?.controls:undefined)??owned.controls);const enabled=owned===video&&live;if(owned.controls!==enabled)owned.controls=enabled;}
+  updateTransport(video,cached);
   $('cache-transport').hidden=true;
   updateTranscript();
  }
- return{update,toggleFullscreen,enterFullscreen,destroy(){destroyed=true;document.removeEventListener('fullscreenchange',onFs);restoreFullscreenHost();for(const el of document.querySelectorAll('[data-zy-classroom-fullscreen]'))el.removeAttribute('data-zy-classroom-fullscreen');}};
+ return{update,toggleFullscreen,enterFullscreen,destroy(){destroyed=true;document.removeEventListener('fullscreenchange',onFs);restoreFullscreenHost();for(const [owned,original] of nativeOwners)owned.controls=original;nativeOwners.clear();for(const root of [controlRoot,extraControlRoot]){root?.removeAttribute('data-zy-external-player');root?.removeAttribute('data-zy-local-player');root?.removeAttribute('data-zy-online-controls');}transport.hidden=true;for(const el of document.querySelectorAll('[data-zy-classroom-fullscreen]'))el.removeAttribute('data-zy-classroom-fullscreen');}};
 }
 if(typeof module!=='undefined'&&module.exports)module.exports={isEditing};else root.ZYPlayerInteractions={mount};
 })(typeof globalThis!=='undefined'?globalThis:this);

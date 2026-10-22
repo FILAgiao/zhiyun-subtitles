@@ -87,7 +87,7 @@ class Gateway(AdminMixin, PromptMixin, StudyMixin, OperationsMixin):
                 'api_versions':[1],'learning_jobs':True,'speech_requires_login':True,
                 'prompt_catalog':True,'membership':True,'guest_speech':False,'graceful_shutdown':True,
                 'speech_stream':self.speech_streams.available(),'speech_stream_pcm':True,
-                'study_sync':True,'email_registration':True,'mail_configured':self.study_capabilities()['mail_configured'],
+                'study_clips':True,'study_sync':True,'email_registration':True,'mail_configured':self.study_capabilities()['mail_configured'],
                 'compatibility':{'baseline':'0.20.48','version_header_required':False}}
     def client_metadata(self,headers):
         version=headers.get('X-Client-Version','')

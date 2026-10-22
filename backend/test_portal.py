@@ -31,7 +31,7 @@ class PortalTests(unittest.TestCase):
         self.assertEqual(status,200);return json.loads(raw)['token']
     def test_explicit_public_assets_and_document_policies(self):
         folder=Path(__file__).parent
-        for path in ('/study','/study/','/study.html?login=1','/account?tab=register','/account/','/account.html?tab=recharge','/portal.css','/portal.js','/study.css','/study.js','/account.css','/account.js','/site.js'):
+        for path in ('/study','/study/','/study.html?login=1','/account?tab=register','/account/','/account.html?tab=recharge','/clips.css','/clips.js','/portal.css','/portal.js','/study.css','/study.js','/account.css','/account.js','/site.js'):
             status,headers,raw=self.request(path);self.assertEqual(status,200,path)
             name=public_page_file(path);self.assertEqual(raw,(folder/name).read_bytes())
             csp=headers['Content-Security-Policy'];self.assertIn("connect-src 'self'",csp);self.assertIn("script-src 'self'",csp);self.assertNotIn('unsafe-inline',csp)

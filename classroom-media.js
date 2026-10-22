@@ -1,14 +1,15 @@
 /* School classroom DOM adapters shared by replay and live lessons. */
 (function(root){
 'use strict';
-function isClassroom(page){return page.hostname==='interactivemeta.cmc.zju.edu.cn'||(page.hostname==='classroom.zju.edu.cn'&&/^\/livingpage\/?$/.test(page.pathname));}
-function voicePane(){return document.querySelector('#pane-voice')||document.querySelector('.spoken-language-body .voice-body_wrap');}
-function voiceRows(element,parseTime){
+function isClassroom(page){return page.hostname==='interactivemeta.cmc.zju.edu.cn'||(page.hostname==='classroom.zju.edu.cn'&&/^\/(?:livingpage|livingroom)\/?$/.test(page.pathname));}
+function voicePane(){return document.querySelector('#pane-voice')||document.querySelector('.spoken-language-body .voice-body_wrap')||document.querySelector('.transform-wrapper .trans-list_wrap')||document.querySelector('.trans-contain');}
+function voiceContent(element,parseTime){
  return [...(element?.querySelectorAll('.trans-item')||[])].map(row=>{
   const lines=row.querySelector('.trans-lan')?.children;
-  return {start:parseTime(row.querySelector('.item-title,.item-time')?.textContent||''),original:(row.querySelector('.item-origin')?.textContent||lines?.[0]?.textContent||'').trim(),translation:(row.querySelector('[class*="item-tanslate-"]')?.textContent||lines?.[1]?.textContent||'').trim()};
- }).filter(row=>Number.isFinite(row.start)&&row.original);
+  return {element:row,start:parseTime(row.querySelector('.item-title,.item-time')?.textContent||''),original:(row.querySelector('.item-origin')?.textContent||lines?.[0]?.textContent||'').trim(),translation:(row.querySelector('[class*="item-tanslate-"]')?.textContent||lines?.[1]?.textContent||'').trim()};
+ }).filter(row=>row.original);
 }
+function voiceRows(element,parseTime){return voiceContent(element,parseTime).filter(row=>Number.isFinite(row.start)).map(({element,...row})=>row);}
 const imageSelector='#pane-ppt img,.note-ppt_item img,.ppt-section-wrapper .ppt-item-wrapper img';
 function imageURL(image){
  for(const raw of [image.getAttribute('data-src'),image.getAttribute('data-original'),image.currentSrc,image.getAttribute('src')]){
@@ -17,18 +18,25 @@ function imageURL(image){
 }
 function imageKey(url){try{const u=new URL(url);return u.origin+u.pathname.replace(/\/s_([^/]+)$/,'/$1');}catch{return url;}}
 function slides(parseTime){
- const replay=document.querySelector('#pane-ppt'),list=document.querySelector('.note-scroll_body'),current=document.querySelector('.ppt-section-wrapper .ppt-item-wrapper img');
- const images=[...document.querySelectorAll(imageSelector)],full=current?imageURL(current):'',entries=[];
+ const replay=document.querySelector('#pane-ppt'),list=document.querySelector('.note-scroll_body');
+ const thumbnail=[...document.querySelectorAll('.student-list .video-item')].find(card=>card.querySelector('.tag span')?.textContent.trim()==='PPT')?.querySelector('img');
+ const current=[document.querySelector('.ppt-section-wrapper .ppt-item-wrapper img'),thumbnail].find(image=>image&&imageURL(image));
+ const images=[...new Set([...document.querySelectorAll(imageSelector),current].filter(Boolean))],full=current?imageURL(current):'',entries=[];
  const rows=replay?[...replay.querySelectorAll('img')]:[...document.querySelectorAll('.note-ppt_item img')];
  for(const image of rows){let url=imageURL(image);if(!url)continue;if(full&&imageKey(url)===imageKey(full))url=full;
-  const card=image.closest('.tab-ppt,.note-ppt_item');entries.push({url,time:parseTime((card?.querySelector('.time,.ppt_time')||card?.querySelector('.ppt_order'))?.textContent||''),image});
+  const card=image.closest('.tab-ppt,.note-ppt_item');entries.push({url,time:['.time','.ppt_time','.ppt_order'].map(selector=>parseTime(card?.querySelector(selector)?.textContent||'')).find(Number.isFinite)??NaN,image});
  }
  let activeIndex=-1;
  if(full){activeIndex=entries.findIndex(e=>imageKey(e.url)===imageKey(full));if(activeIndex<0&&!replay){activeIndex=entries.length;entries.push({url:full,time:null,image:current});}}
  if(activeIndex<0&&!replay)activeIndex=entries.findIndex(e=>{const mask=e.image.closest('.note-ppt_item')?.querySelector('.ppt_mask');return mask&&getComputedStyle(mask).display==='none';});
  return{element:replay||list||current?.parentElement||null,items:images,entries,activeIndex,signature:JSON.stringify(entries.map(e=>[e.url,e.time]))};
 }
-function isLive(video){return !!video&&(/(?:^|[\/#?&=])live(?:[\/?&=]|$)/i.test(location.hash+location.pathname)||(!Number.isFinite(video.duration)&&(!!video.srcObject||!!video.closest('.player-wrapper'))));}
+function isLive(video){
+ if(!video)return false;
+ const route=location.hash+location.pathname,stream=video.closest('#stream-list-wrapper');
+ const studentLive=/^#\/studentsrs(?:[/?]|$)/i.test(location.hash)&&stream&&getComputedStyle(stream).display!=='none';
+ return /(?:^|[\/#?&=])live(?:[\/?&=]|$)/i.test(route)||!!video.srcObject||!!studentLive||(!Number.isFinite(video.duration)&&!!video.closest('.player-wrapper'));
+}
 function timeline(video){
  const live=isLive(video),ranges=[];
  if(live){try{for(let i=0;i<video.seekable.length;i++){const start=video.seekable.start(i),end=video.seekable.end(i);if(Number.isFinite(start)&&Number.isFinite(end)&&end>start)ranges.push([start,end]);}}catch{}}
@@ -50,5 +58,5 @@ function placeVideo(video,r){
  video.style.setProperty('width',r.width/sx+'px','important');video.style.setProperty('height',r.height/sy+'px','important');
  video.style.setProperty('left',(r.left-origin.left)/sx+'px','important');video.style.setProperty('top',(r.top-origin.top)/sy+'px','important');
 }
-root.ZYClassroomMedia={isClassroom,voicePane,voiceRows,slides,imageSelector,imageURL,isLive,timeline,seekTime,placeVideo,videoStyleKeys:['width','height','margin','margin-left','margin-top','margin-right','margin-bottom','position','left','top','right','bottom','z-index','object-fit','transform','translate','rotate','scale','box-sizing','min-width','min-height','max-width','max-height']};
+root.ZYClassroomMedia={isClassroom,voicePane,voiceContent,voiceRows,slides,imageSelector,imageURL,isLive,timeline,seekTime,placeVideo,videoStyleKeys:['width','height','margin','margin-left','margin-top','margin-right','margin-bottom','position','left','top','right','bottom','z-index','object-fit','transform','translate','rotate','scale','box-sizing','min-width','min-height','max-width','max-height']};
 })(typeof globalThis!=='undefined'?globalThis:this);

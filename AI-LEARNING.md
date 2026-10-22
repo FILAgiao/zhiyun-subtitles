@@ -1,3 +1,5 @@
+> 0.20.79：本地新增独立图片收藏，不需要先问 AI；截图后的对话入口只附图，明确点击发送才请求模型。现有“保存到账号”保存文字，新的“收藏”保存图片和批注。详见 [功能审计](docs/FEATURE-AUDIT-2026-10-22.md)；尚未上线。
+
 # 浙大上课爽 · AI 讲解模块
 
 代码在 ai-learning.js，由 build-userscript.cjs 内联进用户脚本；不使用远程加载的 AI 代码。CommonJS 导出用于独立测试，浏览器导出 globalThis.ZhiyunLearning。

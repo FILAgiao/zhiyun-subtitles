@@ -1,0 +1,22 @@
+const fs=require('node:fs'),path=require('node:path'),cp=require('node:child_process'),crypto=require('node:crypto');
+const version=require('./package.json').version,root=path.resolve('.'),dist=path.resolve('dist');
+const sha=data=>crypto.createHash('sha256').update(data).digest('hex');
+function copy(from,to){fs.mkdirSync(path.dirname(to),{recursive:true});fs.copyFileSync(from,to);}
+function zip(dir,out,names){cp.execFileSync('python',['-c','import pathlib,zipfile,sys,json; root=pathlib.Path(sys.argv[1]).resolve(); names=json.loads(sys.argv[3]); assert len(names)==len(set(names)); assert all((root/n).resolve().is_relative_to(root) and (root/n).is_file() for n in names); z=zipfile.ZipFile(sys.argv[2],"w",zipfile.ZIP_DEFLATED); [z.write(root/n,n) for n in sorted(names)]; z.close(); z=zipfile.ZipFile(sys.argv[2]); assert set(z.namelist())==set(names); assert all(z.read(n)==(root/n).read_bytes() for n in names)',dir,out,JSON.stringify(names)]);}
+const fixed=path.join(dist,'suiyizhai-'+version+'-tested');fs.mkdirSync(fixed,{recursive:true});
+const extensionNames=fs.readdirSync('dist/extension');for(const name of extensionNames){if(!fs.statSync(path.join('dist/extension',name)).isFile())throw Error('Unexpected extension directory');copy(path.join('dist/extension',name),path.join(fixed,name));}
+const extensionZip=path.join(dist,'zhiyun-subtitles-'+version+'-suiyizhai-tested.zip');zip(fixed,extensionZip,extensionNames);
+const userScript=path.join(dist,'zhiyun-subtitles-'+version+'-suiyizhai-tested.user.js'),metadata=path.join(dist,'zhiyun-subtitles-'+version+'-suiyizhai-tested.meta.js');copy('zhiyun-subtitles.user.js',userScript);copy('zhiyun-subtitles.meta.js',metadata);
+const prepared=path.join(dist,'gateway-suiyizhai-'+version+'-prepared'),source=fs.readFileSync('backend/deploy_release.py','utf8');
+const quoted=s=>[...s.matchAll(/'([^']+)'/g)].map(m=>m[1]);
+const main=source.match(/^files=\[([^\n]+)\]/m),images=source.match(/^files \+= \['landing\/'\+name for name in \[([^\n]+)\]/m);if(!main||!images)throw Error('Deployment whitelist missing');
+const files=[...new Set([...quoted(main[1]),...quoted(images[1]).map(n=>'landing/'+n),'public_preview.py','public-page.json','.env.example','compose.server.yml','zhiyun-gateway.service','CLIPS-API.md','README.md','STUDY-API.md','SPEECH-STREAM.md','COMPATIBILITY.md'])];
+const manifest={};for(const name of files){if(name.includes('..')||path.isAbsolute(name))throw Error('Unsafe backend file');copy(path.join('backend',name),path.join(prepared,'backend',name));const bytes=fs.readFileSync(path.join(prepared,'backend',name));manifest['backend/'+name]={bytes:bytes.length,sha256:sha(bytes)};}
+const instructions='浙大上课爽 '+version+' 随意摘完整后端准备包\n\n仅本地准备，未部署。请同批替换代码与静态资源，先备份旧文件和SQLite数据库；保留服务器原有环境配置。启动时自动增加study_clips表，不修改旧文字问答。原图和缩略图存入数据库，需纳入备份容量。\n图片接口见backend/CLIPS-API.md；部署白名单与校验逻辑保存在项目backend/deploy_release.py（本轮未执行）。\n完整扩展请加载同版本ZIP。公开安装脚本和更新元数据必须同批更新并核对公网哈希；无需用户点击网站更新按钮。\n本机临时预览可在此目录运行 python -m backend.public_preview --demo --port 8765；demo账号只用于临时数据，不是线上账号。\n';fs.writeFileSync(path.join(prepared,'README.txt'),instructions);manifest['README.txt']={bytes:Buffer.byteLength(instructions),sha256:sha(instructions)};
+fs.writeFileSync(path.join(prepared,'SHA256SUMS.json'),JSON.stringify(manifest,null,2)+'\n');
+const gatewayZip=path.join(dist,'zhiyun-gateway-'+version+'-suiyizhai-prepared.zip');zip(prepared,gatewayZip,[...Object.keys(manifest),'SHA256SUMS.json']);
+const websiteVersion=JSON.parse(fs.readFileSync('backend/public-page.json','utf8')).pageVersion;
+const products=[extensionZip,userScript,metadata,gatewayZip,path.join(dist,'gateway-website-'+websiteVersion+'-local.zip'),path.join(dist,'suiyizhai-8-designs.png')];
+const report={version,local_only:true,published:false,store_submitted:false,public_check:JSON.parse(fs.readFileSync('dist/suiyizhai-public-check.json','utf8')),tests:JSON.parse(fs.readFileSync('dist/suiyizhai-'+version+'-test-results.json','utf8')),extension_files:Object.fromEntries(extensionNames.map(n=>[n,sha(fs.readFileSync(path.join(fixed,n)))])),products:Object.fromEntries(products.map(file=>{const b=fs.readFileSync(file);return[path.relative(root,file).replaceAll('\\','/'),{bytes:b.length,sha256:sha(b)}];})),backend_files:manifest};
+fs.writeFileSync(path.join(dist,'suiyizhai-'+version+'-verification.json'),JSON.stringify(report,null,2)+'\n');
+console.log('PASS: full extension '+extensionNames.length+' files, backend '+files.length+' allowlisted files, exact ZIP bytes and SHA256 receipts; local only.');

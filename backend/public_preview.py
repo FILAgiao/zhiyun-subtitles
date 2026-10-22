@@ -41,6 +41,7 @@ class PreviewGateway(Gateway):
     """The preview cannot send email, call providers or administer real accounts."""
     def handle(self,method,path,*args,**kwargs):
         allowed={('GET','/health'),('GET','/v1/me'),('GET','/v1/account/access'),
+                 ('GET','/v1/study/clips'),('GET','/v1/study/clip-image'),('POST','/v1/study/clips'),('DELETE','/v1/study/clips'),
                  ('GET','/v1/study/capabilities'),('GET','/v1/study/conversations'),
                  ('POST','/v1/auth/login'),('POST','/v1/auth/logout'),
                  ('POST','/v1/study/conversations'),('DELETE','/v1/study/conversations')}

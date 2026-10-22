@@ -1,4 +1,4 @@
-const assert=require('node:assert/strict');
+const assert=require('node:assert/strict'),fs=require('node:fs');
 const {chromium}=require('playwright');
 (async()=>{
  const browser=await chromium.launch({headless:true,executablePath:process.env.PLAYWRIGHT_EXECUTABLE_PATH||'C:/Program Files/Google/Chrome/Application/chrome.exe'});
@@ -10,7 +10,7 @@ const {chromium}=require('playwright');
    await page.route('https://**/*',route=>route.fulfill({contentType:'text/html',body:'<style>body{margin:0;background:#f6f4ef}#player{width:700px;height:400px;background:#567}video{width:100%;height:100%}</style><div id="player"><video></video></div><div id="pane-voice"><div class="trans-item"><div class="item-title">00:00:10</div><div class="trans-lan"><div>We discuss computer architecture.</div></div></div></div>'}));
    await page.goto(surface==='course'?'https://interactivemeta.cmc.zju.edu.cn/#/replay?course_id=accounts&sub_id=1':'https://public.example/study');
    await page.exposeFunction('captureFixture',async()=> 'data:image/png;base64,'+(await page.screenshot()).toString('base64'));
-   await page.evaluate(plan=>{
+   await page.evaluate(({plan,promptCatalog})=>{
     window.accountPlan=plan;window.calls=[];window.nativeCalls=0;
     const active=['trial','pro','ultra'].includes(plan),permissions=Object.fromEntries(['learning','translation','speech','learning_records','card_export'].map(key=>[key,active]));
     window.fixtureProfile={username:'student',email:'student@example.test',membership:{plan:plan==='expired'?'pro':plan,state:plan==='expired'?'expired':active?'paid':'free',active},permissions,usage:{month:'2026-10',requests:0,request_limit:active?(plan==='pro'?10:30):0,total_tokens:0,audio_seconds:0,audio_limit:active?120:0}};
@@ -20,13 +20,14 @@ const {chromium}=require('playwright');
     window.GM_xmlhttpRequest=options=>{calls.push({url:options.url,data:options.data});const timer=setTimeout(()=>{
      const path=new URL(options.url).pathname;let result={};
      if(path.endsWith('/me'))result=fixtureProfile;
+     else if(path.endsWith('/prompts'))result={prompts:promptCatalog.map(p=>({...p,scope:'official',revision:1}))};
      else if(path.endsWith('/auth/login'))result={...fixtureProfile,token:'session-'+accountPlan};
      else if(path.endsWith('/learning/jobs/create'))result={id:'mock-job'};
      else if(path.endsWith('/learning/jobs/poll'))result={state:'complete',text:'理解流水线的关键是分阶段执行。',response:{status:'completed',output:[{type:'message',content:[{type:'output_text',text:'理解流水线的关键是分阶段执行。'}]}]}};
      options.onload({status:200,responseText:JSON.stringify(result)});
     },5);return{abort(){clearTimeout(timer);options.onabort?.();}};};
     const video=document.querySelector('video');Object.defineProperties(video,{currentTime:{get:()=>12,set(){}},duration:{get:()=>3600},paused:{get:()=>true},readyState:{get:()=>1}});
-   },plan);
+   },{plan,promptCatalog:JSON.parse(fs.readFileSync('backend/official-prompts.json','utf8'))});
    await page.addScriptTag({path:'zhiyun-subtitles.user.js'});
    const ui=page.locator('#zy-subtitle-host');await ui.locator('#gateway-account').waitFor({state:'attached'});
    if(plan!=='guest')await page.waitForFunction(()=>!document.getElementById('zy-subtitle-host').shadowRoot.getElementById('gateway-state').textContent.includes('正在读取'));
@@ -34,14 +35,15 @@ const {chromium}=require('playwright');
    if(!['trial','pro','ultra'].includes(plan)){
     await page.evaluate(()=>{const clipboard=new DataTransfer();clipboard.setData('text/plain','ordinary pasted text');document.dispatchEvent(new ClipboardEvent('paste',{clipboardData:clipboard,bubbles:true}));});
     assert.equal(await ui.locator('#settings-dialog').isVisible(),false,'ordinary text paste must not open login');
-    // A real middle click must open the same account shell as the settings entry, before capture.
+    // Guests need login; signed free/expired accounts may capture for private collection.
     await page.mouse.click(120,100,{button:'middle'});
+    if(plan!=='guest'){await ui.locator('#ai-crop-image').waitFor({state:'visible'});await ui.locator('#ai-crop-cancel').click();await ui.locator(surface==='course'?'#settings-open':'#web-settings-open').evaluate(node=>node.click());await ui.locator('#settings-tab-connection').click();}
     await ui.locator('#settings-dialog').waitFor({state:'visible'});
     assert.equal(await ui.locator('#settings-title').textContent(),'我的学习账号');
     assert.equal(await ui.locator('#settings-tab-connection').getAttribute('aria-selected'),'true');
     assert.equal(await ui.locator('#ai-learning').isVisible(),false);
     assert.equal(await ui.locator('#ai-crop').count(),0);
-    assert.equal(await page.evaluate(()=>nativeCalls),0);
+    assert.equal(await page.evaluate(()=>nativeCalls),plan==='guest'?0:1);
     assert.equal(await ui.locator('#gateway-login-form').isVisible(),plan==='guest');
     const viaCapture=await ui.locator('#settings-card').boundingBox();
     await ui.locator('#settings-close').click();
@@ -60,20 +62,20 @@ const {chromium}=require('playwright');
      await ui.locator('#'+id).evaluate(node=>node.click());await ui.locator('#settings-dialog').waitFor({state:'visible'});await ui.locator('#settings-close').click();
     }
     if(surface==='course'){
-     await ui.locator('#study-sync > summary').click();const offset=Number(await ui.locator('#offset').inputValue());await ui.locator('#later').click();assert.equal(Number(await ui.locator('#offset').inputValue()),offset+.5);assert.equal(await ui.locator('#settings-dialog').isVisible(),false);
+     await ui.locator('#sync-manual-toggle').click();const offset=Number(await ui.locator('#offset').inputValue());await ui.locator('#later').click();assert.equal(Number(await ui.locator('#offset').inputValue()),offset+.5);assert.equal(await ui.locator('#settings-dialog').isVisible(),false);
      for(const id of ['show-slides','focus-fullscreen','cache-download','offset'])assert.notEqual(await ui.locator('#'+id).getAttribute('data-feature-blocked'),'true');
      await ui.locator('#mode').selectOption('both');await ui.locator('#settings-dialog').waitFor({state:'visible'});assert.equal(await ui.locator('#mode').inputValue(),'original');
      await ui.locator('#settings-close').click();
     }
     assert.equal(await page.evaluate(()=>calls.filter(call=>/\/(ark\/responses|learning\/jobs\/create|speech\/(submit|query))$/.test(call.url)).length),0);
-    assert.equal(await page.evaluate(()=>nativeCalls),0);
+    assert.equal(await page.evaluate(()=>nativeCalls),plan==='guest'?0:1);
     assert.equal(await page.evaluate(()=>saved['ai-question-index-v1'].length),1,'denied access does not delete existing learning records');
     assert.equal(await ui.locator('#ai-questions').isVisible(),false);
     if(plan==='guest'&&surface==='web'){await ui.locator('#account-open').evaluate(node=>node.click());await ui.locator('#settings-card').screenshot({path:'.test-media/account-login-unified.png'});}
    }else{
     for(const id of [surface==='course'?'ai-open':'web-ask','transcript-open',...(surface==='course'?['sync-toggle']:[])])assert.equal(await ui.locator('#'+id).getAttribute('data-feature-blocked'),'false');
     await page.mouse.click(120,100,{button:'middle'});await ui.locator('#ai-crop').waitFor();assert.equal(await page.evaluate(()=>nativeCalls),1);
-    if(surface==='course'&&plan==='pro'){await page.mouse.move(140,120);await page.mouse.down();await page.mouse.move(350,260,{steps:6});await page.mouse.up();await ui.locator('#ai-crop-tools').waitFor({state:'visible'});await ui.locator('#ai-crop-circle').click();await page.mouse.move(170,150);await page.mouse.down();await page.mouse.move(290,215,{steps:6});await page.mouse.up();await page.screenshot({path:'.test-media/screenshot-annotation-existing.png'});}
+    if(surface==='course'&&plan==='pro'){await page.mouse.move(140,120);await page.mouse.down();await page.mouse.move(350,260,{steps:6});await page.mouse.up();await ui.locator('#ai-crop-draw').click();await ui.locator('#ai-crop-tools').waitFor({state:'visible'});await ui.locator('#ai-crop-circle').click();await page.mouse.move(170,150);await page.mouse.down();await page.mouse.move(290,215,{steps:6});await page.mouse.up();await page.screenshot({path:'.test-media/screenshot-annotation-existing.png'});}
     await ui.locator('#ai-crop-cancel').click();
     await ui.locator(surface==='course'?'#ai-open':'#web-ask').click();
     await ui.locator('#ai-question').fill('解释流水线');await ui.locator('#ai-send').click();
