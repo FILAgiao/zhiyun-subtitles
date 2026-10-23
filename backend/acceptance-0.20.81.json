@@ -1,0 +1,106 @@
+{
+  "version": "0.20.81",
+  "host": "47.77.182.216",
+  "remote_directory": "/opt/zhiyun-gateway/backend",
+  "files": {
+    "server.py": {
+      "bytes": 45168,
+      "sha256": "36c83c49496b7676e1ebafcd4bb25754356f1d429a3071e353a014c9f565246c"
+    },
+    "speech_stream.py": {
+      "bytes": 28770,
+      "sha256": "7e7bdb094a0d203b16ba63560683075ed4897c7a855ca2e910f02e1e5a7a1ed5"
+    },
+    "install.user.js": {
+      "bytes": 2726425,
+      "sha256": "0fcc8d7e6a152461a3cf564af54793ece6a5b2bca454cd6cd1a697396e3361b9"
+    },
+    "install.meta.js": {
+      "bytes": 1058,
+      "sha256": "04e01c16c58fd43da2d0851cb4fb0636e44ffdebd63450e4e4e36a8c05c17bc8"
+    },
+    "extension.zip": {
+      "bytes": 1313741,
+      "sha256": "f711a88ced7d3dc4f892e9d7149c3e3140cb193095a013c7a0695c078d2737ca"
+    }
+  },
+  "steps": [
+    "backup the five files, gateway.env and a consistent SQLite snapshot",
+    "upload and hash-check five candidates",
+    "compile the two Python candidates",
+    "replace five files and only RELEASE_VERSION in gateway.env",
+    "gracefully recreate the existing gateway container with its current limits/network/mounts",
+    "verify public health and exact installer, metadata and ZIP hashes",
+    "retain backups; restore old files/env/container automatically on activation failure"
+  ],
+  "status": "deployed_and_verified",
+  "backup": "/opt/zhiyun-gateway/backend/.rollback-speech-0.20.81-20261023T103254Z",
+  "database_backup": "/data/gateway-before-speech-0.20.81-20261023T103254Z.sqlite3",
+  "previous_container": "zhiyun-gateway-before-speech-20261023T103254Z",
+  "public_files": {
+    "install.user.js": {
+      "bytes": 2726425,
+      "sha256": "0fcc8d7e6a152461a3cf564af54793ece6a5b2bca454cd6cd1a697396e3361b9"
+    },
+    "install.meta.js": {
+      "bytes": 1058,
+      "sha256": "04e01c16c58fd43da2d0851cb4fb0636e44ffdebd63450e4e4e36a8c05c17bc8"
+    },
+    "extension.zip": {
+      "bytes": 1313741,
+      "sha256": "f711a88ced7d3dc4f892e9d7149c3e3140cb193095a013c7a0695c078d2737ca"
+    }
+  },
+  "health": {
+    "ok": true,
+    "api_version": 1,
+    "capabilities": {
+      "web_search": false,
+      "api_versions": [
+        1
+      ],
+      "learning_jobs": true,
+      "speech_requires_login": true,
+      "prompt_catalog": true,
+      "membership": true,
+      "guest_speech": false,
+      "graceful_shutdown": true,
+      "speech_stream": true,
+      "speech_stream_pcm": true,
+      "study_clips": true,
+      "study_sync": true,
+      "email_registration": true,
+      "mail_configured": false,
+      "compatibility": {
+        "baseline": "0.20.48",
+        "version_header_required": false
+      }
+    },
+    "draining": false
+  },
+  "provider_verification": {
+    "running_version": "0.20.81",
+    "sample_seconds": 7.79,
+    "sample_kind": "existing_generated_hello_world",
+    "account_records_changed": false,
+    "stream": {
+      "handshake": true,
+      "event_count": 17,
+      "first_text_seconds": 2.167,
+      "first_stable_seconds": 3.434,
+      "final_received": true,
+      "known_phrase_recognized": true,
+      "errors": []
+    },
+    "standard": {
+      "submit_status": 200,
+      "submit_code": "20000000",
+      "query_code": "20000000",
+      "query_count": 1,
+      "known_phrase_recognized": true,
+      "seconds": 3.335,
+      "submissions": 1
+    },
+    "sample_sha256": "309ca74f4579ca5c1979ad5dfc1fbc27f866b2651320b05e0d8d4762c6cd94be"
+  }
+}

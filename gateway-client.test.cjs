@@ -134,3 +134,34 @@ test('stream transport reports malformed successful JSON and network failures ex
 test('stream transport exposes GM timeout as a bounded stream timeout and aborts its request',async()=>{
  const {api,calls}=await authenticatedStream(),transport=api.speechStream.bindTransport(),pending=transport('push',{id:'one',sequence:0,audio:'AA=='});calls.at(-1).ontimeout();await assert.rejects(pending,{code:'stream_timeout'});
 });
+
+
+test('first-click access preparation shares the initial profile request and awaits live capabilities',async()=>{
+ const {api,calls}=setup({url:'https://api.test',token:'saved-session'});
+ const initial=api.ensureAccess(true),click=api.ensureAccess();assert.equal(initial,click);assert.equal(calls.length,1);assert.equal(api.canUse('speech'),false);
+ calls[0].onload({status:200,responseText:JSON.stringify({permissions:{speech:true},capabilities:{speech_stream:true}})});
+ await click;assert.equal(api.canUse('speech'),true);assert.equal(api.speechStream.supported(),true);await api.ensureAccess();assert.equal(calls.length,1);
+});
+
+test('access preparation rejects account or service switches and cannot restore stale permissions',async()=>{
+ for(const next of [{url:'https://api.test',token:'new-session'},{url:'https://other.test',token:'saved-session'}]){
+  const {api,calls,storage}=setup({url:'https://api.test',token:'saved-session'}),pending=api.ensureAccess();storage['gateway-account-v1']=next;
+  calls[0].onload({status:200,responseText:JSON.stringify({permissions:{speech:true},capabilities:{speech_stream:true}})});
+  await assert.rejects(pending,{code:'account_changed'});assert.equal(api.canUse('speech'),false);assert.equal(api.speechStream.supported(),false);
+ }
+});
+
+test('failed preparation makes no paid request and a later click can retry the profile',async()=>{
+ const {api,calls}=setup({url:'https://api.test',token:'saved-session'}),first=api.ensureAccess();calls[0].onerror();await assert.rejects(first);
+ const retry=api.ensureAccess();assert.equal(calls.length,2);assert.ok(calls.every(call=>call.url.endsWith('/v1/me')));
+ calls[1].onload({status:200,responseText:JSON.stringify({permissions:{speech:false},capabilities:{speech_stream:true}})});await retry;assert.equal(api.canUse('speech'),false);
+});
+
+
+test('standard speech forwards only known safe gateway error meanings without upstream body text',()=>{
+ const {api,calls}=setup({url:'https://api.test',token:'session'});let response;
+ api.transport({url:'https://openspeech.bytedance.com/api/v3/auc/bigmodel/query',onload:r=>response=r});
+ calls.at(-1).onload({status:502,responseText:JSON.stringify({error_code:'speech_upstream_auth',error:'secret-provider-key and audio'})});
+ assert.equal(response.gatewaySpeechError.code,'speech_upstream_auth');assert.match(response.gatewaySpeechError.message,/授权失败/);assert.ok(!response.gatewaySpeechError.message.includes('secret-provider-key'));
+ api.transport({url:'https://openspeech.bytedance.com/api/v3/auc/bigmodel/query',onload:r=>response=r});calls.at(-1).onload({status:502,responseText:JSON.stringify({error_code:'unknown',error:'secret-provider-key'})});assert.equal(response.gatewaySpeechError,undefined);
+});

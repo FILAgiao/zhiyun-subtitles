@@ -181,3 +181,11 @@ test('a merged packet retry keeps exactly the same sequence and PCM bytes',async
 test('a reserved create error snapshot forbids a second file task even before audio upload',async()=>{
  const actions=[],source=sourceFixture();const result=await createSession(basicOptions(source,async(action,payload)=>{actions.push({action,payload});return action==='create'?snapshot({state:'error',error:'upstream unavailable after reservation',error_code:'speech_stream_unavailable',error_status:503,audio_seconds:0}):snapshot({state:'cancelled'});})).run();assert.equal(result.matched,false);assert.equal(result.sentAudio,false);assert.equal(result.fallbackAllowed,false);assert.equal(result.reason,'speech_stream_unavailable');assert.deepEqual(actions.map(item=>item.action),['create','cancel']);assert.equal(actions.at(-1).payload.id,'test-session');
 });
+
+
+test('temporary stream unavailability or cooldown cannot start a second paid file job',async()=>{
+ for(const code of ['speech_stream_unavailable','speech_stream_cooling_down','speech_stream_timeout','speech_stream_network']){
+  const actions=[],source=sourceFixture();const result=await createSession(basicOptions(source,async action=>{actions.push(action);if(action==='create')throw Object.assign(new Error('temporarily unavailable'),{status:503,code});return snapshot({state:'cancelled'});})).run();
+  assert.equal(result.fallbackAllowed,false,code);assert.equal(result.sentAudio,false);assert.deepEqual(actions,['create','cancel']);
+ }
+});

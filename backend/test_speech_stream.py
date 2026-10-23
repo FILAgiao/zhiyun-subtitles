@@ -8,6 +8,7 @@ import json
 import os
 import queue
 import socket
+import ssl
 import struct
 import tempfile
 import threading
@@ -283,11 +284,28 @@ class StreamTests(unittest.TestCase):
         key = str(uuid.uuid4())
         result = self.call('create', {'request_id': key})
         self.assertEqual(result['state'], 'error')
-        self.assertEqual(result['error_code'], 'speech_stream_unavailable')
+        self.assertEqual(result['error_code'], 'speech_stream_protocol_error')
         self.assertNotIn('server-only-test-key', json.dumps(result))
-        self.assertFalse(self.gateway.capabilities()['speech_stream'])
+        self.assertTrue(self.gateway.capabilities()['speech_stream'])
+        with self.assertRaises(Fault) as cooling:
+            self.call('create', {'request_id': str(uuid.uuid4())})
+        self.assertEqual(cooling.exception.code, 'speech_stream_cooling_down')
+        self.assertGreater(cooling.exception.retry_after, 0)
+        self.assertNotIn('未配置', cooling.exception.message)
         self.assertEqual(self.call('create', {'request_id': key})['state'], 'error')
         self.assertEqual(self.gateway.usage(1, 'zhiyun-subtitles')['requests'], 1)
+
+    def test_connection_failures_keep_capability_and_report_safe_reason(self):
+        for error, code in [(TimeoutError('private'), 'speech_stream_connect_timeout'),
+                            (socket.gaierror('private'), 'speech_stream_network_error'),
+                            (ssl.SSLError('private'), 'speech_stream_tls_error')]:
+            with self.subTest(code=code):
+                self.gateway.speech_streams.unavailable_until = 0
+                self.gateway.speech_streams.connector = lambda headers, error=error: (_ for _ in ()).throw(error)
+                result = self.call('create', {'request_id': str(uuid.uuid4())})
+                self.assertEqual(result['error_code'], code)
+                self.assertNotIn('private', json.dumps(result))
+                self.assertTrue(self.gateway.capabilities()['speech_stream'])
 
     def test_drain_rejects_new_stream_and_waits_for_existing(self):
         key = self.create()

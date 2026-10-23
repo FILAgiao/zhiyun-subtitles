@@ -334,3 +334,16 @@ test('cancellation during submit recovery prevents querying or displaying a late
  await assert.rejects(recognizeStandard(async action=>{calls.push(action);throw Object.assign(Error('timeout'),{code:'speech_timeout'});},async()=>{cancelled=true;},'audio','key','id',()=>cancelled,e=>events.push(e.stage)),/取消/);
  assert.deepEqual(calls,['submit']);assert.ok(!events.includes('recognized'));
 });
+
+
+test('standard ASR preserves safe gateway authorization errors and does not query a rejected submit',async()=>{
+ const calls=[],response={status:502,responseHeaders:'',responseText:'{}',gatewaySpeechError:{code:'speech_upstream_auth',message:'语音服务授权失败，请联系管理员检查服务权限。'}};
+ await assert.rejects(recognizeStandard(async action=>{calls.push(action);return response;},async()=>{},'audio','key','same'),{code:'speech_upstream_auth',message:response.gatewaySpeechError.message});assert.deepEqual(calls,['submit']);
+ assert.throws(()=>speechResult(response),{code:'speech_upstream_auth',message:response.gatewaySpeechError.message});
+});
+
+test('standard ASR recovers safe gateway network errors only by querying the original task',async()=>{
+ const calls=[],response={status:502,responseHeaders:'',responseText:'{}',gatewaySpeechError:{code:'speech_upstream_network',message:'语音服务连接中断'}};
+ const result=await recognizeStandard(async(action,headers)=>{calls.push([action,headers['X-Api-Request-Id']]);return action==='submit'?response:asrResponse(20000000,[{text:'recovered',start_time:0}]);},async()=>{},'audio','key','original-task');
+ assert.equal(result[0].text,'recovered');assert.deepEqual(calls,[['submit','original-task'],['query','original-task']]);
+});

@@ -1,6 +1,6 @@
 'use strict';
 // Every service request and audio frame is synthetic. No real audio is uploaded.
-const path=require('node:path'),assert=require('node:assert/strict'),{chromium}=require('playwright');
+const fs=require('node:fs'),path=require('node:path'),assert=require('node:assert/strict'),{chromium}=require('playwright');
 const phrase='the financial market uses several different trading strategies for managing risk and measuring expected returns';
 const conflict='the biology department studies cellular structures and examines how living organisms adapt to changing environmental conditions';
 const unrelated='this unrelated statement contains several distinct words about a completely different subject entirely';
@@ -13,11 +13,11 @@ const homophoneRecognition='魔数转焕后的采样电压，会被处理气写�
 const screenshotWords=Array.from(screenshotRecognition).map((text,index)=>({text,start_time:index<screenshotRecognition.indexOf('那')?Math.round(index*3000/screenshotRecognition.indexOf('那')):3000+(index-screenshotRecognition.indexOf('那'))*150}));
 const caption=phrase+' while the professor continues discussing many other unrelated details about investment institutions and their organizational structure in another market';
 const fixture='<style>body{margin:0;background:#eee4d9}.cmc-main{width:850px;height:480px;background:#263d4c}video{width:100%;height:100%}.spoken-language-body{display:none}</style><div class="cmc-main"><video></video></div><div class="spoken-language-body"><div class="voice-body_wrap"><div class="trans-item"><p class="item-time">00:00:20</p><div class="item-origin">'+caption+'</div></div><div class="trans-item"><p class="item-time">00:00:50</p><div class="item-origin">'+conflict+'</div></div><div class="trans-item"><p class="item-time">01:02:24</p><div class="item-origin">'+screenshotCaption+'</div></div><div class="trans-item"><p class="item-time">00:01:40</p><div class="item-origin">'+homophoneCaption+'</div></div></div></div>';
-function installFixture({plans,phrase,native,streaming=false}){
- globalThis.speechFixture={plans,phrase,calls:[],jobs:{},pending:{},round:0,streaming};
+function installFixture({plans,phrase,native,streaming=false,holdAccess=false}){
+ globalThis.speechFixture={plans,phrase,calls:[],jobs:{},pending:{},round:0,streaming,holdAccess,accessCalls:0,accessReady:false};
  globalThis.fixtureRequest=async(url,options={})=>{
   const state=speechFixture,pathname=new URL(url).pathname;
-  if(pathname.endsWith('/me'))return{status:200,headers:{'Content-Type':'application/json'},body:{username:'fixture',usage:{requests:0,request_limit:100,audio_seconds:0,audio_limit:100},permissions:{learning:true,translation:true,speech:true},membership:{active:true,plan:'pro'},capabilities:{speech_stream:state.streaming,speech_stream_pcm:true}}};
+  if(pathname.endsWith('/me')){state.accessCalls++;if(state.holdAccess&&!state.accessReady){if(state.pending.access)throw Error('Duplicate pending profile request');await new Promise(resolve=>state.pending.access=()=>{delete state.pending.access;state.accessReady=true;resolve();});}return{status:200,headers:{'Content-Type':'application/json'},body:{username:'fixture',usage:{requests:0,request_limit:100,audio_seconds:0,audio_limit:100},permissions:{learning:true,translation:true,speech:true},membership:{active:true,plan:'pro'},capabilities:{speech_stream:state.streaming,speech_stream_pcm:true}}};}
   if(pathname.endsWith('/prompts'))return{status:404,headers:{'Content-Type':'application/json'},body:{error:'接口不存在'}};
   if(pathname.endsWith('/activity')||pathname.endsWith('/auth/logout'))return{status:200,headers:{'Content-Type':'application/json'},body:{}};
   const streamAction=pathname.match(/\/speech\/stream\/(create|push|poll|finish|cancel)$/)?.[1];
@@ -90,16 +90,16 @@ function mockAudio({currentTime=22,streaming=false}={}){
  window.OfflineAudioContext=class{createBufferSource(){return{connect(){},start(){}};}async startRendering(){return{getChannelData:()=>new Float32Array([.1,.2,.3])};}};
 }
 (async()=>{
- const native=process.argv.includes('--extension'),dir=path.resolve('dist/extension');let browser,worker,scenario=0;
+ const native=process.argv.includes('--extension'),dir=path.resolve(process.env.ZY_TEST_EXTENSION_DIR||'dist/extension');let browser,worker,scenario=0;
  const context=native?await chromium.launchPersistentContext(path.resolve('.test-media/speech-sync-'+Date.now()),{headless:true,executablePath:'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe',viewport:{width:1440,height:1000},args:['--disable-extensions-except='+dir,'--load-extension='+dir]}):await(browser=await chromium.launch({headless:true,executablePath:'C:/Program Files/Google/Chrome/Application/chrome.exe'})).newContext({viewport:{width:1440,height:1000}});
  try{
   if(native){worker=context.serviceWorkers()[0]||await context.waitForEvent('serviceworker');await worker.evaluate(()=>chrome.storage.local.set({'cache-auto':false,'gateway-guide-no-remind-v2':true,'gateway-account-v1':{url:'https://47.77.182.216.sslip.io/gateway',token:'fixture-token'}}));}
   await context.route('**/*',r=>r.request().isNavigationRequest()?r.fulfill({contentType:'text/html; charset=utf-8',body:fixture}):r.abort());
-  async function open(plans,{currentTime=22,streaming=false}={}){
-   const page=await context.newPage(),errors=[],worlds=new Map();page.on('pageerror',e=>errors.push(e.message));let session;const setup={plans,phrase,native,streaming};
+  async function open(plans,{currentTime=22,streaming=false,holdAccess=false}={}){
+   const page=await context.newPage(),errors=[],worlds=new Map();page.on('pageerror',e=>errors.push(e.message));let session;const setup={plans,phrase,native,streaming,holdAccess};
    if(native){await worker.evaluate(({code,setup})=>(0,eval)('('+code+')')(setup),{code:installFixture.toString(),setup});session=await context.newCDPSession(page);session.on('Runtime.executionContextCreated',e=>worlds.set(e.context.id,e.context));session.on('Runtime.executionContextDestroyed',e=>worlds.delete(e.executionContextId));session.on('Runtime.executionContextsCleared',()=>worlds.clear());await session.send('Runtime.enable');}
    await page.goto('https://classroom.zju.edu.cn/livingpage?tenant_code=112&course_id=speech-'+(++scenario)+'&sub_id=1');
-   if(!native){await page.evaluate(installFixture,setup);await page.evaluate(mockAudio,{currentTime,streaming});await page.addScriptTag({path:'zhiyun-subtitles.user.js'});}
+   if(!native){await page.evaluate(installFixture,setup);await page.evaluate(mockAudio,{currentTime,streaming});await page.addScriptTag({path:process.env.ZY_TEST_USERSCRIPT_PATH||'zhiyun-subtitles.user.js'});}
    const ui=page.locator('#zy-subtitle-host');await ui.locator('#sync-toggle').waitFor();
    if(native){let world;for(const[id,info]of worlds){if(info.auxData?.isDefault)continue;try{const r=await session.send('Runtime.evaluate',{contextId:id,expression:'typeof ZYClassroomMedia',returnByValue:true});if(r.result.value==='object'){world=id;break;}}catch{}}assert.ok(world);await session.send('Runtime.evaluate',{contextId:world,expression:'('+mockAudio.toString()+')('+JSON.stringify({currentTime,streaming})+')',returnByValue:true});}
    await page.waitForTimeout(650);
@@ -109,9 +109,19 @@ function mockAudio({currentTime=22,streaming=false}={}){
    const syncKey='subtitle-sync:'+JSON.stringify(['speech-'+scenario,'1','112']);
    const saved=()=>native?worker.evaluate(key=>chrome.storage.local.get(key).then(values=>values[key]),syncKey):page.evaluate(key=>values[key],syncKey);
    const done=()=>page.waitForFunction(()=>document.getElementById('zy-subtitle-host').shadowRoot.getElementById('auto-align').textContent==='开始匹配');
-   return{page,ui,calls,pending,release,done,saved,start:()=>ui.locator('#sync-toggle').click(),offset:()=>ui.locator('#offset').inputValue(),status:()=>ui.locator('#align-status').textContent(),attempts:()=>ui.locator('#align-attempts li').allTextContents(),live:()=>ui.locator('#sync-live-status').textContent(),close:async()=>{assert.deepEqual(errors,[]);await page.close();}};
+   return{page,ui,calls,pending,release,done,saved,accessCalls:()=>evaluate(()=>speechFixture.accessCalls),changeAccount:()=>native?worker.evaluate(()=>chrome.storage.local.set({'gateway-account-v1':{url:'https://47.77.182.216.sslip.io/gateway',token:'different-token'}})):page.evaluate(()=>values['gateway-account-v1']={url:'https://47.77.182.216.sslip.io/gateway',token:'different-token'}),start:()=>ui.locator('#sync-toggle').click(),offset:()=>ui.locator('#offset').inputValue(),status:()=>ui.locator('#align-status').textContent(),attempts:()=>ui.locator('#align-attempts li').allTextContents(),live:()=>ui.locator('#sync-live-status').textContent(),close:async()=>{assert.deepEqual(errors,[]);await page.close();}};
   }
   async function oneSubmission(s){const calls=await s.calls();assert.equal(calls.filter(x=>x.action==='submit').length,1);assert.equal(new Set(calls.filter(x=>['submit','query'].includes(x.action)).map(x=>x.requestId)).size,1);}
+
+  {
+   const s=await open([{}],{streaming:true,holdAccess:true});await s.pending('access');await s.start();assert.match(await s.status(),/正在确认语音服务/);assert.deepEqual(await s.calls(),[]);assert.equal(await s.accessCalls(),1);await s.release('access');await s.done();assert.equal(await s.offset(),'2');assert.equal((await s.calls()).filter(x=>x.action==='create').length,1);assert.equal((await s.calls()).filter(x=>x.action==='submit').length,0);await s.close();
+  }
+  {
+   const s=await open([{}],{streaming:true,holdAccess:true});await s.pending('access');await s.start();await s.start();await s.done();assert.match(await s.status(),/已取消/);await s.release('access');await s.page.waitForTimeout(100);assert.deepEqual(await s.calls(),[]);assert.equal(await s.offset(),'0');await s.close();
+  }
+  {
+   const s=await open([{}],{streaming:true,holdAccess:true});await s.pending('access');await s.start();await s.changeAccount();await s.release('access');await s.done();await s.page.waitForTimeout(100);assert.deepEqual(await s.calls(),[]);assert.equal(await s.offset(),'0');await s.close();
+  }
   {
    const s=await open([{}]);await s.start();await s.done();assert.equal(await s.offset(),'2');assert.match(await s.status(),/匹配成功.*时间差 \+2 秒/);await oneSubmission(s);assert.equal((await s.attempts()).length,1);await s.close();
   }
@@ -157,6 +167,6 @@ function mockAudio({currentTime=22,streaming=false}={}){
   {
    const s=await open([{text:unrelated,neverStable:true}],{streaming:true});await s.start();await s.done();assert.equal(await s.offset(),'0');const calls=await s.calls();assert.equal(calls.filter(x=>x.action==='create').length,1);assert.equal(calls.filter(x=>x.action==='submit').length,0);assert.equal(calls.filter(x=>x.action==='finish').length,1);assert.equal(calls.filter(x=>x.action==='cancel').length,1);assert.match(await s.status(),/未找到可靠时间差/);await s.close();
   }
-  console.log('PASS '+(native?'real Edge MV3':'Chrome userscript')+': 15 scenarios; one file job or one continuous stream per click; first definite result immediately applies; partial results never move offsets; no automatic second/third recordings; same UUID query retries; cancel/course change/manual edit isolate late callbacks; screenshot fragment and homophones; one live log line; +/- collapse survives partial and final results; stream success stops audio and closes session.');
+  console.log('PASS '+(native?'real Edge MV3':'Chrome userscript')+': 18 scenarios; delayed initial profile is awaited by the first click; cancel/account switch before profile arrival send no audio; one file job or one continuous stream per click; first definite result immediately applies; partial results never move offsets; no automatic second/third recordings; same UUID query retries; cancel/course change/manual edit isolate late callbacks; screenshot fragment and homophones; one live log line; +/- collapse survives partial and final results; stream success stops audio and closes session.');
  }finally{await context.close();await browser?.close();}
 })().catch(e=>{console.error(e);process.exitCode=1;});

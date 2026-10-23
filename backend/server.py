@@ -2,6 +2,7 @@ import signal, sys, argparse, re, copy, base64, getpass, ipaddress, threading, h
 from pathlib import Path
 from contextlib import contextmanager
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from http.client import HTTPException
 ARK='https://ark.cn-beijing.volces.com/api/v3/responses'
 SPEECH='https://openspeech.bytedance.com/api/v3/auc/bigmodel/'
 SCHEMA='''
@@ -33,8 +34,67 @@ def password_hash(password,salt): return hashlib.pbkdf2_hmac('sha256',password.e
 class NoRedirect(urllib.request.HTTPRedirectHandler):
     def redirect_request(self,*args,**kwargs): return None
 
+def speech_status_code(headers):
+    # Only this numeric supplier field may cross the gateway boundary. Never
+    # copy diagnostic messages, arbitrary response headers or error bodies.
+    values=[str(value) for name,value in headers.items() if name.lower()=='x-api-status-code']
+    return values[0] if len(values)==1 and re.fullmatch(r'[0-9]{8}',values[0]) else ''
+
+def speech_fault(status,message,code,upstream_code='',retry_after=None):
+    error=Fault(status,message,code,retry_after)
+    error.speech_status_code=upstream_code if re.fullmatch(r'[0-9]{8}',upstream_code) else ''
+    return error
+
+def speech_response_fault(status,code):
+    if status in (401,403):
+        return speech_fault(503,'语音服务授权失败，请联系管理员检查服务权限。','speech_upstream_auth',code)
+    if status==429 or code in ('45000131','55000031'):
+        return speech_fault(503,'语音服务繁忙，请稍后重试。','speech_upstream_busy',code,3)
+    if code in ('20000003','45000002'):
+        return speech_fault(422,'未检测到可识别的人声，请播放有讲课声音的片段后重试。','speech_audio_empty',code)
+    if code in ('45000132','45000151'):
+        return speech_fault(422,'语音服务无法处理本次音频，请重新播放课程后重试。','speech_audio_invalid',code)
+    if code=='45000001' or 400<=status<500:
+        return speech_fault(502,'语音服务未接受本次识别请求，请联系管理员检查请求参数。','speech_upstream_rejected',code)
+    if status>=500 or code.startswith('550'):
+        return speech_fault(503,'语音服务暂时不可用，请稍后重试。','speech_upstream_unavailable',code,3)
+    return speech_fault(502,'语音服务返回了无法确认的任务状态，请稍后重试。','speech_upstream_response',code)
+
+def official_speech(request):
+    # Standard ASR submit intentionally returns an empty success body. Status
+    # lives in X-Api-Status-Code; only completed queries carry result JSON.
+    # Keeping this separate preserves the ARK response contract.
+    try:
+        try:
+            response=urllib.request.build_opener(NoRedirect()).open(request,timeout=75)
+        except urllib.error.HTTPError as error:
+            with error:
+                code=speech_status_code(error.headers)
+                return error.code,{'X-Api-Status-Code':code} if code else {},{}
+        with response:
+            code=speech_status_code(response.headers)
+            headers={'X-Api-Status-Code':code} if code else {}
+            if response.status!=200 or code!='20000000' or request.full_url==SPEECH+'submit':
+                return response.status,headers,{}
+            raw=response.read(8000001)
+            if len(raw)>8000000:
+                raise speech_fault(502,'语音服务响应过大，请联系管理员。','speech_upstream_response',code)
+            try:
+                result=json.loads(raw)
+                if not isinstance(result,dict): raise ValueError()
+            except (ValueError,UnicodeError):
+                raise speech_fault(502,'语音服务返回了无效的识别结果，请稍后重试。','speech_upstream_response',code) from None
+            return response.status,headers,{k:result[k] for k in ('result','audio_info') if k in result}
+    except (TimeoutError,urllib.error.URLError) as error:
+        if isinstance(error,TimeoutError) or isinstance(getattr(error,'reason',None),TimeoutError):
+            raise speech_fault(504,'连接语音服务超时，请稍后重试；已提交的任务会继续查询。','speech_upstream_timeout') from None
+        raise speech_fault(502,'暂时无法连接语音服务，请稍后重试。','speech_upstream_network') from None
+    except (OSError,HTTPException):
+        raise speech_fault(502,'语音服务连接中断，请稍后重试；已提交的任务会继续查询。','speech_upstream_network') from None
+
 def official(url,headers,body):
     request=urllib.request.Request(url,json.dumps(body).encode(),headers,method='POST')
+    if url in (SPEECH+'submit',SPEECH+'query'): return official_speech(request)
     try:
         with urllib.request.build_opener(NoRedirect()).open(request,timeout=75) as r:
             raw=r.read(8000001)
@@ -86,7 +146,7 @@ class Gateway(AdminMixin, PromptMixin, StudyMixin, OperationsMixin):
         return {'web_search':os.environ.get('ALLOW_WEB_SEARCH')=='1',
                 'api_versions':[1],'learning_jobs':True,'speech_requires_login':True,
                 'prompt_catalog':True,'membership':True,'guest_speech':False,'graceful_shutdown':True,
-                'speech_stream':self.speech_streams.available(),'speech_stream_pcm':True,
+                'speech_stream':self.speech_streams.configured(),'speech_stream_pcm':True,
                 'study_clips':True,'study_sync':True,'email_registration':True,'mail_configured':self.study_capabilities()['mail_configured'],
                 'compatibility':{'baseline':'0.20.48','version_header_required':False}}
     def client_metadata(self,headers):
@@ -380,7 +440,7 @@ class Gateway(AdminMixin, PromptMixin, StudyMixin, OperationsMixin):
     def speech(self,user,app,path,headers,body):
         with self.db() as db: db.execute('DELETE FROM jobs WHERE created<?',(int(time.time())-86400,))
         key=os.environ.get('SPEECH_API_KEY')
-        if not key: raise Fault(503,'尚未配置语音服务')
+        if not key: raise Fault(503,'语音服务尚未配置，请联系管理员。','speech_not_configured')
         task=headers.get('X-Api-Request-Id','')
         try: uuid.UUID(task)
         except ValueError: raise Fault(400,'语音任务 ID 无效') from None
@@ -408,8 +468,8 @@ class Gateway(AdminMixin, PromptMixin, StudyMixin, OperationsMixin):
             if job['done']: return 200,{'X-Api-Status-Code':'20000000'},json.loads(job['result'])
         try:
             status,response_headers,result=self.upstream(SPEECH+path.rsplit('/',1)[1],{'X-Api-Key':key,'X-Api-Resource-Id':'volc.seedasr.auc','X-Api-Request-Id':task,'X-Api-Sequence':'-1','Content-Type':'application/json'},payload)
-            code=next((str(v) for k,v in response_headers.items() if k.lower()=='x-api-status-code'),'')
-            if status!=200 or code not in ('20000000','20000001','20000002'): raise Fault(502,'语音服务返回异常')
+            code=speech_status_code(response_headers)
+            if status!=200 or code not in ('20000000','20000001','20000002'): raise speech_response_fault(status,code)
             clean={k:result[k] for k in ('result','audio_info') if k in result}
             if path.endswith('/query') and code=='20000000':
                 with self.db() as db: db.execute('UPDATE jobs SET done=1,result=? WHERE id=?',(json.dumps(clean),task))
@@ -458,6 +518,8 @@ def make_server(gateway,host='127.0.0.1',port=8080,allowed_web_origins=()):
             except Fault as error:
                 status=error.status
                 more={'Retry-After':str(error.retry_after)} if error.retry_after is not None else {}
+                speech_code=getattr(error,'speech_status_code','')
+                if re.fullmatch(r'[0-9]{8}',speech_code): more['X-Api-Status-Code']=speech_code
                 result={'error':error.message,'error_code':error.code,'request_id':request_id}
                 # Diagnostics contain no credentials, IP, account name, prompts or media.
                 route=self.path if self.path in ('/v1/ark/responses','/v1/learning/jobs/create','/v1/speech/submit','/v1/speech/query') else 'other'

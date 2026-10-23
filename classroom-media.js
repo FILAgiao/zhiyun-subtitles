@@ -6,7 +6,12 @@ function voicePane(){return document.querySelector('#pane-voice')||document.quer
 function voiceContent(element,parseTime){
  return [...(element?.querySelectorAll('.trans-item')||[])].map(row=>{
   const lines=row.querySelector('.trans-lan')?.children;
-  return {element:row,start:parseTime(row.querySelector('.item-title,.item-time')?.textContent||''),original:(row.querySelector('.item-origin')?.textContent||lines?.[0]?.textContent||'').trim(),translation:(row.querySelector('[class*="item-tanslate-"]')?.textContent||lines?.[1]?.textContent||'').trim()};
+  // The shared livingroom/livingpage replay component renders the time as a
+  // sibling before the text card. Only accept that immediate time element;
+  // walking farther back would assign another caption's time to untimed rows.
+  const previous=row.previousElementSibling;
+  const time=row.querySelector('.item-title,.item-time')||(previous?.matches('.item-title,.item-time')?previous:null);
+  return {element:row,start:parseTime(time?.textContent||''),original:(row.querySelector('.item-origin')?.textContent||lines?.[0]?.textContent||'').trim(),translation:(row.querySelector('[class*="item-tanslate-"]')?.textContent||lines?.[1]?.textContent||'').trim()};
  }).filter(row=>row.original);
 }
 function voiceRows(element,parseTime){return voiceContent(element,parseTime).filter(row=>Number.isFinite(row.start)).map(({element,...row})=>row);}

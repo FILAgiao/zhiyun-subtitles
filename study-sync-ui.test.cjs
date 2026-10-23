@@ -99,10 +99,10 @@ const {chromium} = require('playwright');
       );
     });
     await ui.locator('#ai-crop-preview').waitFor({state: 'visible'});
+    assert.equal(await ui.locator('#ai-crop-use').isHidden(), true);
     await ui.locator('#ai-crop-send').click();
-    await ui.locator('#ai-attachment').waitFor({state: 'visible'});
-    await ui.locator('#ai-question').fill('为什么梯度下降要沿梯度的反方向更新？');
-    await ui.locator('#ai-send').click();
+    await ui.locator('#ai-log .ai-message[data-role=user] img').waitFor({state: 'visible'});
+    assert.equal(await ui.locator('#ai-attachment').isVisible(), false);
     await page.waitForFunction(() => {
       const root = document.getElementById('zy-subtitle-host').shadowRoot;
       return saved['ai-question-index-v1']?.length === 1 && root.getElementById('ai-learning').getAttribute('aria-busy') === 'false';

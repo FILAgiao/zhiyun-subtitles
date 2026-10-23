@@ -290,7 +290,7 @@
     if(!shadow || typeof request!=='function')throw new Error('AI 助手缺少 shadow 或 request');
     const doc=shadow.ownerDocument,win=doc.defaultView;
     function ensureAccess(feature='learning'){if(canUse(feature))return true;onRequireLogin(feature);return false;}
-    let settings=settingsOf(getValue(STORAGE_KEY,DEFAULTS)),history=[],lastAnswer=null,recentSlides=[],lastSlideKey='',pendingImage=null,controller=null,destroyed=false,cleanupCapture=null,requestSerial=0,slideContextEnabled=settings.followSlides,capturePending=false,captureHideCount=0,captureHiddenElements=[];
+    let settings=settingsOf(getValue(STORAGE_KEY,DEFAULTS)),history=[],lastAnswer=null,recentSlides=[],lastSlideKey='',pendingImage=null,controller=null,destroyed=false,cleanupCapture=null,requestSerial=0,slideContextEnabled=settings.followSlides,capturePending=false,sendPreparing=false,captureHideCount=0,captureHiddenElements=[];
     let preferredPromptMode=settings.mode;
     let legacyPrompts=settings.prompts.map(p=>({...p})),legacyCustom=settings.customPrompt;
     let promptAccount='',promptEpoch=0,promptReady=false,promptCloudReady=false,promptLoading=null,promptMessage='',redrawPrompts=()=>{};
@@ -434,7 +434,7 @@
       if(!await syncPrompts(true))throw Error('云端已保存，列表读取失败，请刷新后查看。');
     }
     function open(){if(!ensureAccess())return;questions.hidden=true;panel.hidden=false;resume.hidden=true;clampFloating(panel);badge();fitQuestion();$('ai-question').focus();persist();}
-    function collapse(){resetCardChoices();if(capturePending)stop();cleanupCapture?.();panel.hidden=true;resume.hidden=false;clampResume();persist();}
+    function collapse(){resetCardChoices();if(sendPreparing){stop();status('已取消发送，截图已保留。');}else if(capturePending)stop();cleanupCapture?.();panel.hidden=true;resume.hidden=false;clampResume();persist();}
     let sessionCourse=String(getCourseId()),conversationId='',conversationTitle='',conversationSource='文字提问',conversationCourse='',conversationOrigin='';
     const INDEX_KEY='ai-question-index-v1';
     const records=()=>{const value=getValue(INDEX_KEY,[]);return Array.isArray(value)?value:[];};
@@ -474,7 +474,7 @@
     }
     listen($('ai-question'),'input',()=>{fitQuestion();persist();});listen(win,'pagehide',persist);
     const composeResize=new win.ResizeObserver(()=>fitQuestion());composeResize.observe(panel);cleanups.push(()=>composeResize.disconnect());
-    function stop(){if(controller){flushPendingReply?.();flushPendingReply=null;persist();}requestSerial++;controller?.abort();controller=null;capturePending=false;setBusy(false);}
+    function stop(){if(controller){flushPendingReply?.();flushPendingReply=null;persist();}requestSerial++;controller?.abort();controller=null;capturePending=false;sendPreparing=false;setBusy(false);}
     function setBusy(busy){$('ai-send').disabled=busy;$('ai-slide-action').disabled=busy;$('ai-stop').hidden=!busy;$('ai-save-card').disabled=busy||!lastAnswer;panel.setAttribute('aria-busy',String(busy));updateCardSelection();}
     function attach(src){pendingImage=src;$('ai-attachment').hidden=!src;$('ai-attachment').querySelector('img').src=src||'';fitQuestion();}
     function notifySlide(slide=getSlide()) {
@@ -517,9 +517,15 @@
       return blobToData(await imageBlob(slide.url,signal),signal);
     }
     async function send(question,{slide=null,image=null,fresh=false,source='文字提问'}={}) {
-      if(!ensureAccess())return;
-      if(promptStore&&!await syncPrompts()){status(promptMessage);return;}
-      if(!ensureAccess()||controller||destroyed)return;
+      const before=requestSerial;
+      if(!ensureAccess()||sendPreparing||controller||destroyed)return;
+      if(promptStore){
+        let ready=false;sendPreparing=true;setBusy(true);status('正在准备提问…');
+        try{ready=await syncPrompts();}finally{if(before===requestSerial){sendPreparing=false;setBusy(false);}}
+        if(before!==requestSerial||destroyed)return;
+        if(!ready){status(promptMessage);return;}
+      }
+      if(before!==requestSerial||!ensureAccess()||controller||destroyed)return;
       question=String(question||'').trim();if(!question && !image && !pendingImage)return;if(controller)return;if(fresh||image){clear();conversationSource=source==='文字提问'?'截图提问':source;}
       open();const currentKey=String(getApiKey()||'');if(!currentKey.trim()){status('请先登录账号，解锁 AI 讲解与截图问答。');onRequireLogin();return;}
       controller=new AbortController();const ownController=controller,signal=controller.signal,serial=++requestSerial;
@@ -686,21 +692,24 @@
       const serial=requestSerial,viewport=sourceViewport||captureViewport();
       if(gesture){const from=gesture.viewport||viewport,convert=p=>({x:Math.max(0,Math.min(viewport.w,p.x*viewport.w/from.w)),y:Math.max(0,Math.min(viewport.h,p.y*viewport.h/from.h))});gesture={...gesture,start:convert(gesture.start),end:convert(gesture.end)};}
       const layer=make('section',{id:'ai-crop',role:'dialog','aria-label':'截图与批注'});
-      layer.innerHTML='<div id="ai-crop-stage"><img id="ai-crop-image" alt="当前标签页本地截图"><div id="ai-crop-selection"></div></div><div class="ai-crop-head"><strong>拖框选择 · Esc 取消</strong><button id="ai-crop-cancel" type="button" aria-label="关闭截图" style="position:absolute;right:8px;top:6px">×</button><div class="ai-crop-actions"><select id="ai-crop-conversation" aria-label="截图添加到哪个对话" hidden></select><button id="ai-crop-draw" disabled aria-expanded="false" aria-controls="ai-crop-tools">圈画</button><button id="ai-crop-use" disabled>继续上次对话</button><button id="ai-crop-send" disabled>圈画新对话</button><button id="ai-crop-save" disabled title="保存截图和批注到自己的账号，不调用 AI">收藏</button></div><div id="ai-crop-tools" hidden><button id="ai-crop-pen" aria-pressed="true">画笔</button><button id="ai-crop-circle" aria-pressed="false">圈选</button><button id="ai-crop-undo" disabled>撤销</button><button id="ai-crop-reset">清除批注</button></div><details id="ai-clip-details" hidden><summary>添加标题 / 笔记</summary><input id="ai-clip-title" maxlength="200" aria-label="收藏标题" placeholder="收藏标题"><textarea id="ai-clip-note" maxlength="4000" aria-label="收藏笔记" placeholder="记下这一张的重点（可选）"></textarea></details><p id="ai-clip-status" role="status" aria-live="polite"></p></div>';
+      layer.innerHTML='<div id="ai-crop-stage"><img id="ai-crop-image" alt="当前标签页本地截图"><div id="ai-crop-selection"></div></div><div class="ai-crop-head"><strong>拖框选择 · Esc 取消</strong><button id="ai-crop-cancel" type="button" aria-label="关闭截图" style="position:absolute;right:8px;top:6px">×</button><div class="ai-crop-actions"><select id="ai-crop-conversation" aria-label="截图添加到哪个对话" hidden></select><button id="ai-crop-draw" disabled aria-expanded="false" aria-controls="ai-crop-tools">圈画</button><button id="ai-crop-use" disabled>继续上次对话</button><button id="ai-crop-send" disabled>新对话提问</button><div class="ai-clip-favorite"><button id="ai-crop-save" disabled title="保存截图和批注到自己的账号，不调用 AI">收藏</button><details id="ai-clip-details" hidden><summary title="可选：编辑收藏标题和备注">备注</summary><div class="ai-clip-editor"><label>标题<input id="ai-clip-title" maxlength="200" aria-label="收藏标题" placeholder="收藏标题"></label><label>备注（可选）<textarea id="ai-clip-note" maxlength="4000" aria-label="收藏笔记" placeholder="记下这张截图的重点"></textarea></label><small>随截图一起保存，可直接点击收藏。</small></div></details></div></div><div id="ai-crop-tools" hidden><button id="ai-crop-pen" aria-pressed="true">画笔</button><button id="ai-crop-circle" aria-pressed="false">圈选</button><button id="ai-crop-undo" disabled>撤销</button><button id="ai-crop-reset">清除批注</button></div><p id="ai-clip-status" role="status" aria-live="polite"></p></div>';
       shadow.append(layer);const img=layer.querySelector('img'),stage=layer.querySelector('#ai-crop-stage'),selection=layer.querySelector('#ai-crop-selection'),use=layer.querySelector('#ai-crop-use'),submit=layer.querySelector('#ai-crop-send');
       const destination=layer.querySelector('#ai-crop-conversation');
       destination.append(make('option',{value:'new',text:'新对话'}));
-      if(history.length||pendingImage||$('ai-question').value)destination.append(make('option',{value:'current',text:'继续上次对话'}));
-      else {const last=records().find(r=>r.origin===String(getCourseId()));if(last)destination.append(make('option',{value:last.id,text:'继续上次对话：'+last.title.slice(0,22)}));}
+      if(history.some(t=>t.role==='user'))destination.append(make('option',{value:'current',text:'继续上次对话'}));
+      else {const last=canUse('learning_records')&&records().find(r=>r.origin===String(getCourseId())&&getValue(conversationKey(r.id),null)?.history?.some(t=>t.role==='user'));if(last)destination.append(make('option',{value:last.id,text:'继续上次对话：'+String(last.title||'图片提问').slice(0,22)}));}
+      use.hidden=destination.options.length<2;
+      submit.title='将当前截图和圈画直接发送给 AI';use.title='将当前截图和圈画直接发送到上次对话';
       destination.value=!panel.hidden&&destination.querySelector('[value="current"]')?'current':'new';
       let start=gesture?.start||null,rect=null,canvas=null,base=null,tool='pen',active=null,strokes=[],clipBusy=false,clipId='',clipSnapshot=null;
       const captureCourse=String(getCourseId()),captureUrl=win.location.href;
       const draw=layer.querySelector('#ai-crop-draw'),favorite=layer.querySelector('#ai-crop-save'),clipStatus=layer.querySelector('#ai-clip-status');
       layer.querySelector('#ai-clip-title').value=String(getCourseTitle()||doc.title||'截图收藏').slice(0,200);
-      const clipStyle=make('style');clipStyle.textContent='#ai-crop .ai-crop-head{max-height:calc(100vh - 16px);overflow:auto;padding-top:32px}#ai-crop .ai-crop-actions{display:flex;flex-wrap:wrap;gap:6px}#ai-crop .ai-crop-actions button{flex:1;white-space:nowrap;padding:8px}#ai-crop #ai-crop-save{background:#b94e29;color:#fff}#ai-crop #ai-crop-tools[hidden],#ai-crop #ai-crop-conversation{display:none!important}#ai-crop #ai-crop-tools{margin-top:10px}#ai-clip-details{font-size:12px;margin-top:8px}#ai-clip-details input,#ai-clip-details textarea{display:block;box-sizing:border-box;width:100%;margin-top:6px;padding:8px;font:inherit}#ai-clip-note{max-height:90px}#ai-clip-status{font-size:12px;margin:8px 0 0}';layer.append(clipStyle);
+      const clipDetails=layer.querySelector('#ai-clip-details');
+      const clipStyle=make('style');clipStyle.textContent='#ai-crop .ai-crop-head{max-height:calc(100vh - 16px);overflow:auto;padding-top:32px}#ai-crop .ai-crop-actions{display:flex;flex-wrap:wrap;gap:6px}#ai-crop .ai-crop-actions button{flex:1;white-space:nowrap;padding:8px}#ai-crop #ai-crop-save{background:#b94e29;color:#fff}#ai-crop #ai-crop-tools[hidden],#ai-crop #ai-crop-conversation{display:none!important}#ai-crop #ai-crop-tools{margin-top:10px}#ai-crop .ai-clip-favorite{display:flex;flex:1;min-width:112px;align-items:center;gap:4px}#ai-crop-use[hidden]{display:none!important}#ai-clip-details{font-size:12px}#ai-clip-details summary{cursor:pointer;white-space:nowrap;padding:8px 4px;border-radius:6px}#ai-clip-details summary:hover,#ai-clip-details[open] summary{background:var(--zy-soft,#eee)}#ai-clip-details .ai-clip-editor{box-sizing:border-box;position:fixed;z-index:2;width:min(360px,calc(100vw - 16px));max-height:calc(100vh - 16px);overflow:auto;border:1px solid var(--zy-line,#ddd);border-radius:10px;padding:12px;background:var(--zy-card,#fff);color:var(--zy-text,#233954);box-shadow:0 8px 28px #0003}#ai-clip-details label{display:block;margin-bottom:8px}#ai-clip-details small{display:block;color:var(--zy-muted,#667)}#ai-clip-details input,#ai-clip-details textarea{display:block;box-sizing:border-box;width:100%;margin-top:6px;padding:8px;font:inherit}#ai-clip-note{max-height:90px}#ai-clip-status{font-size:12px;margin:8px 0 0}';layer.append(clipStyle);
       draw.onclick=()=>{const tools=layer.querySelector('#ai-crop-tools');tools.hidden=!tools.hidden;draw.setAttribute('aria-expanded',String(!tools.hidden));layoutPreview();};
       const cancel=()=>{img.onload=null;win.removeEventListener('resize',layoutPreview);doc.removeEventListener('fullscreenchange',layoutPreview);layer.remove();doc.removeEventListener('keydown',onKey,true);if(cleanupCapture===cancel)cleanupCapture=null;};cleanupCapture=cancel;
-      const onKey=e=>{if(e.key==='Escape'){e.preventDefault();e.stopImmediatePropagation();cancel();}};doc.addEventListener('keydown',onKey,true);
+      const onKey=e=>{if(e.key==='Escape'){e.preventDefault();e.stopImmediatePropagation();if(clipDetails.open)clipDetails.open=false;else cancel();}};doc.addEventListener('keydown',onKey,true);
       const point=e=>({x:Math.max(0,Math.min(viewport.w,e.clientX*viewport.w/win.innerWidth)),y:Math.max(0,Math.min(viewport.h,e.clientY*viewport.h/win.innerHeight))});
       const update=p=>{if(!start)return;rect={x:Math.min(start.x,p.x),y:Math.min(start.y,p.y),w:Math.abs(start.x-p.x),h:Math.abs(start.y-p.y)};Object.assign(selection.style,{display:'block',left:rect.x*win.innerWidth/viewport.w+'px',top:rect.y*win.innerHeight/viewport.h+'px',width:rect.w*win.innerWidth/viewport.w+'px',height:rect.h*win.innerHeight/viewport.h+'px'});};
       const redraw=()=>{if(!clipBusy)clipSnapshot=null;const ctx=canvas.getContext('2d');ctx.drawImage(base,0,0);ctx.strokeStyle='#e53935';ctx.lineWidth=Math.max(3,canvas.width/220);ctx.lineCap=ctx.lineJoin='round';for(const stroke of [...strokes,...(active?[active]:[])]){ctx.beginPath();const a=stroke.points[0],b=stroke.points.at(-1);if(stroke.tool==='circle')ctx.ellipse((a.x+b.x)/2,(a.y+b.y)/2,Math.max(1,Math.abs(a.x-b.x)/2),Math.max(1,Math.abs(a.y-b.y)/2),0,0,Math.PI*2);else{ctx.moveTo(a.x,a.y);for(const p of stroke.points)ctx.lineTo(p.x,p.y);if(stroke.points.length===1)ctx.lineTo(a.x+.1,a.y+.1);}ctx.stroke();}layer.querySelector('#ai-crop-undo').disabled=!strokes.length;};
@@ -714,8 +723,10 @@
         const toolbar=layer.querySelector('.ai-crop-head');Object.assign(toolbar.style,{bottom:'auto',right:'auto',pointerEvents:'auto'});toolbar.style.width=Math.max(1,Math.min(480,width-16))+'px';
         const toolbarHeight=toolbar.getBoundingClientRect().height;
         Object.assign(toolbar.style,{left:Math.max(8,Math.min(x,width-toolbar.offsetWidth-8))+'px',top:(y+h+toolbarHeight+16<=height?y+h+8:Math.max(8,y-toolbarHeight-8))+'px'});
+        if(clipDetails.open){const editor=clipDetails.querySelector('.ai-clip-editor'),anchor=clipDetails.getBoundingClientRect(),eh=editor.offsetHeight;Object.assign(editor.style,{left:Math.max(8,Math.min(anchor.right-editor.offsetWidth,width-editor.offsetWidth-8))+'px',top:Math.max(8,Math.min(anchor.bottom+eh+8<=height?anchor.bottom+4:anchor.top-eh-4,height-eh-8))+'px'});}
       }
       win.addEventListener('resize',layoutPreview);doc.addEventListener('fullscreenchange',layoutPreview);
+      clipDetails.addEventListener('toggle',layoutPreview);layer.addEventListener('pointerdown',e=>{if(clipDetails.open&&!clipDetails.contains(e.target))clipDetails.open=false;});
       const ready=()=>{
         if(canvas||start||!rect||rect.w<8||rect.h<8||!img.complete||!img.naturalWidth)return;
         const sx=img.naturalWidth/viewport.w,sy=img.naturalHeight/viewport.h;
@@ -744,10 +755,22 @@
       if(gesture){update(gesture.end);if(!gesture.held){start=null;ready();}}
       for(const name of ['pen','circle'])layer.querySelector('#ai-crop-'+name).onclick=()=>{tool=name;for(const n of ['pen','circle'])layer.querySelector('#ai-crop-'+n).setAttribute('aria-pressed',String(n===tool));};
       layer.querySelector('#ai-crop-undo').onclick=()=>{strokes.pop();favorite.disabled=false;favorite.textContent='收藏';redraw();};layer.querySelector('#ai-crop-reset').onclick=()=>{strokes=[];favorite.disabled=false;favorite.textContent='收藏';redraw();};
-      const choose=immediate=>{if(clipBusy)return;if(!ensureAccess())return;if(serial!==requestSerial){cancel();return;}try{if(!canvas)return;const data=canvas.toDataURL('image/jpeg',.85);if(!validImage(data))throw Error('选区过大，请选择更小区域。');const target=destination.value;cancel();if(target==='new')clear();else if(target!=='current')loadConversation(target);conversationSource='截图提问';attach(data);open();if(immediate)send($('ai-question').value.trim()||'请解释截图中的内容。');else status(target==='new'?'截图已添加到新对话，可补充问题后发送。':'截图已添加到上次对话，可补充问题后发送。');}catch(e){status(e.message||'选区读取失败，请重试。');cancel();}};
+      const choose=()=>{
+        if(clipBusy||!canvas||!ensureAccess())return;
+        if(serial!==requestSerial||captureCourse!==String(getCourseId())||captureUrl!==win.location.href){cancel();return;}
+        try{
+          const data=canvas.toDataURL('image/jpeg',.85);if(!validImage(data))throw Error('选区过大，请选择更小区域。');
+          const target=destination.value,question=target==='current'?$('ai-question').value.trim():'';
+          if(target!=='new'&&target!=='current'&&!getValue(conversationKey(target),null)?.history?.some(t=>t.role==='user')){use.hidden=true;clipStatus.textContent='上次对话已不存在，请选择新对话提问。';return;}
+          if(target!=='new'&&target!=='current'&&!ensureAccess('learning_records'))return;
+          cancel();if(target==='new')clear();else if(target!=='current')loadConversation(target);
+          conversationSource='截图提问';attach(data);open();status('正在发送截图…');
+          void send(question||(strokes.length?'请解释截图中红色圈画标注的内容。':'请解释截图中的内容。'));
+        }catch(e){status(e.message||'选区读取失败，请重试。');cancel();}
+      };
       layer.querySelector('#ai-crop-cancel').onclick=cancel;
-      use.onclick=()=>{destination.value=destination.querySelector('option[value="current"]')?'current':destination.options[1]?.value;choose(false);};
-      submit.onclick=()=>{destination.value='new';choose(false);};
+      use.onclick=()=>{destination.value=destination.querySelector('option[value="current"]')?'current':destination.options[1]?.value||'new';choose();};
+      submit.onclick=()=>{destination.value='new';choose();};
       // Collect only on an explicit click. Retries reuse the same ID and frozen payload.
 
       for(const id of ['ai-clip-title','ai-clip-note'])layer.querySelector('#'+id).addEventListener('input',()=>{if(!clipBusy){clipSnapshot=null;favorite.disabled=false;favorite.textContent='收藏';}});
@@ -773,7 +796,7 @@
           }
           clipStatus.textContent='正在保存图片和批注，仅当前账号可见…';
           await studyStore.saveClip(clipSnapshot);if(!current())return;
-          favorite.textContent='已收藏';favorite.disabled=true;
+          favorite.textContent='已收藏';favorite.disabled=true;clipDetails.open=false;
           clipStatus.replaceChildren(make('span',{text:'已保存。手机登录同一账号即可回看。 '}),make('a',{text:'打开收藏夹 ↗',href:'https://47.77.182.216.sslip.io/gateway/study#clips',target:'_blank',rel:'noopener noreferrer'}));
         }catch(error){if(!current())return;clipStatus.replaceChildren(make('span',{text:(error.status===404?'服务器尚未部署图片收藏。':error.message||'收藏失败。')+' 当前截图仍在预览中，可重试或先下载。 '}));const download=make('a',{text:'下载截图',href:clipSnapshot?.image||canvas.toDataURL('image/png'),download:'随意摘.png'});clipStatus.append(download);favorite.textContent='重试收藏';favorite.disabled=false;}
         finally{clipBusy=false;if(current()){for(const id of ['ai-clip-title','ai-clip-note','ai-crop-pen','ai-crop-circle','ai-crop-reset'])layer.querySelector('#'+id).disabled=false;layer.querySelector('#ai-crop-undo').disabled=!strokes.length;if(favorite.textContent!=='已收藏'){favorite.disabled=false;if(favorite.textContent==='收藏中…')favorite.textContent='收藏';}layoutPreview();}}
@@ -837,7 +860,7 @@
     }
 
     // Image paste belongs to the explicit AI composer, never the page fallback.
-    async function paste(event){if(event.defaultPrevented||panel.hidden||!shadow.host.isConnected||doc.visibilityState==='hidden')return;const serial=requestSerial;const file=[...(event.clipboardData?.items||[])].find(i=>i.type.startsWith('image/'))?.getAsFile();if(!file)return;if(!ensureAccess())return;event.preventDefault();try{const data=await blobToData(file);if(destroyed||serial!==requestSerial||panel.hidden||doc.visibilityState==='hidden')return;if(controller)stop();cleanupCapture?.();showCrop(data,null,true);status('截图已居中，可先圈画，再添加到对话。');}catch(e){status(e.message);}}
+    async function paste(event){if(event.defaultPrevented||panel.hidden||!shadow.host.isConnected||doc.visibilityState==='hidden')return;const serial=requestSerial;const file=[...(event.clipboardData?.items||[])].find(i=>i.type.startsWith('image/'))?.getAsFile();if(!file)return;if(!ensureAccess())return;event.preventDefault();try{const data=await blobToData(file);if(destroyed||serial!==requestSerial||panel.hidden||doc.visibilityState==='hidden')return;if(controller)stop();cleanupCapture?.();showCrop(data,null,true);status('截图已居中，可先圈画，再直接提问或收藏。');}catch(e){status(e.message);}}
     const modified=e=>e.ctrlKey||e.metaKey||e.altKey||e.shiftKey;
     const middleAllowed=e=>{const target=e.composedPath?.()[0]||e.target;return e.button===1&&settings.middleClick&&!modified(e)&&!target?.closest?.('a,input,textarea,select,[contenteditable],#ai-crop');};
     const middle=e=>{if(!middleAllowed(e))return;e.preventDefault();e.stopPropagation();startCapture(e);};

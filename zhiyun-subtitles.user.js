@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         浙大上课爽
 // @namespace    zhiyunzimu.local
-// @version      0.20.79
+// @version      0.20.83
 // @description  网课不硬扛，浙大上课爽！智云课堂同步字幕、PPT 讲解与本机缓存。
 // @match        https://*/*
 // @match        http://*/*
@@ -382,7 +382,12 @@ function voicePane(){return document.querySelector('#pane-voice')||document.quer
 function voiceContent(element,parseTime){
  return [...(element?.querySelectorAll('.trans-item')||[])].map(row=>{
   const lines=row.querySelector('.trans-lan')?.children;
-  return {element:row,start:parseTime(row.querySelector('.item-title,.item-time')?.textContent||''),original:(row.querySelector('.item-origin')?.textContent||lines?.[0]?.textContent||'').trim(),translation:(row.querySelector('[class*="item-tanslate-"]')?.textContent||lines?.[1]?.textContent||'').trim()};
+  // The shared livingroom/livingpage replay component renders the time as a
+  // sibling before the text card. Only accept that immediate time element;
+  // walking farther back would assign another caption's time to untimed rows.
+  const previous=row.previousElementSibling;
+  const time=row.querySelector('.item-title,.item-time')||(previous?.matches('.item-title,.item-time')?previous:null);
+  return {element:row,start:parseTime(time?.textContent||''),original:(row.querySelector('.item-origin')?.textContent||lines?.[0]?.textContent||'').trim(),translation:(row.querySelector('[class*="item-tanslate-"]')?.textContent||lines?.[1]?.textContent||'').trim()};
  }).filter(row=>row.original);
 }
 function voiceRows(element,parseTime){return voiceContent(element,parseTime).filter(row=>Number.isFinite(row.start)).map(({element,...row})=>row);}
@@ -790,7 +795,7 @@ function utteranceStart(utterance){
  if(Number.isFinite(utterance.start_time)&&utterance.start_time>=0)return utterance.start_time;
  const word=utterance.words?.find(word=>Number.isFinite(word.start_time)&&word.start_time>=0);return word?word.start_time:null;
 }
-function explicitUnsupported(error){return [404,405,501].includes(Number(error?.status||error?.error_status))||['stream_unsupported','speech_stream_unsupported','speech_stream_unavailable','speech_stream_disabled'].includes(error?.code||error?.error_code);}
+function explicitUnsupported(error){return [404,405,501].includes(Number(error?.status||error?.error_status))||['stream_unsupported','speech_stream_unsupported','speech_stream_disabled'].includes(error?.code||error?.error_code);}
 function createSession(options){
  if(typeof options?.transport!=='function')throw new TypeError('speech stream transport is required');
  const video=options.video,transport=options.transport,audioSource=options.audioSource||createPCMSource(video,options);
@@ -1657,7 +1662,7 @@ if(typeof module==='object'&&module.exports)module.exports={create};else root.ZY
     if(!shadow || typeof request!=='function')throw new Error('AI 助手缺少 shadow 或 request');
     const doc=shadow.ownerDocument,win=doc.defaultView;
     function ensureAccess(feature='learning'){if(canUse(feature))return true;onRequireLogin(feature);return false;}
-    let settings=settingsOf(getValue(STORAGE_KEY,DEFAULTS)),history=[],lastAnswer=null,recentSlides=[],lastSlideKey='',pendingImage=null,controller=null,destroyed=false,cleanupCapture=null,requestSerial=0,slideContextEnabled=settings.followSlides,capturePending=false,captureHideCount=0,captureHiddenElements=[];
+    let settings=settingsOf(getValue(STORAGE_KEY,DEFAULTS)),history=[],lastAnswer=null,recentSlides=[],lastSlideKey='',pendingImage=null,controller=null,destroyed=false,cleanupCapture=null,requestSerial=0,slideContextEnabled=settings.followSlides,capturePending=false,sendPreparing=false,captureHideCount=0,captureHiddenElements=[];
     let preferredPromptMode=settings.mode;
     let legacyPrompts=settings.prompts.map(p=>({...p})),legacyCustom=settings.customPrompt;
     let promptAccount='',promptEpoch=0,promptReady=false,promptCloudReady=false,promptLoading=null,promptMessage='',redrawPrompts=()=>{};
@@ -1801,7 +1806,7 @@ if(typeof module==='object'&&module.exports)module.exports={create};else root.ZY
       if(!await syncPrompts(true))throw Error('云端已保存，列表读取失败，请刷新后查看。');
     }
     function open(){if(!ensureAccess())return;questions.hidden=true;panel.hidden=false;resume.hidden=true;clampFloating(panel);badge();fitQuestion();$('ai-question').focus();persist();}
-    function collapse(){resetCardChoices();if(capturePending)stop();cleanupCapture?.();panel.hidden=true;resume.hidden=false;clampResume();persist();}
+    function collapse(){resetCardChoices();if(sendPreparing){stop();status('已取消发送，截图已保留。');}else if(capturePending)stop();cleanupCapture?.();panel.hidden=true;resume.hidden=false;clampResume();persist();}
     let sessionCourse=String(getCourseId()),conversationId='',conversationTitle='',conversationSource='文字提问',conversationCourse='',conversationOrigin='';
     const INDEX_KEY='ai-question-index-v1';
     const records=()=>{const value=getValue(INDEX_KEY,[]);return Array.isArray(value)?value:[];};
@@ -1841,7 +1846,7 @@ if(typeof module==='object'&&module.exports)module.exports={create};else root.ZY
     }
     listen($('ai-question'),'input',()=>{fitQuestion();persist();});listen(win,'pagehide',persist);
     const composeResize=new win.ResizeObserver(()=>fitQuestion());composeResize.observe(panel);cleanups.push(()=>composeResize.disconnect());
-    function stop(){if(controller){flushPendingReply?.();flushPendingReply=null;persist();}requestSerial++;controller?.abort();controller=null;capturePending=false;setBusy(false);}
+    function stop(){if(controller){flushPendingReply?.();flushPendingReply=null;persist();}requestSerial++;controller?.abort();controller=null;capturePending=false;sendPreparing=false;setBusy(false);}
     function setBusy(busy){$('ai-send').disabled=busy;$('ai-slide-action').disabled=busy;$('ai-stop').hidden=!busy;$('ai-save-card').disabled=busy||!lastAnswer;panel.setAttribute('aria-busy',String(busy));updateCardSelection();}
     function attach(src){pendingImage=src;$('ai-attachment').hidden=!src;$('ai-attachment').querySelector('img').src=src||'';fitQuestion();}
     function notifySlide(slide=getSlide()) {
@@ -1884,9 +1889,15 @@ if(typeof module==='object'&&module.exports)module.exports={create};else root.ZY
       return blobToData(await imageBlob(slide.url,signal),signal);
     }
     async function send(question,{slide=null,image=null,fresh=false,source='文字提问'}={}) {
-      if(!ensureAccess())return;
-      if(promptStore&&!await syncPrompts()){status(promptMessage);return;}
-      if(!ensureAccess()||controller||destroyed)return;
+      const before=requestSerial;
+      if(!ensureAccess()||sendPreparing||controller||destroyed)return;
+      if(promptStore){
+        let ready=false;sendPreparing=true;setBusy(true);status('正在准备提问…');
+        try{ready=await syncPrompts();}finally{if(before===requestSerial){sendPreparing=false;setBusy(false);}}
+        if(before!==requestSerial||destroyed)return;
+        if(!ready){status(promptMessage);return;}
+      }
+      if(before!==requestSerial||!ensureAccess()||controller||destroyed)return;
       question=String(question||'').trim();if(!question && !image && !pendingImage)return;if(controller)return;if(fresh||image){clear();conversationSource=source==='文字提问'?'截图提问':source;}
       open();const currentKey=String(getApiKey()||'');if(!currentKey.trim()){status('请先登录账号，解锁 AI 讲解与截图问答。');onRequireLogin();return;}
       controller=new AbortController();const ownController=controller,signal=controller.signal,serial=++requestSerial;
@@ -2053,21 +2064,24 @@ if(typeof module==='object'&&module.exports)module.exports={create};else root.ZY
       const serial=requestSerial,viewport=sourceViewport||captureViewport();
       if(gesture){const from=gesture.viewport||viewport,convert=p=>({x:Math.max(0,Math.min(viewport.w,p.x*viewport.w/from.w)),y:Math.max(0,Math.min(viewport.h,p.y*viewport.h/from.h))});gesture={...gesture,start:convert(gesture.start),end:convert(gesture.end)};}
       const layer=make('section',{id:'ai-crop',role:'dialog','aria-label':'截图与批注'});
-      layer.innerHTML='<div id="ai-crop-stage"><img id="ai-crop-image" alt="当前标签页本地截图"><div id="ai-crop-selection"></div></div><div class="ai-crop-head"><strong>拖框选择 · Esc 取消</strong><button id="ai-crop-cancel" type="button" aria-label="关闭截图" style="position:absolute;right:8px;top:6px">×</button><div class="ai-crop-actions"><select id="ai-crop-conversation" aria-label="截图添加到哪个对话" hidden></select><button id="ai-crop-draw" disabled aria-expanded="false" aria-controls="ai-crop-tools">圈画</button><button id="ai-crop-use" disabled>继续上次对话</button><button id="ai-crop-send" disabled>圈画新对话</button><button id="ai-crop-save" disabled title="保存截图和批注到自己的账号，不调用 AI">收藏</button></div><div id="ai-crop-tools" hidden><button id="ai-crop-pen" aria-pressed="true">画笔</button><button id="ai-crop-circle" aria-pressed="false">圈选</button><button id="ai-crop-undo" disabled>撤销</button><button id="ai-crop-reset">清除批注</button></div><details id="ai-clip-details" hidden><summary>添加标题 / 笔记</summary><input id="ai-clip-title" maxlength="200" aria-label="收藏标题" placeholder="收藏标题"><textarea id="ai-clip-note" maxlength="4000" aria-label="收藏笔记" placeholder="记下这一张的重点（可选）"></textarea></details><p id="ai-clip-status" role="status" aria-live="polite"></p></div>';
+      layer.innerHTML='<div id="ai-crop-stage"><img id="ai-crop-image" alt="当前标签页本地截图"><div id="ai-crop-selection"></div></div><div class="ai-crop-head"><strong>拖框选择 · Esc 取消</strong><button id="ai-crop-cancel" type="button" aria-label="关闭截图" style="position:absolute;right:8px;top:6px">×</button><div class="ai-crop-actions"><select id="ai-crop-conversation" aria-label="截图添加到哪个对话" hidden></select><button id="ai-crop-draw" disabled aria-expanded="false" aria-controls="ai-crop-tools">圈画</button><button id="ai-crop-use" disabled>继续上次对话</button><button id="ai-crop-send" disabled>新对话提问</button><div class="ai-clip-favorite"><button id="ai-crop-save" disabled title="保存截图和批注到自己的账号，不调用 AI">收藏</button><details id="ai-clip-details" hidden><summary title="可选：编辑收藏标题和备注">备注</summary><div class="ai-clip-editor"><label>标题<input id="ai-clip-title" maxlength="200" aria-label="收藏标题" placeholder="收藏标题"></label><label>备注（可选）<textarea id="ai-clip-note" maxlength="4000" aria-label="收藏笔记" placeholder="记下这张截图的重点"></textarea></label><small>随截图一起保存，可直接点击收藏。</small></div></details></div></div><div id="ai-crop-tools" hidden><button id="ai-crop-pen" aria-pressed="true">画笔</button><button id="ai-crop-circle" aria-pressed="false">圈选</button><button id="ai-crop-undo" disabled>撤销</button><button id="ai-crop-reset">清除批注</button></div><p id="ai-clip-status" role="status" aria-live="polite"></p></div>';
       shadow.append(layer);const img=layer.querySelector('img'),stage=layer.querySelector('#ai-crop-stage'),selection=layer.querySelector('#ai-crop-selection'),use=layer.querySelector('#ai-crop-use'),submit=layer.querySelector('#ai-crop-send');
       const destination=layer.querySelector('#ai-crop-conversation');
       destination.append(make('option',{value:'new',text:'新对话'}));
-      if(history.length||pendingImage||$('ai-question').value)destination.append(make('option',{value:'current',text:'继续上次对话'}));
-      else {const last=records().find(r=>r.origin===String(getCourseId()));if(last)destination.append(make('option',{value:last.id,text:'继续上次对话：'+last.title.slice(0,22)}));}
+      if(history.some(t=>t.role==='user'))destination.append(make('option',{value:'current',text:'继续上次对话'}));
+      else {const last=canUse('learning_records')&&records().find(r=>r.origin===String(getCourseId())&&getValue(conversationKey(r.id),null)?.history?.some(t=>t.role==='user'));if(last)destination.append(make('option',{value:last.id,text:'继续上次对话：'+String(last.title||'图片提问').slice(0,22)}));}
+      use.hidden=destination.options.length<2;
+      submit.title='将当前截图和圈画直接发送给 AI';use.title='将当前截图和圈画直接发送到上次对话';
       destination.value=!panel.hidden&&destination.querySelector('[value="current"]')?'current':'new';
       let start=gesture?.start||null,rect=null,canvas=null,base=null,tool='pen',active=null,strokes=[],clipBusy=false,clipId='',clipSnapshot=null;
       const captureCourse=String(getCourseId()),captureUrl=win.location.href;
       const draw=layer.querySelector('#ai-crop-draw'),favorite=layer.querySelector('#ai-crop-save'),clipStatus=layer.querySelector('#ai-clip-status');
       layer.querySelector('#ai-clip-title').value=String(getCourseTitle()||doc.title||'截图收藏').slice(0,200);
-      const clipStyle=make('style');clipStyle.textContent='#ai-crop .ai-crop-head{max-height:calc(100vh - 16px);overflow:auto;padding-top:32px}#ai-crop .ai-crop-actions{display:flex;flex-wrap:wrap;gap:6px}#ai-crop .ai-crop-actions button{flex:1;white-space:nowrap;padding:8px}#ai-crop #ai-crop-save{background:#b94e29;color:#fff}#ai-crop #ai-crop-tools[hidden],#ai-crop #ai-crop-conversation{display:none!important}#ai-crop #ai-crop-tools{margin-top:10px}#ai-clip-details{font-size:12px;margin-top:8px}#ai-clip-details input,#ai-clip-details textarea{display:block;box-sizing:border-box;width:100%;margin-top:6px;padding:8px;font:inherit}#ai-clip-note{max-height:90px}#ai-clip-status{font-size:12px;margin:8px 0 0}';layer.append(clipStyle);
+      const clipDetails=layer.querySelector('#ai-clip-details');
+      const clipStyle=make('style');clipStyle.textContent='#ai-crop .ai-crop-head{max-height:calc(100vh - 16px);overflow:auto;padding-top:32px}#ai-crop .ai-crop-actions{display:flex;flex-wrap:wrap;gap:6px}#ai-crop .ai-crop-actions button{flex:1;white-space:nowrap;padding:8px}#ai-crop #ai-crop-save{background:#b94e29;color:#fff}#ai-crop #ai-crop-tools[hidden],#ai-crop #ai-crop-conversation{display:none!important}#ai-crop #ai-crop-tools{margin-top:10px}#ai-crop .ai-clip-favorite{display:flex;flex:1;min-width:112px;align-items:center;gap:4px}#ai-crop-use[hidden]{display:none!important}#ai-clip-details{font-size:12px}#ai-clip-details summary{cursor:pointer;white-space:nowrap;padding:8px 4px;border-radius:6px}#ai-clip-details summary:hover,#ai-clip-details[open] summary{background:var(--zy-soft,#eee)}#ai-clip-details .ai-clip-editor{box-sizing:border-box;position:fixed;z-index:2;width:min(360px,calc(100vw - 16px));max-height:calc(100vh - 16px);overflow:auto;border:1px solid var(--zy-line,#ddd);border-radius:10px;padding:12px;background:var(--zy-card,#fff);color:var(--zy-text,#233954);box-shadow:0 8px 28px #0003}#ai-clip-details label{display:block;margin-bottom:8px}#ai-clip-details small{display:block;color:var(--zy-muted,#667)}#ai-clip-details input,#ai-clip-details textarea{display:block;box-sizing:border-box;width:100%;margin-top:6px;padding:8px;font:inherit}#ai-clip-note{max-height:90px}#ai-clip-status{font-size:12px;margin:8px 0 0}';layer.append(clipStyle);
       draw.onclick=()=>{const tools=layer.querySelector('#ai-crop-tools');tools.hidden=!tools.hidden;draw.setAttribute('aria-expanded',String(!tools.hidden));layoutPreview();};
       const cancel=()=>{img.onload=null;win.removeEventListener('resize',layoutPreview);doc.removeEventListener('fullscreenchange',layoutPreview);layer.remove();doc.removeEventListener('keydown',onKey,true);if(cleanupCapture===cancel)cleanupCapture=null;};cleanupCapture=cancel;
-      const onKey=e=>{if(e.key==='Escape'){e.preventDefault();e.stopImmediatePropagation();cancel();}};doc.addEventListener('keydown',onKey,true);
+      const onKey=e=>{if(e.key==='Escape'){e.preventDefault();e.stopImmediatePropagation();if(clipDetails.open)clipDetails.open=false;else cancel();}};doc.addEventListener('keydown',onKey,true);
       const point=e=>({x:Math.max(0,Math.min(viewport.w,e.clientX*viewport.w/win.innerWidth)),y:Math.max(0,Math.min(viewport.h,e.clientY*viewport.h/win.innerHeight))});
       const update=p=>{if(!start)return;rect={x:Math.min(start.x,p.x),y:Math.min(start.y,p.y),w:Math.abs(start.x-p.x),h:Math.abs(start.y-p.y)};Object.assign(selection.style,{display:'block',left:rect.x*win.innerWidth/viewport.w+'px',top:rect.y*win.innerHeight/viewport.h+'px',width:rect.w*win.innerWidth/viewport.w+'px',height:rect.h*win.innerHeight/viewport.h+'px'});};
       const redraw=()=>{if(!clipBusy)clipSnapshot=null;const ctx=canvas.getContext('2d');ctx.drawImage(base,0,0);ctx.strokeStyle='#e53935';ctx.lineWidth=Math.max(3,canvas.width/220);ctx.lineCap=ctx.lineJoin='round';for(const stroke of [...strokes,...(active?[active]:[])]){ctx.beginPath();const a=stroke.points[0],b=stroke.points.at(-1);if(stroke.tool==='circle')ctx.ellipse((a.x+b.x)/2,(a.y+b.y)/2,Math.max(1,Math.abs(a.x-b.x)/2),Math.max(1,Math.abs(a.y-b.y)/2),0,0,Math.PI*2);else{ctx.moveTo(a.x,a.y);for(const p of stroke.points)ctx.lineTo(p.x,p.y);if(stroke.points.length===1)ctx.lineTo(a.x+.1,a.y+.1);}ctx.stroke();}layer.querySelector('#ai-crop-undo').disabled=!strokes.length;};
@@ -2081,8 +2095,10 @@ if(typeof module==='object'&&module.exports)module.exports={create};else root.ZY
         const toolbar=layer.querySelector('.ai-crop-head');Object.assign(toolbar.style,{bottom:'auto',right:'auto',pointerEvents:'auto'});toolbar.style.width=Math.max(1,Math.min(480,width-16))+'px';
         const toolbarHeight=toolbar.getBoundingClientRect().height;
         Object.assign(toolbar.style,{left:Math.max(8,Math.min(x,width-toolbar.offsetWidth-8))+'px',top:(y+h+toolbarHeight+16<=height?y+h+8:Math.max(8,y-toolbarHeight-8))+'px'});
+        if(clipDetails.open){const editor=clipDetails.querySelector('.ai-clip-editor'),anchor=clipDetails.getBoundingClientRect(),eh=editor.offsetHeight;Object.assign(editor.style,{left:Math.max(8,Math.min(anchor.right-editor.offsetWidth,width-editor.offsetWidth-8))+'px',top:Math.max(8,Math.min(anchor.bottom+eh+8<=height?anchor.bottom+4:anchor.top-eh-4,height-eh-8))+'px'});}
       }
       win.addEventListener('resize',layoutPreview);doc.addEventListener('fullscreenchange',layoutPreview);
+      clipDetails.addEventListener('toggle',layoutPreview);layer.addEventListener('pointerdown',e=>{if(clipDetails.open&&!clipDetails.contains(e.target))clipDetails.open=false;});
       const ready=()=>{
         if(canvas||start||!rect||rect.w<8||rect.h<8||!img.complete||!img.naturalWidth)return;
         const sx=img.naturalWidth/viewport.w,sy=img.naturalHeight/viewport.h;
@@ -2111,10 +2127,22 @@ if(typeof module==='object'&&module.exports)module.exports={create};else root.ZY
       if(gesture){update(gesture.end);if(!gesture.held){start=null;ready();}}
       for(const name of ['pen','circle'])layer.querySelector('#ai-crop-'+name).onclick=()=>{tool=name;for(const n of ['pen','circle'])layer.querySelector('#ai-crop-'+n).setAttribute('aria-pressed',String(n===tool));};
       layer.querySelector('#ai-crop-undo').onclick=()=>{strokes.pop();favorite.disabled=false;favorite.textContent='收藏';redraw();};layer.querySelector('#ai-crop-reset').onclick=()=>{strokes=[];favorite.disabled=false;favorite.textContent='收藏';redraw();};
-      const choose=immediate=>{if(clipBusy)return;if(!ensureAccess())return;if(serial!==requestSerial){cancel();return;}try{if(!canvas)return;const data=canvas.toDataURL('image/jpeg',.85);if(!validImage(data))throw Error('选区过大，请选择更小区域。');const target=destination.value;cancel();if(target==='new')clear();else if(target!=='current')loadConversation(target);conversationSource='截图提问';attach(data);open();if(immediate)send($('ai-question').value.trim()||'请解释截图中的内容。');else status(target==='new'?'截图已添加到新对话，可补充问题后发送。':'截图已添加到上次对话，可补充问题后发送。');}catch(e){status(e.message||'选区读取失败，请重试。');cancel();}};
+      const choose=()=>{
+        if(clipBusy||!canvas||!ensureAccess())return;
+        if(serial!==requestSerial||captureCourse!==String(getCourseId())||captureUrl!==win.location.href){cancel();return;}
+        try{
+          const data=canvas.toDataURL('image/jpeg',.85);if(!validImage(data))throw Error('选区过大，请选择更小区域。');
+          const target=destination.value,question=target==='current'?$('ai-question').value.trim():'';
+          if(target!=='new'&&target!=='current'&&!getValue(conversationKey(target),null)?.history?.some(t=>t.role==='user')){use.hidden=true;clipStatus.textContent='上次对话已不存在，请选择新对话提问。';return;}
+          if(target!=='new'&&target!=='current'&&!ensureAccess('learning_records'))return;
+          cancel();if(target==='new')clear();else if(target!=='current')loadConversation(target);
+          conversationSource='截图提问';attach(data);open();status('正在发送截图…');
+          void send(question||(strokes.length?'请解释截图中红色圈画标注的内容。':'请解释截图中的内容。'));
+        }catch(e){status(e.message||'选区读取失败，请重试。');cancel();}
+      };
       layer.querySelector('#ai-crop-cancel').onclick=cancel;
-      use.onclick=()=>{destination.value=destination.querySelector('option[value="current"]')?'current':destination.options[1]?.value;choose(false);};
-      submit.onclick=()=>{destination.value='new';choose(false);};
+      use.onclick=()=>{destination.value=destination.querySelector('option[value="current"]')?'current':destination.options[1]?.value||'new';choose();};
+      submit.onclick=()=>{destination.value='new';choose();};
       // Collect only on an explicit click. Retries reuse the same ID and frozen payload.
 
       for(const id of ['ai-clip-title','ai-clip-note'])layer.querySelector('#'+id).addEventListener('input',()=>{if(!clipBusy){clipSnapshot=null;favorite.disabled=false;favorite.textContent='收藏';}});
@@ -2140,7 +2168,7 @@ if(typeof module==='object'&&module.exports)module.exports={create};else root.ZY
           }
           clipStatus.textContent='正在保存图片和批注，仅当前账号可见…';
           await studyStore.saveClip(clipSnapshot);if(!current())return;
-          favorite.textContent='已收藏';favorite.disabled=true;
+          favorite.textContent='已收藏';favorite.disabled=true;clipDetails.open=false;
           clipStatus.replaceChildren(make('span',{text:'已保存。手机登录同一账号即可回看。 '}),make('a',{text:'打开收藏夹 ↗',href:'https://47.77.182.216.sslip.io/gateway/study#clips',target:'_blank',rel:'noopener noreferrer'}));
         }catch(error){if(!current())return;clipStatus.replaceChildren(make('span',{text:(error.status===404?'服务器尚未部署图片收藏。':error.message||'收藏失败。')+' 当前截图仍在预览中，可重试或先下载。 '}));const download=make('a',{text:'下载截图',href:clipSnapshot?.image||canvas.toDataURL('image/png'),download:'随意摘.png'});clipStatus.append(download);favorite.textContent='重试收藏';favorite.disabled=false;}
         finally{clipBusy=false;if(current()){for(const id of ['ai-clip-title','ai-clip-note','ai-crop-pen','ai-crop-circle','ai-crop-reset'])layer.querySelector('#'+id).disabled=false;layer.querySelector('#ai-crop-undo').disabled=!strokes.length;if(favorite.textContent!=='已收藏'){favorite.disabled=false;if(favorite.textContent==='收藏中…')favorite.textContent='收藏';}layoutPreview();}}
@@ -2204,7 +2232,7 @@ if(typeof module==='object'&&module.exports)module.exports={create};else root.ZY
     }
 
     // Image paste belongs to the explicit AI composer, never the page fallback.
-    async function paste(event){if(event.defaultPrevented||panel.hidden||!shadow.host.isConnected||doc.visibilityState==='hidden')return;const serial=requestSerial;const file=[...(event.clipboardData?.items||[])].find(i=>i.type.startsWith('image/'))?.getAsFile();if(!file)return;if(!ensureAccess())return;event.preventDefault();try{const data=await blobToData(file);if(destroyed||serial!==requestSerial||panel.hidden||doc.visibilityState==='hidden')return;if(controller)stop();cleanupCapture?.();showCrop(data,null,true);status('截图已居中，可先圈画，再添加到对话。');}catch(e){status(e.message);}}
+    async function paste(event){if(event.defaultPrevented||panel.hidden||!shadow.host.isConnected||doc.visibilityState==='hidden')return;const serial=requestSerial;const file=[...(event.clipboardData?.items||[])].find(i=>i.type.startsWith('image/'))?.getAsFile();if(!file)return;if(!ensureAccess())return;event.preventDefault();try{const data=await blobToData(file);if(destroyed||serial!==requestSerial||panel.hidden||doc.visibilityState==='hidden')return;if(controller)stop();cleanupCapture?.();showCrop(data,null,true);status('截图已居中，可先圈画，再直接提问或收藏。');}catch(e){status(e.message);}}
     const modified=e=>e.ctrlKey||e.metaKey||e.altKey||e.shiftKey;
     const middleAllowed=e=>{const target=e.composedPath?.()[0]||e.target;return e.button===1&&settings.middleClick&&!modified(e)&&!target?.closest?.('a,input,textarea,select,[contenteditable],#ai-crop');};
     const middle=e=>{if(!middleAllowed(e))return;e.preventDefault();e.stopPropagation();startCapture(e);};
@@ -2370,10 +2398,17 @@ return{failure,create};
 (function(root,factory){const api=factory();if(typeof module==='object'&&module.exports)module.exports=api;else root.ZYGateway=api;})(globalThis,function(){
 'use strict';
 const DEFAULT_ORIGIN="https://47.77.182.216.sslip.io/gateway";
-const CLIENT_VERSION='0.20.79';
+const CLIENT_VERSION='0.20.83';
 function clientHeaders(){return {'X-Client-Version':CLIENT_VERSION,'X-Client-Channel':'userscript'};}
 const KEY='gateway-account-v1',APP='zhiyun-subtitles',CLIENT=globalThis.ZY_CLIENT_TYPE||'userscript';
 function baseURL(value){const u=new URL(String(value).trim());if(u.username||u.password||u.search||u.hash||!['/','/gateway','/gateway/'].includes(u.pathname)||(u.protocol!=='https:'&&!(u.protocol==='http:'&&['localhost','127.0.0.1'].includes(u.hostname))))throw Error('请填写 HTTPS 服务地址；本机调试可使用 http://127.0.0.1:8080');return u.origin+(u.pathname==='/'?'':'/gateway');}
+// Translate only gateway-owned error codes; upstream bodies can contain audio or credentials.
+function gatewaySpeechError(response){
+ if(response.status>=200&&response.status<300)return null;
+ let body;try{body=JSON.parse(response.responseText);}catch{return null;}
+ const messages={speech_not_configured:'语音服务尚未配置，请联系管理员。',speech_upstream_auth:'语音服务授权失败，请联系管理员检查服务权限。',speech_upstream_busy:'语音服务繁忙，请稍后重试。',speech_audio_empty:'未检测到讲课人声，请播放有声音的讲课片段后重试。',speech_audio_invalid:'语音服务无法处理本次音频，请重新播放后重试。',speech_upstream_rejected:'语音服务未接受本次识别请求，请联系管理员。',speech_upstream_unavailable:'语音服务暂时不可用，请稍后重试。',speech_upstream_response:'语音服务返回了无法确认的结果，请稍后重试。',speech_upstream_timeout:'连接语音服务超时，正在查询同一任务的结果。',speech_upstream_network:'语音服务连接中断，正在查询同一任务的结果。'};
+ return Object.prototype.hasOwnProperty.call(messages,body?.error_code)?{code:body.error_code,message:messages[body.error_code]}:null;
+}
 function accessSummary(data,now=Date.now()){
  const membership=data?.membership||{},permissions=data?.permissions||{},plan=membership.plan||'legacy';
  if(!data||plan==='free')return null;
@@ -2390,21 +2425,34 @@ function accessSummary(data,now=Date.now()){
  return {plan,trial,expired,remaining,expires,text,quota,deadline,low:!expired&&(seconds!=null&&seconds<=86400||remaining!=null&&remaining<=3)};
 }
 function create({request,getValue,setValue}){
- let refreshUI=null,changeListener=null,accessProfile=null,accessToken='',showAccount=()=>{},queueUsageRefresh=()=>{},serverOffset=0,cleanupMounted=()=>{};
+ let refreshUI=null,changeListener=null,accessProfile=null,accessToken='',accessOrigin='',accessPending=null,showAccount=()=>{},queueUsageRefresh=()=>{},serverOffset=0,cleanupMounted=()=>{};
  const account=()=>{const saved=getValue(KEY,{})||{};return{...saved,url:DEFAULT_ORIGIN||saved.url||''};};
  const configured=()=>!!account().url;
  const credential=()=>configured()?(account().token||''):'';
- function rememberAccess(data,token=credential()){if(!token||token!==credential())return false;accessProfile=data;accessToken=token;if(Number.isFinite(data.server_time))serverOffset=data.server_time*1000-Date.now();return true;}
+ function accessReady(){return !!credential()&&accessToken===credential()&&accessOrigin===baseURL(account().url)&&!!accessProfile;}
+ function rememberAccess(data,token=credential(),url=account().url){if(!token||token!==credential()||baseURL(url)!==baseURL(account().url))return false;accessProfile=data;accessToken=token;accessOrigin=baseURL(url);if(Number.isFinite(data.server_time))serverOffset=data.server_time*1000-Date.now();return true;}
+ function ensureAccess(force=false){
+  const bound=account(),origin=bound.url?baseURL(bound.url):'',token=bound.token||'';
+  if(!origin||!token)return Promise.reject(Object.assign(new Error('请先登录账号。'),{code:'login_required'}));
+  if(accessPending?.origin===origin&&accessPending.token===token)return accessPending.promise;
+  if(!force&&accessReady())return Promise.resolve(accessProfile);
+  const pending={origin,token,promise:null};accessPending=pending;
+  pending.promise=call('/v1/me',undefined,token,origin).then(data=>{
+   if(!rememberAccess(data,token,origin))throw Object.assign(new Error('学习账号已切换，请重新同步。'),{code:'account_changed'});
+   return data;
+  }).finally(()=>{if(accessPending===pending)accessPending=null;});
+  return pending.promise;
+ }
  function canUse(feature='learning'){
   if(!configured())return feature==='speech'?!!getValue('speech-credentials',{})?.apiKey:!!getValue('ark-api-key','');
-  if(!credential()||accessToken!==credential()||!accessProfile)return false;
+  if(!accessReady())return false;
   if(feature==='clips')return true;
   if(accessProfile.membership?.active===false)return false;
   const p=accessProfile.permissions||{},expiry=accessProfile.membership?.expires??p.expires;if(expiry&&expiry<=(Date.now()+serverOffset)/1000)return false;
   const key=['learning_records','card_export'].includes(feature)&&p[feature]===undefined?'learning':feature;
   return p[key]===undefined?Number(accessProfile.usage?.request_limit)>0:p[key]===true;
  }
- function statusSummary(){return accessToken===credential()&&credential()?accessSummary(accessProfile,Date.now()+serverOffset):null;}
+ function statusSummary(){return accessReady()?accessSummary(accessProfile,Date.now()+serverOffset):null;}
  function requireFeature(feature='learning'){if(canUse(feature))return true;showAccount(!credential()?'请先登录账号。':accessProfile?.membership?.state==='expired'||statusSummary()?.expired?(accessProfile?.membership?.plan==='trial'?'免费体验已结束，基础功能仍可使用。':'套餐已到期，基础功能仍可使用。'):'申请免费体验或开通 PRO / Ultra 后可使用此功能。');return false;}
  function incremental(options,a,headers){
   let stopped=false,current=null,timer=null,networkTimer=null,jobId='',raw='',lastText='';
@@ -2442,9 +2490,9 @@ function create({request,getValue,setValue}){
   const headers={...(a.token?{Authorization:'Bearer '+a.token}:{}),'Content-Type':'application/json','X-App-Id':APP,'X-Client-Type':CLIENT,...clientHeaders()};
   for(const [k,v] of Object.entries(options.headers||{}))if(k.toLowerCase()==='x-api-request-id')headers['X-Api-Request-Id']=v;
   if(path==='/v1/ark/responses'&&options.responseType==='stream')return incremental(options,a,headers);
-  return request({...options,url:baseURL(a.url)+path,headers,anonymous:true,onload:r=>{if(r.status===401&&a.token&&a.token===credential()){setValue(KEY,{url:a.url,token:''});refreshUI?.();changeListener?.();}if(path==='/v1/ark/responses'||path==='/v1/speech/submit')queueUsageRefresh();options.onload?.(r);}});
+  return request({...options,url:baseURL(a.url)+path,headers,anonymous:true,onload:r=>{if(r.status===401&&a.token&&a.token===credential()){setValue(KEY,{url:a.url,token:''});refreshUI?.();changeListener?.();}if(path==='/v1/ark/responses'||path==='/v1/speech/submit')queueUsageRefresh();if(path.startsWith('/v1/speech/')){const error=gatewaySpeechError(r);if(error)r={...r,gatewaySpeechError:error};}options.onload?.(r);}});
  }
- function streamSupported(){return configured()&&!!credential()&&accessToken===credential()&&accessProfile?.capabilities?.speech_stream===true&&canUse('speech');}
+ function streamSupported(){return accessReady()&&accessProfile?.capabilities?.speech_stream===true&&canUse('speech');}
  function bindSpeechStreamTransport(){
   const bound=account(),origin=bound.url?baseURL(bound.url):'',token=bound.token||'';
   const sameAccount=()=>!!origin&&!!token&&credential()===token&&configured()&&baseURL(account().url)===origin;
@@ -2512,7 +2560,7 @@ function create({request,getValue,setValue}){
 @media(max-width:600px){#gateway-account{padding:4px 0!important}#gateway-account .account-head{gap:10px}#gateway-avatar{width:46px;height:46px;border-radius:13px}#gateway-avatar img{width:34px;height:34px}#gateway-account #gateway-name{font-size:20px}#gateway-account #gateway-intro{font-size:12px;margin-bottom:24px}#gateway-account #gateway-quota{gap:7px}#gateway-account .quota-row{padding:12px 8px}#gateway-account .quota-ring strong{font-size:21px}#gateway-account .quota-label{font-size:10px}#gateway-account .account-login-help{align-items:flex-start;flex-wrap:wrap}#gateway-plan-badge{padding:4px 6px;font-size:9px}#gateway-basic-note{margin-top:20px;padding-top:18px}}
 `;shadow.append(style);for(const child of target.children)child.hidden=true;target.prepend(box);
   const entry=document.createElement('div');entry.id='account-entry';entry.innerHTML='<p id="account-guide"></p><button id="account-open">去登录</button>';const heading=shadow.querySelector('#panel-head > div');if(heading){heading.classList.add('account-title');heading.append(entry);}else (shadow.getElementById('panel-head')||shadow.getElementById('panel-body')).append(entry);
-  const openAccount=(message='')=>{if(openSettings)openSettings('connection');else{shadow.getElementById('settings-tab-connection')?.click();shadow.getElementById('settings-dialog').hidden=false;}if(message)$('gateway-status').textContent=message;(credential()?$('gateway-usage'):$('gateway-email')).focus();};showAccount=openAccount;$('account-open').onclick=()=>openAccount();shadow.addEventListener('click',e=>{const button=e.composedPath().find(n=>n?.dataset?.loginRequired==='true'||n?.dataset?.featureBlocked==='true');if(button&&!canUse(button.dataset.gatewayFeature||'learning')){e.preventDefault();e.stopImmediatePropagation();requireFeature(button.dataset.gatewayFeature||'learning');}},true);
+  const openAccount=(message='')=>{if(openSettings)openSettings('connection');else{shadow.getElementById('settings-tab-connection')?.click();shadow.getElementById('settings-dialog').hidden=false;}if(message)$('gateway-status').textContent=message;(credential()?$('gateway-usage'):$('gateway-email')).focus();};showAccount=openAccount;$('account-open').onclick=()=>openAccount();shadow.addEventListener('click',e=>{const button=e.composedPath().find(n=>n?.dataset?.loginRequired==='true'||n?.dataset?.featureBlocked==='true');if(button&&button.id!=='sync-toggle'&&!canUse(button.dataset.gatewayFeature||'learning')){e.preventDefault();e.stopImmediatePropagation();requireFeature(button.dataset.gatewayFeature||'learning');}},true);
   let busy=false,profile='',usageData=null,permissions=null,previousAccess=false;
   let noteReturn=null;const contact=button=>{noteReturn=button;$('gateway-recharge-note').hidden=false;$('gateway-recharge-close').focus();};
   $('gateway-recharge-close').onclick=()=>{$('gateway-recharge-note').hidden=true;noteReturn?.focus();};
@@ -2533,9 +2581,9 @@ function create({request,getValue,setValue}){
     quota.append(row);
    }
   };
-  const refresh=()=>{const signed=!!credential(),membership=accessToken===credential()?accessProfile?.membership:null,ready=accessToken===credential()&&!!accessProfile,paid=canUse('learning');if($('compact'))$('compact').textContent=signed?'🐥 上课爽':'🐥 上课爽 · 去登录';$('gateway-login-form').hidden=signed;$('gateway-member').hidden=!signed;$('gateway-name').textContent=signed?(profile||'我的学习账号'):'登录，继续你的学习';$('gateway-quota-section').hidden=!signed;$('gateway-basic-note').hidden=signed;$('gateway-intro').hidden=signed;$('gateway-state').textContent=!signed?'基础功能免登录可以使用':!ready?'已登录 · 正在读取套餐':membership?.state==='expired'||statusSummary()?.expired?(membership?.plan==='trial'?'已登录 · 免费体验已结束':'已登录 · 套餐已到期'):paid?'已登录 · '+({trial:'免费体验',pro:'PRO',ultra:'Ultra'}[membership?.plan]||'原有授权'):'已登录 · 免费账号（未充值）';$('gateway-avatar').replaceChildren();if(signed)$('gateway-avatar').textContent=(profile||'我').slice(0,1);else if(typeof ZY_STUDY_MASCOT!=='undefined'){const logo=document.createElement('img');logo.alt='';logo.src=ZY_STUDY_MASCOT;$('gateway-avatar').append(logo);}else $('gateway-avatar').textContent='爽';const summary=statusSummary();$('gateway-membership').hidden=!signed||!summary;if(summary){$('gateway-membership-title').textContent=summary.trial?'免费体验资格':'账号有效期';$('gateway-membership-value').textContent=summary.text;$('gateway-membership-deadline').textContent=summary.deadline;$('gateway-membership').dataset.ended=String(summary.expired);}$('gateway-plan-badge').hidden=!signed||!ready;$('gateway-plan-badge').textContent=summary?.trial?'免费体验':({pro:'PRO',ultra:'Ultra'}[membership?.plan]||(paid?'已开通':'基础免费'));$('account-guide').textContent=summary?.trial?summary.text:signed?'● 已登录':'○ 游客';$('account-guide').title=summary?[summary.quota,summary.deadline].join(' · '):'';$('account-open').textContent=signed?'账号':'登录';for(const id of ['ai-open','ai-capture','slide-explain','transcript-open','web-ask','web-page-ask']){const b=$(id);if(b){b.dataset.loginRequired=String(!signed);b.title=signed?'':'登录后使用；点击查看账号';b.setAttribute('aria-disabled',String(!signed));}}if(!signed){usageData=null;permissions=null;}for(const id of ['ai-open','ai-capture','slide-explain','transcript-open','web-ask','web-page-ask','sync-toggle']){const b=$(id),feature=['ai-capture','web-page-ask'].includes(id)?'clips':id==='sync-toggle'?'speech':id==='transcript-open'?'learning_records':'learning';if(b){b.dataset.gatewayFeature=feature;b.dataset.loginRequired=String(!signed);b.dataset.featureBlocked=String(signed&&!canUse(feature));b.setAttribute('aria-disabled',String(!canUse(feature)));b.title=!signed?'登录后使用体验资格或套餐':!canUse(feature)?'申请体验或开通套餐后使用':'';}}renderQuota();const both=$('mode')?.querySelector('[value="both"]');if(both){both.textContent=signed&&!canUse('translation')?'中外对照（需开通套餐）':'中外对照';both.disabled=false;}previousAccess=canUse('learning');shadow.dispatchEvent(new CustomEvent('zy-account-state'));};refreshUI=refresh;
+  const refresh=()=>{const signed=!!credential(),membership=accessToken===credential()?accessProfile?.membership:null,ready=accessToken===credential()&&!!accessProfile,paid=canUse('learning');if($('compact'))$('compact').textContent=signed?'🐥 上课爽':'🐥 上课爽 · 去登录';$('gateway-login-form').hidden=signed;$('gateway-member').hidden=!signed;$('gateway-name').textContent=signed?(profile||'我的学习账号'):'登录，继续你的学习';$('gateway-quota-section').hidden=!signed;$('gateway-basic-note').hidden=signed;$('gateway-intro').hidden=signed;$('gateway-state').textContent=!signed?'基础功能免登录可以使用':!ready?'已登录 · 正在读取套餐':membership?.state==='expired'||statusSummary()?.expired?(membership?.plan==='trial'?'已登录 · 免费体验已结束':'已登录 · 套餐已到期'):paid?'已登录 · '+({trial:'免费体验',pro:'PRO',ultra:'Ultra'}[membership?.plan]||'原有授权'):'已登录 · 免费账号（未充值）';$('gateway-avatar').replaceChildren();if(signed)$('gateway-avatar').textContent=(profile||'我').slice(0,1);else if(typeof ZY_STUDY_MASCOT!=='undefined'){const logo=document.createElement('img');logo.alt='';logo.src=ZY_STUDY_MASCOT;$('gateway-avatar').append(logo);}else $('gateway-avatar').textContent='爽';const summary=statusSummary();$('gateway-membership').hidden=!signed||!summary;if(summary){$('gateway-membership-title').textContent=summary.trial?'免费体验资格':'账号有效期';$('gateway-membership-value').textContent=summary.text;$('gateway-membership-deadline').textContent=summary.deadline;$('gateway-membership').dataset.ended=String(summary.expired);}$('gateway-plan-badge').hidden=!signed||!ready;$('gateway-plan-badge').textContent=summary?.trial?'免费体验':({pro:'PRO',ultra:'Ultra'}[membership?.plan]||(paid?'已开通':'基础免费'));$('account-guide').textContent=summary?.trial?summary.text:signed?'● 已登录':'○ 游客';$('account-guide').title=summary?[summary.quota,summary.deadline].join(' · '):'';$('account-open').textContent=signed?'账号':'登录';for(const id of ['ai-open','ai-capture','slide-explain','transcript-open','web-ask','web-page-ask']){const b=$(id);if(b){b.dataset.loginRequired=String(!signed);b.title=signed?'':'登录后使用；点击查看账号';b.setAttribute('aria-disabled',String(!signed));}}if(!signed){usageData=null;permissions=null;}for(const id of ['ai-open','ai-capture','slide-explain','transcript-open','web-ask','web-page-ask','sync-toggle']){const b=$(id),feature=['ai-capture','web-page-ask'].includes(id)?'clips':id==='sync-toggle'?'speech':id==='transcript-open'?'learning_records':'learning';if(b){const preparing=feature==='speech'&&signed&&!accessReady();b.dataset.gatewayFeature=feature;b.dataset.loginRequired=String(!signed);b.dataset.featureBlocked=String(signed&&!canUse(feature)&&!preparing);b.setAttribute('aria-disabled',String(!canUse(feature)&&!preparing));b.title=preparing?'点击后等待账号与语音服务就绪':!signed?'登录后使用体验资格或套餐':!canUse(feature)?'申请体验或开通套餐后使用':'';}}renderQuota();const both=$('mode')?.querySelector('[value="both"]');if(both){both.textContent=signed&&!canUse('translation')?'中外对照（需开通套餐）':'中外对照';both.disabled=false;}previousAccess=canUse('learning');shadow.dispatchEvent(new CustomEvent('zy-account-state'));};refreshUI=refresh;
   const run=async(fn)=>{if(busy)return;busy=true;box.querySelectorAll('button').forEach(b=>b.disabled=true);try{await fn();}catch(e){$('gateway-status').dataset.error='true';$('gateway-status').textContent=e.message;}finally{busy=false;box.querySelectorAll('button').forEach(b=>b.disabled=false);refresh();}};
-  const usage=async()=>{const previous=JSON.stringify([accessToken,accessProfile?.permissions,accessProfile?.membership]),token=credential(),data=await call('/v1/me');if(!rememberAccess(data,token))return;permissions=data.permissions||null;profile=data.username||data.email||'我的学习账号';const u=data.usage;usageData=u; $('gateway-status').dataset.error='false';$('gateway-status').textContent='额度已更新';refresh();if(previous!==JSON.stringify([accessToken,accessProfile?.permissions,accessProfile?.membership]))onChange();};
+  const usage=async()=>{const initial=!accessReady(),previous=JSON.stringify([accessToken,accessProfile?.permissions,accessProfile?.membership]),token=credential(),origin=account().url,data=await ensureAccess(true);if(!rememberAccess(data,token,origin))return;permissions=data.permissions||null;profile=data.username||data.email||'我的学习账号';const u=data.usage;usageData=u; $('gateway-status').dataset.error='false';$('gateway-status').textContent='额度已更新';refresh();if(previous!==JSON.stringify([accessToken,accessProfile?.permissions,accessProfile?.membership]))onChange({initial});};
   $('gateway-login-form').onsubmit=e=>{e.preventDefault();run(async()=>{if(!configured())throw Error('服务尚未配置，请联系管理员更新插件。');$('gateway-status').dataset.error='false';$('gateway-status').textContent='正在登录…';await login(account().url,$('gateway-email').value,$('gateway-password').value);$('gateway-password').value='';$('gateway-password').type='password';$('gateway-password-toggle').textContent='显示';$('gateway-password-toggle').setAttribute('aria-pressed','false');$('gateway-password-toggle').setAttribute('aria-label','显示密码');profile=$('gateway-email').value;$('gateway-status').textContent='登录成功，正在读取权限和额度';onChange();refresh();heartbeat();await usage();});};
   $('gateway-usage').onclick=()=>run(usage);$('gateway-logout').onclick=()=>run(async()=>{try{await logout();}finally{profile='';usageData=null;permissions=null;$('gateway-password').value='';$('gateway-status').textContent='已退出登录，原文字幕、手动同步和缓存仍可使用。';onChange();}});
   let quotaTimer=null,lastQuotaRefresh=0;queueUsageRefresh=()=>{if(!credential()||quotaTimer)return;quotaTimer=setTimeout(()=>{quotaTimer=null;lastQuotaRefresh=Date.now();if(credential())usage().catch(()=>{});},Math.max(700,5000-(Date.now()-lastQuotaRefresh)));};
@@ -2632,7 +2680,7 @@ function create({request,getValue,setValue}){
 
  }
 
- return{speechStream:{supported:streamSupported,bindTransport:bindSpeechStreamTransport},study:{account:credential,save:body=>call('/v1/study/conversations',body),saveClip:body=>call('/v1/study/clips',body)},prompts:{account:credential,list:()=>call('/v1/prompts'),save:body=>call('/v1/prompts/save',body),remove:body=>call('/v1/prompts/delete',body)},transport,configured,credential,login,logout,call,mount,destroy:()=>cleanupMounted(),canUse,requireFeature,statusSummary,openAccount:(message='')=>showAccount(message),features:()=>({webSearch:!configured()||getValue('gateway-capabilities-v1',{}).web_search===true})};
+ return{speechStream:{supported:streamSupported,bindTransport:bindSpeechStreamTransport},study:{account:credential,save:body=>call('/v1/study/conversations',body),saveClip:body=>call('/v1/study/clips',body)},prompts:{account:credential,list:()=>call('/v1/prompts'),save:body=>call('/v1/prompts/save',body),remove:body=>call('/v1/prompts/delete',body)},transport,configured,credential,login,logout,call,ensureAccess,mount,destroy:()=>cleanupMounted(),canUse,requireFeature,statusSummary,openAccount:(message='')=>showAccount(message),features:()=>({webSearch:!configured()||getValue('gateway-capabilities-v1',{}).web_search===true})};
 }
 return{create,baseURL,accessSummary};
 });
@@ -2765,10 +2813,14 @@ const ZY_ONBOARDING_ARTWORK="data:image/webp;base64,UklGRvzlBwBXRUJQVlA4WAoAAAAw
   function matchSpeech(utterances, cues, start) {
     return ZYSpeechAlignment.match(utterances,cues,start);
   }
+  function speechResponseError(response,fallback){
+    const safe=response.gatewaySpeechError;
+    return Object.assign(new Error(safe?.message||fallback),{code:safe?.code||(response.status>=500?'speech_server':''),status:response.status});
+  }
   function speechResult(response) {
     const match=String(response.responseHeaders || '').match(/^x-api-status-code:\s*(\d+)/im);
     if(response.status!==200 || match?.[1]!=='20000000') {
-      throw new Error(`语音识别失败（HTTP ${response.status}，状态 ${match?.[1] || '未知'}），请检查 API Key 和 volc.seedasr.auc 权限。`);
+      throw speechResponseError(response,`语音识别失败（HTTP ${response.status}，状态 ${match?.[1] || '未知'}），请检查 API Key 和 volc.seedasr.auc 权限。`);
     }
     const body=JSON.parse(response.responseText);
     if(!Array.isArray(body.result?.utterances)) throw new Error('语音接口没有返回带时间的语句，未修改偏移。');
@@ -2778,14 +2830,12 @@ const ZY_ONBOARDING_ARTWORK="data:image/webp;base64,UklGRvzlBwBXRUJQVlA4WAoAAAAw
     const began=Date.now(),deadline=began+120000;
     const headers = {'x-api-key':apiKey,'X-Api-Resource-Id':'volc.seedasr.auc','X-Api-Request-Id':requestId,'X-Api-Sequence':'-1','Content-Type':'application/json'};
     const check = () => { if(cancelled()) throw new Error('校准已取消'); };
-    const transient = error => ['speech_timeout','speech_network','speech_server'].includes(error?.code);
+    const transient = error => ['speech_timeout','speech_network','speech_server','speech_upstream_timeout','speech_upstream_network','speech_upstream_unavailable','speech_upstream_response'].includes(error?.code);
     const status = response => {
       const code=String(response.responseHeaders || '').match(/^x-api-status-code:\s*(\d+)/im)?.[1];
       if(response.status!==200 || !['20000000','20000001','20000002'].includes(code)) {
         // Only expose service status; response bodies may echo credentials or audio.
-        const error=new Error(`标准版识别失败（HTTP ${response.status}，状态 ${code || '未知'}）。请检查语音服务权限及音频输入是否支持。`);
-        if(response.status>=500)error.code='speech_server';
-        throw error;
+        throw speechResponseError(response,`标准版识别失败（HTTP ${response.status}，状态 ${code || '未知'}）。请检查语音服务权限及音频输入是否支持。`);
       }
       return code;
     };
@@ -3202,7 +3252,7 @@ const ZY_ONBOARDING_ARTWORK="data:image/webp;base64,UklGRvzlBwBXRUJQVlA4WAoAAAAw
   const $ = id => shadow.getElementById(id);
   const studyUI=ZYStudyUI.mount({shadow,mascot:ZY_STUDY_MASCOT});
   const gateway=ZYGateway.create({request:GM_xmlhttpRequest,getValue:GM_getValue,setValue:GM_setValue});
-  gateway.mount(shadow,()=>{stopTranslation('账号连接已更新，请重新选择中外对照');cancelAlignment?.();learning?.refreshAccess();updateKeyBadges();},name=>studyUI.open(name));
+  gateway.mount(shadow,(change={})=>{if(!change.initial){stopTranslation('账号连接已更新，请重新选择中外对照');cancelAlignment?.();}learning?.refreshAccess();updateKeyBadges();},name=>studyUI.open(name));
   let learning=null;
   let editingLayout=false, videoManuallyPlaced=false;
   function updateKeyBadges() {
@@ -3278,7 +3328,25 @@ const ZY_ONBOARDING_ARTWORK="data:image/webp;base64,UklGRvzlBwBXRUJQVlA4WAoAAAAw
   async function runAlignment(periodic = false) {
     if (cancelAlignment) { if (!periodic) cancelAlignment(); return; }
     if(ZYClassroomMedia.isLive(mainVideo)){ $('align-status').textContent='直播字幕跟随课堂实时推送，无需按回放时间校准。'; return; }
-    if(gateway.configured()&&!gateway.canUse('speech')){if(!periodic)gateway.requireFeature('speech');return;}
+    if(gateway.configured()){
+      if(!gateway.credential()){if(!periodic)gateway.requireFeature('speech');return;}
+      // The saved login exists before /v1/me returns. Keep the original click
+      // pending until permissions and stream capability belong to this account.
+      const preparingVideo=mainVideo,preparingCourse=courseIdentity(location.hash),preparingToken=gateway.credential();
+      let preparationCancelled=false,releasePreparation;
+      const cancelPreparation=()=>{preparationCancelled=true;releasePreparation?.();$('align-status').textContent='校准已取消，未修改偏移。';};
+      const stillPreparing=()=>!preparationCancelled&&mainVideo===preparingVideo&&courseIdentity(location.hash)===preparingCourse&&gateway.credential()===preparingToken;
+      cancelAlignment=cancelPreparation;$('auto-align').textContent='停止匹配';
+      if($('sync-result')){$('sync-result').dataset.available='true';if(!periodic||$('study-sync')?.open)$('sync-result').hidden=false;}
+      stopTranscript(true);$('align-label').textContent='';$('align-attempts')?.replaceChildren();
+      $('align-status').textContent='正在确认语音服务与账号权限…';
+      try{
+        await Promise.race([gateway.ensureAccess(),new Promise(resolve=>{releasePreparation=resolve;})]);
+        if(!stillPreparing())return;
+        if(!gateway.canUse('speech')){if(!periodic)gateway.requireFeature('speech');$('align-status').textContent='当前账号尚未开通语音同步，请查看账号权限。';return;}
+      }catch(error){if(stillPreparing())$('align-status').textContent='暂时无法确认语音服务：'+(error.message||'连接失败')+'；未提交语音，可重试。';return;}
+      finally{if(cancelAlignment===cancelPreparation){cancelAlignment=null;$('auto-align').textContent='开始匹配';}}
+    }
 
     const video = mainVideo, credentials = gateway.configured()?{apiKey:gateway.credential()}:GM_getValue('speech-credentials', null);
     if(periodic&&video?.paused)return;
@@ -4429,7 +4497,7 @@ const ZY_ONBOARDING_ARTWORK="data:image/webp;base64,UklGRvzlBwBXRUJQVlA4WAoAAAAw
   }
   function updateSourceStatus() {
     const live=ZYClassroomMedia.isLive(mainVideo),line=mainVideo?ZYClassroomMedia.timeline(mainVideo):null;
-    const captionText=live?(liveRows.length?'实时字幕：已读取 '+liveRows.length+' 条，跟随课堂推送。':'实时字幕：尚未读取到，等待课堂推送或打开右侧字幕。'):(cues.length?'字幕：已读取 '+cues.length+' 条带时间字幕。':'字幕：尚未读取到，请打开课堂右侧字幕后重试。');
+    const captionText=live?(liveRows.length?'实时字幕：已读取 '+liveRows.length+' 条，跟随课堂推送。':'实时字幕：尚未读取到，等待课堂推送或打开右侧字幕。'):(cues.length?'字幕：已读取 '+cues.length+' 条带时间字幕。':'字幕：尚未读取到，请打开课堂“语音识别”列表后重试。');
     const caption=$('classroom-caption-source'),ppt=$('classroom-ppt-source');
     const paused=live&&mainVideo?.paused,behind=live&&line.ranges.length&&line.end-mainVideo.currentTime>5;
     const message=captionText+(behind?' 回看期间不叠加当前实时字幕。':paused?' 已暂停字幕跟随。':'');
@@ -4574,7 +4642,7 @@ const ZY_ONBOARDING_ARTWORK="data:image/webp;base64,UklGRvzlBwBXRUJQVlA4WAoAAAAw
   $('export').addEventListener('click', () => {
     refresh();
     if(ZYClassroomMedia.isLive(mainVideo)){ $('status').textContent='直播字幕没有可核实的回放时间，暂不导出 SRT。';studyUI.feedback?.($('status').textContent);return; }
-    if (!cues.length) { $('status').textContent = '还没有读取到字幕，请先打开右侧语音识别。'; return; }
+    if (!cues.length) { $('status').textContent = '还没有读取到字幕，请先打开课堂“语音识别”列表。'; return; }
     const exported = cues.map(cue => $('mode').value === 'original' ? { ...cue, translation: '' } : translatedCue(cue));
     const blob = new Blob(['\ufeff' + srt(exported, value('offset', 0, -3600, 3600), syncAnchors)], { type: 'text/plain;charset=utf-8' });
     const url = URL.createObjectURL(blob);
@@ -4652,10 +4720,13 @@ const ZY_ONBOARDING_ARTWORK="data:image/webp;base64,UklGRvzlBwBXRUJQVlA4WAoAAAAw
     if (selected) {
       const r = layoutMode==='focus' && !$('slides').hidden ? $('slides').getBoundingClientRect() : selected.rect;
       const layout = captionLayout(r, innerWidth, below, value('bottom', 60, 0, 300));
-      if (below && layoutMode!=='focus') reserveBand(selected.video, layout.band);else if(layoutMode==='focus') releaseVideo();
+      // Chromium lays out and hit-tests native controls inside the video's content box.
+      // Keep that box intact during loading and native playback; captions sit above its controls.
+      if (below && layoutMode!=='focus' && !selected.video.controls && !live) reserveBand(selected.video, layout.band);
+      else releaseVideo();
       Object.assign($('caption').style, {
         left: ($('caption-custom').checked?value('caption-x',layout.left,-innerWidth,innerWidth):layout.left) + 'px', width: ($('caption-custom').checked?value('caption-w',layout.width,160,innerWidth*2):layout.width) + 'px',
-        top: ($('caption-custom').checked?value('caption-y',r.bottom,0,innerHeight*2):layoutMode==='focus'?Math.min(innerHeight-12,r.bottom+110):below?r.bottom-64:Math.min(layout.top,r.bottom-64)) + 'px', transform: 'translateY(-100%)', maxHeight: Math.max(24,r.height-80) + 'px',
+        top: ($('caption-custom').checked?value('caption-y',r.bottom,0,innerHeight*2):layoutMode==='focus'?Math.min(innerHeight-12,r.bottom+110):below?r.bottom-(selected.video.controls||live?80:64):Math.min(layout.top,r.bottom-64)) + 'px', transform: 'translateY(-100%)', maxHeight: Math.max(24,r.height-80) + 'px',
         fontSize: value('size', 26, 14, 48) + 'px'
       });
       // Fit long bilingual lines without a scrollbar; keep all pointer input available to the player.

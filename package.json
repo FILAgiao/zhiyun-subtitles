@@ -1,12 +1,12 @@
 {
   "name": "zhiyun-subtitles",
-  "version": "0.20.79",
+  "version": "0.20.83",
   "private": true,
   "description": "浙大上课爽：网课不硬扛，浙大上课爽！同步字幕、PPT 讲解与本机缓存。",
   "scripts": {
     "test": "node --test subtitle.test.cjs translation-sync.test.cjs cache-close.test.cjs ai-learning.test.cjs translation-reliability.test.cjs speech-alignment.test.cjs speech-stream.test.cjs",
     "test:sync:button": "node sync-button-ui.test.cjs && node sync-button-ui.test.cjs --extension",
-    "test:speech": "node --test subtitle.test.cjs speech-alignment.test.cjs speech-stream.test.cjs gateway-client.test.cjs && python -m unittest backend.test_speech_stream && node speech-sync-ui.test.cjs && node speech-sync-ui.test.cjs --extension",
+    "test:speech": "node --test subtitle.test.cjs speech-alignment.test.cjs speech-stream.test.cjs gateway-client.test.cjs && python -m unittest backend.test_speech_stream backend.test_speech_handshake backend.test_speech_http && node speech-sync-ui.test.cjs && node speech-sync-ui.test.cjs --extension",
     "test:ui": "node ui.test.cjs && node playback-ui.test.cjs && node player-edge-ui.test.cjs && node translation-sync-ui.test.cjs && node course-route-ui.test.cjs && node ai-learning-ui.test.cjs && node simple-ui.test.cjs && node question-history-ui.test.cjs && node ppt-thumbnails-ui.test.cjs && node ppt-sync-ui.test.cjs",
     "build:stream": "node build-stream.cjs",
     "test:media": "node generate-test-media.cjs",
@@ -36,12 +36,12 @@
     "test:translation": "node --test translation-reliability.test.cjs translation-sync.test.cjs && node translation-reliability-ui.test.cjs",
     "test:extension": "node --test extension.test.cjs extension-bridge.test.cjs && node extension-ui.test.cjs && node extension-screenshot-ui.test.cjs && node extension-focus-ui.test.cjs && node paste-scope-ui.test.cjs --extension",
     "test:live": "node live-classroom-ui.test.cjs && node live-extension-ui.test.cjs && node live-native-controls-ui.test.cjs && node live-resource-retry-ui.test.cjs",
-    "test:livingroom": "node livingpage-ui.test.cjs --livingroom && node livingpage-ui.test.cjs --livingroom --extension",
-    "test:livingpage": "node livingpage-ui.test.cjs && node livingpage-ui.test.cjs --extension",
+    "test:livingroom": "node classroom-caption-dom.test.cjs && node livingpage-ui.test.cjs --livingroom && node livingpage-ui.test.cjs --livingroom --extension && node livingpage-ui.test.cjs --livingroom --sibling-time && node livingpage-ui.test.cjs --livingroom --sibling-time --extension",
+    "test:livingpage": "node livingpage-ui.test.cjs && node livingpage-ui.test.cjs --extension && node livingpage-ui.test.cjs --sibling-time && node livingpage-ui.test.cjs --sibling-time --extension",
     "test:interfaces": "node interface-compat-ui.test.cjs && node interface-compat-ui.test.cjs --extension",
     "test:fullscreen": "node classroom-fullscreen-ui.test.cjs",
     "test:paste": "node paste-scope-ui.test.cjs && node paste-scope-ui.test.cjs --extension",
-    "test:screenshot": "node native-capture-policy-ui.test.cjs && node classroom-screenshot-ui.test.cjs && node classroom-ppt-integration-ui.test.cjs && node ppt-image-ui.test.cjs && node screenshot-gesture-ui.test.cjs && node screenshot-session-ui.test.cjs && node screenshot-repeat-ui.test.cjs && node ai-actions-ui.test.cjs",
+    "test:screenshot": "node screenshot-actions-ui.test.cjs && node native-capture-policy-ui.test.cjs && node classroom-screenshot-ui.test.cjs && node classroom-ppt-integration-ui.test.cjs && node ppt-image-ui.test.cjs && node screenshot-gesture-ui.test.cjs && node screenshot-session-ui.test.cjs && node screenshot-repeat-ui.test.cjs && node ai-actions-ui.test.cjs",
     "test:ai:scroll": "node ai-stream-scroll-ui.test.cjs",
     "test:ai:layout": "node ai-conversation-layout-ui.test.cjs",
     "test:selection": "node selection-lifecycle-ui.test.cjs",
@@ -57,7 +57,9 @@
     "build:speech:release": "node build-userscript.cjs && node build-extension.cjs && node build-speech-release.cjs",
     "test:speech:source": "node speech-stream-native-smoke.test.cjs",
     "test:studentsrs": "node studentsrs-ui.test.cjs && node studentsrs-ui.test.cjs --extension",
-    "test:clips": "python -m unittest backend.test_clips -q && node clips-ui.test.cjs"
+    "test:clips": "python -m unittest backend.test_clips -q && node clips-ui.test.cjs",
+    "test:caption:dom": "node classroom-caption-dom.test.cjs",
+    "test:player:loading": "node player-loading-ui.test.cjs && node player-loading-ui.test.cjs --extension"
   },
   "engines": {
     "node": ">=20.8"

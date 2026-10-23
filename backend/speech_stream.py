@@ -102,8 +102,15 @@ class OfficialWebSocket:
         self.closed = False
         self.fragments = bytearray()
         self.fragmented = False
-        connection = socket.create_connection((HOST, 443), timeout=6)
+        deadline = time.monotonic() + 8
+        def remaining():
+            value = deadline - time.monotonic()
+            if value <= 0:
+                raise TimeoutError('websocket handshake deadline')
+            return value
+        connection = socket.create_connection((HOST, 443), timeout=remaining())
         try:
+            connection.settimeout(remaining())
             self.socket = ssl.create_default_context().wrap_socket(connection, server_hostname=HOST)
             key = base64.b64encode(secrets.token_bytes(16)).decode('ascii')
             values = {'Host': HOST, 'Upgrade': 'websocket', 'Connection': 'Upgrade',
@@ -111,9 +118,11 @@ class OfficialWebSocket:
             if any('\r' in str(v) or '\n' in str(v) for v in values.values()):
                 raise ValueError('invalid websocket header')
             request = 'GET ' + PATH + ' HTTP/1.1\r\n' + ''.join(str(k) + ': ' + str(v) + '\r\n' for k, v in values.items()) + '\r\n'
+            self.socket.settimeout(remaining())
             self.socket.sendall(request.encode('ascii'))
             raw = bytearray()
             while b'\r\n\r\n' not in raw:
+                self.socket.settimeout(remaining())
                 part = self.socket.recv(4096)
                 if not part or len(raw) + len(part) > 16384:
                     raise ValueError('invalid websocket handshake')
@@ -124,15 +133,24 @@ class OfficialWebSocket:
             for line in lines[1:]:
                 name, value = line.split(':', 1)
                 name = name.lower().strip()
-                if name in response:
-                    raise ValueError('duplicate websocket header')
-                response[name] = value.strip()
+                # CDN metadata (notably Server-Timing) may repeat. Only the
+                # security-critical accept/upgrade fields must be unambiguous.
+                if name in response and name in ('sec-websocket-accept', 'upgrade'):
+                    raise ValueError('duplicate websocket handshake field')
+                response[name] = response[name] + ',' + value.strip() if name in response else value.strip()
             expected = base64.b64encode(hashlib.sha1((key + '258EAFA5-E914-47DA-95CA-C5AB0DC85B11').encode()).digest()).decode()
-            if (lines[0].split(' ')[1] != '101' or response.get('upgrade', '').lower() != 'websocket'
+            status = int(lines[0].split()[1])
+            if status in (401, 403):
+                raise Fault(503, '服务器语音服务授权失败，请联系管理员检查语音资源权限。', 'speech_stream_auth_failed')
+            if status == 429:
+                raise Fault(503, '语音服务繁忙，请稍后重试。', 'speech_stream_busy')
+            if status >= 500:
+                raise Fault(502, '语音上游服务暂时不可用，请稍后重试。', 'speech_stream_upstream_unavailable')
+            if (status != 101 or response.get('upgrade', '').lower() != 'websocket'
                     or 'upgrade' not in [v.strip().lower() for v in response.get('connection', '').split(',')]
                     or not hmac.compare_digest(response.get('sec-websocket-accept', ''), expected)
                     or response.get('sec-websocket-extensions') or response.get('sec-websocket-protocol')):
-                raise Fault(503, '流式语音连接未获服务授权，请检查服务器语音配置。', 'speech_stream_unavailable')
+                raise Fault(502, '语音服务握手响应不符合协议，请联系管理员检查。', 'speech_stream_protocol_error')
             self.buffer.extend(rest)
             self.socket.settimeout(1)
         except Exception:
@@ -238,8 +256,11 @@ class SpeechStreams:
         with gateway.db() as db:
             db.execute('CREATE TABLE IF NOT EXISTS speech_stream_receipts(id TEXT PRIMARY KEY,user INTEGER,app TEXT,call TEXT,created INTEGER)')
 
+    def configured(self):
+        return bool(configuration()[0])
+
     def available(self):
-        return bool(configuration()[0]) and time.monotonic() >= self.unavailable_until
+        return self.configured() and time.monotonic() >= self.unavailable_until
 
     def active(self):
         with self.lock:
@@ -364,7 +385,19 @@ class SpeechStreams:
                 failed = session['state'] not in TERMINAL
             if failed:
                 self.unavailable_until = time.monotonic() + 30
-                self._end(session, 'error', error if isinstance(error, Fault) else Fault(503, '流式语音连接未完成，请检查服务器服务配置。', 'speech_stream_unavailable'))
+                if isinstance(error, Fault):
+                    failure = error
+                elif isinstance(error, TimeoutError):
+                    failure = Fault(504, '服务器连接语音服务超时，请稍后重试。', 'speech_stream_connect_timeout')
+                elif isinstance(error, ssl.SSLError):
+                    failure = Fault(502, '服务器与语音服务的安全连接失败，请联系管理员检查。', 'speech_stream_tls_error')
+                elif isinstance(error, (OSError, EOFError)):
+                    failure = Fault(502, '服务器暂时无法连接语音服务，请稍后重试。', 'speech_stream_network_error')
+                elif isinstance(error, ValueError):
+                    failure = Fault(502, '语音服务握手响应不符合协议，请联系管理员检查。', 'speech_stream_protocol_error')
+                else:
+                    failure = Fault(502, '语音服务连接未完成，请稍后重试。', 'speech_stream_connect_error')
+                self._end(session, 'error', failure)
         finally:
             session['ready'].set()
 
@@ -401,8 +434,11 @@ class SpeechStreams:
                     return 200, {}, {'id': key, 'state': 'cancelled', 'revision': 0, 'result': {}}
                 raise Fault(409, '原流式语音会话已结束或服务已更新；不会重复提交，请手动开始新同步。', 'speech_stream_interrupted')
             if action == 'create' and not session:
-                if not self.available():
+                if not self.configured():
                     raise Fault(503, '尚未配置可用的流式语音服务。', 'speech_stream_unavailable')
+                if not self.available():
+                    retry = max(1, int(self.unavailable_until - time.monotonic()) + 1)
+                    raise Fault(503, '语音连接刚刚失败，请约 ' + str(retry) + ' 秒后重试；本次未新建识别任务。', 'speech_stream_cooling_down', retry)
                 if len(self.sessions) >= 128 or sum(not s['ended'].is_set() for s in self.sessions.values()) >= 16:
                     raise Fault(503, '流式语音会话较多，请稍后重试。', 'speech_stream_busy')
                 if any(s['user'] == user and not s['ended'].is_set() for s in self.sessions.values()):

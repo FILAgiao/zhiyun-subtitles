@@ -67,7 +67,7 @@ function utteranceStart(utterance){
  if(Number.isFinite(utterance.start_time)&&utterance.start_time>=0)return utterance.start_time;
  const word=utterance.words?.find(word=>Number.isFinite(word.start_time)&&word.start_time>=0);return word?word.start_time:null;
 }
-function explicitUnsupported(error){return [404,405,501].includes(Number(error?.status||error?.error_status))||['stream_unsupported','speech_stream_unsupported','speech_stream_unavailable','speech_stream_disabled'].includes(error?.code||error?.error_code);}
+function explicitUnsupported(error){return [404,405,501].includes(Number(error?.status||error?.error_status))||['stream_unsupported','speech_stream_unsupported','speech_stream_disabled'].includes(error?.code||error?.error_code);}
 function createSession(options){
  if(typeof options?.transport!=='function')throw new TypeError('speech stream transport is required');
  const video=options.video,transport=options.transport,audioSource=options.audioSource||createPCMSource(video,options);
