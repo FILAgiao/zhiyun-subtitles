@@ -70,3 +70,56 @@ test('legacy slow work lasting 77 seconds can clear before the bounded busy retr
  for(const delay of [5000,10000,20000,30000,30000]){d.calls.at(-1).reject(busy());await flush();await time.advance(delay);}
  assert.equal(time.now(),95000);assert.equal(t.enabled,true);d.calls.at(-1).resolve('服务已恢复');await flush();assert.equal(t.get('sentence'),'服务已恢复');t.stop();
 });
+
+
+test('only a structured pre-submission maintenance rejection may retry a 503',()=>{
+ const updating=failure({status:503,responseText:JSON.stringify({error:'maintenance',error_code:'server_updating'}),responseHeaders:'Retry-After: 8\r\n'});
+ assert.equal(updating.code,'server_updating');assert.equal(updating.safeToRetry,true);assert.equal(updating.retryAfterMs,8000);
+ for(const [status,body] of [[503,{error_code:'database_unavailable'}],[503,{}],[502,{error_code:'server_updating'}]]){
+  const error=failure({status,responseText:JSON.stringify(body)});assert.equal(error.safeToRetry,false);
+ }
+});
+
+test('null or malformed error bodies settle the lease and do not strand the next subtitle',async()=>{
+ for(const responseText of ['null','"failure"','<html>bad gateway</html>']){
+  const sends=[],request=create(o=>sends.push(o),parse);
+  const old=request({data:'old'}),next=request({data:'next'});
+  sends[0].onload({status:502,responseText});await assert.rejects(old.promise,e=>e.code==='translation_failed'&&!e.safeToRetry);
+  assert.equal(sends.length,2);sends[1].onload(ok('下一句'));assert.equal(await next.promise,'下一句');
+ }
+});
+
+test('invalid successful responses are classified and release work without retrying or caching the paid result',async()=>{
+ for(const responseText of ['{',JSON.stringify({error:'missing output'})]){
+  const sends=[],request=create(o=>sends.push(o),body=>{if(!body.text)throw Error('provider detail');return body.text;});
+  const old=request({data:'old',cacheKey:'same'}),next=request({data:'next'});
+  sends[0].onload({status:200,responseText});await assert.rejects(old.promise,e=>e.code==='translation_output_invalid'&&e.safeToRetry===false&&!/provider detail/.test(e.message));
+  assert.equal(sends.length,2);sends[1].onload(ok('下一句'));await next.promise;
+  const retry=request({data:'retry',cacheKey:'same'});assert.equal(sends.length,3);sends[2].onload(ok('正确译文'));assert.equal(await retry.promise,'正确译文');
+ }
+});
+
+test('business-invalid paid output is not reused by manual retry and valid completion is cached',async()=>{
+ const sends=[],request=create(o=>sends.push(o),parse),cacheResult=text=>text==='正确译文';
+ const first=request({data:'same input',cacheKey:'same',cacheResult});sends[0].onload(ok('Untranslated English'));assert.equal(await first.promise,'Untranslated English');
+ const retry=request({data:'same input',cacheKey:'same',cacheResult});assert.equal(sends.length,2);sends[1].onload(ok('正确译文'));assert.equal(await retry.promise,'正确译文');
+ assert.equal(await request({data:'same input',cacheKey:'same',cacheResult}).promise,'正确译文');assert.equal(sends.length,2);
+ assert.ok(sends.every(options=>!('cacheResult' in options)));
+});
+
+test('cache validation errors cannot strand the lease or make bad output reusable',async()=>{
+ const sends=[],request=create(o=>sends.push(o),parse),cacheResult=()=>{throw Error('bad batch format');};
+ const old=request({data:'old',cacheKey:'same',cacheResult}),retry=request({data:'retry',cacheKey:'same',cacheResult});
+ sends[0].onload(ok('bad format'));assert.equal(await old.promise,'bad format');assert.equal(sends.length,2);
+ sends[1].onload(ok('second result'));assert.equal(await retry.promise,'second result');
+});
+
+test('structured server update waits and automatically resumes while database ambiguity pauses',async()=>{
+ const time=clock(),d=deferred(),states=[],translator=createTranslator(d.request,(message,state)=>states.push(state),1,time);
+ translator.start('en','zh');translator.schedule(['sentence']);
+ d.calls[0].reject(failure({status:503,responseText:JSON.stringify({error_code:'server_updating'}),responseHeaders:'Retry-After: 8\r\n'}));await flush();
+ assert.equal(translator.enabled,true);assert.equal(states.at(-1).state,'waiting');await time.advance(7999);assert.equal(d.calls.length,1);await time.advance(1);assert.equal(d.calls.length,2);
+ d.calls[1].resolve('服务已恢复');await flush();assert.equal(translator.get('sentence'),'服务已恢复');translator.schedule(['next']);
+ d.calls[2].reject(failure({status:503,responseText:JSON.stringify({error_code:'database_unavailable'})}));await flush();await time.advance(120000);
+ assert.equal(translator.enabled,false);assert.equal(d.calls.length,3);assert.equal(states.at(-1).state,'paused');
+});

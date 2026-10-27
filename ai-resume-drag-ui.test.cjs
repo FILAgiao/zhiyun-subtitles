@@ -41,6 +41,7 @@ const fixture = `<!doctype html><meta name="viewport" content="width=device-widt
       assert.ok(Math.abs(actual.x - expected.x) < 2 && Math.abs(actual.y - expected.y) < 2, `${message}: ${JSON.stringify(actual)} vs ${JSON.stringify(expected)}`);
     };
     async function assertOnscreen(message) {
+      await page.waitForFunction(() => {const el=document.querySelector('#host').shadowRoot.querySelector('#ai-resume'),r=el.getBoundingClientRect();return r.left>=7&&r.top>=7&&r.right<=innerWidth-7&&r.bottom<=innerHeight-7;},{},{timeout:3000});
       const b = await box(), viewport = await page.evaluate(() => ({width:innerWidth,height:innerHeight}));
       assert.ok(b.x >= 7 && b.y >= 7 && b.x + b.width <= viewport.width - 7 && b.y + b.height <= viewport.height - 7, `${message}: ${JSON.stringify(b)} in ${JSON.stringify(viewport)}`);
     }

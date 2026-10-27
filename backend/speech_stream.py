@@ -12,6 +12,7 @@ import io
 import json
 import os
 import secrets
+import select
 import socket
 import ssl
 import struct
@@ -97,6 +98,7 @@ class OfficialWebSocket:
     """
     def __init__(self, headers):
         self.send_lock = threading.Lock()
+        self.tls_lock = threading.Lock()
         self.socket = None
         self.buffer = bytearray()
         self.closed = False
@@ -152,7 +154,7 @@ class OfficialWebSocket:
                     or response.get('sec-websocket-extensions') or response.get('sec-websocket-protocol')):
                 raise Fault(502, '语音服务握手响应不符合协议，请联系管理员检查。', 'speech_stream_protocol_error')
             self.buffer.extend(rest)
-            self.socket.settimeout(1)
+            self.socket.settimeout(0)
         except Exception:
             if self.socket:
                 self.socket.close()
@@ -160,15 +162,44 @@ class OfficialWebSocket:
                 connection.close()
             raise
 
-    def _read(self, size):
-        while len(self.buffer) < size:
-            part = self.socket.recv(min(65536, size - len(self.buffer)))
-            if not part:
+    def _tls_io(self, operation, value, deadline):
+        # SSL objects are not safe for concurrent read/write/close. Nonblocking
+        # calls share this lock; readiness waits release it for other callers.
+        # Check closed while locked before every SSL call: the kernel may reuse
+        # a closed socket fd for SQLite before the old reader wakes up.
+        while True:
+            with self.tls_lock:
+                if self.closed:
+                    raise EOFError('websocket closed')
+                try:
+                    return getattr(self.socket, operation)(value)
+                except ssl.SSLWantReadError:
+                    reading = True
+                except ssl.SSLWantWriteError:
+                    reading = False
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise socket.timeout('websocket IO deadline')
+            try:
+                select.select([self.socket] if reading else [],
+                              [] if reading else [self.socket], [], min(.05, remaining))
+            except (OSError, ValueError):
+                with self.tls_lock:
+                    if self.closed:
+                        raise EOFError('websocket closed') from None
+                raise
+
+    def _receive(self, size):
+        return self._tls_io('recv', size, time.monotonic() + 1)
+
+    def _write(self, data):
+        deadline = time.monotonic() + 1
+        view = memoryview(data)
+        while view:
+            sent = self._tls_io('send', view, deadline)
+            if not sent:
                 raise EOFError('websocket closed')
-            self.buffer.extend(part)
-        result = bytes(self.buffer[:size])
-        del self.buffer[:size]
-        return result
+            view = view[sent:]
 
     def send(self, payload, opcode=2):
         if len(payload) > MAX_MESSAGE:
@@ -182,14 +213,14 @@ class OfficialWebSocket:
                 prefix += struct.pack('>H' if size < 65536 else '>Q', size)
             mask = secrets.token_bytes(4)
             masked = bytes(value ^ mask[i & 3] for i, value in enumerate(payload))
-            self.socket.sendall(prefix + mask + masked)
+            self._write(prefix + mask + masked)
 
     def _frame(self):
         # Do not consume any bytes until the complete frame is buffered.  A
         # timeout midway through a header or payload is safe to resume.
         def fill(size):
             while len(self.buffer) < size:
-                part = self.socket.recv(min(65536, size - len(self.buffer)))
+                part = self._receive(min(65536, size - len(self.buffer)))
                 if not part:
                     raise EOFError('websocket closed')
                 self.buffer.extend(part)
@@ -234,15 +265,18 @@ class OfficialWebSocket:
                 return result
 
     def close(self):
-        # shutdown interrupts recv immediately, including cancellation during a
-        # partial upstream frame; never wait on a remote close handshake.
-        self.closed = True
-        if self.socket:
-            try:
-                self.socket.shutdown(socket.SHUT_RDWR)
-            except OSError:
-                pass
-            self.socket.close()
+        # Do not release the fd while SSL_read/SSL_write still uses its BIO.
+        # No peer/network wait holds tls_lock, so cancellation remains prompt.
+        with self.tls_lock:
+            if self.closed:
+                return
+            self.closed = True
+            if self.socket:
+                try:
+                    self.socket.shutdown(socket.SHUT_RDWR)
+                except OSError:
+                    pass
+                self.socket.close()
 
 
 class SpeechStreams:

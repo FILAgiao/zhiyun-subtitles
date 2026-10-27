@@ -13,7 +13,7 @@ with tempfile.TemporaryDirectory() as folder:
   const port=await new Promise((resolve,reject)=>{let output='';fixture.stdout.on('data',data=>{output+=data;try{resolve(JSON.parse(output.trim()).port);}catch{}});fixture.on('error',reject);fixture.on('exit',code=>reject(Error('Fixture exited '+code)));});
   const base='http://127.0.0.1:'+port;
   browser=await chromium.launch({headless:true,executablePath:'C:/Program Files/Google/Chrome/Application/chrome.exe'});
-  const context=await browser.newContext({viewport:{width:1440,height:1000}}),page=await context.newPage(),errors=[];page.on('pageerror',e=>errors.push(e.message));
+  const context=await browser.newContext({viewport:{width:1440,height:1000},reducedMotion:'reduce'}),page=await context.newPage(),errors=[];page.on('pageerror',e=>errors.push(e.message));
   const failures=[];page.on('response',r=>{if(r.url().startsWith(base)&&r.status()>=400)failures.push(r.url()+' '+r.status());});
   for(const path of ['/gateway/','/gateway/download','/gateway/download?from=qr','/gateway/index.html?from=mobile']){const response=await context.request.get(base+path);assert.equal(response.status(),200);assert.match(await response.text(),/网课不硬扛/);assert.match(response.headers()['content-security-policy'],/style-src 'self'/);}
   await page.goto(base+'/gateway/download?from=qr');assert.equal(await page.title(),'浙大上课爽 · 网课不硬扛');
@@ -27,11 +27,22 @@ with tempfile.TemporaryDirectory() as folder:
   for(const chrome of await chromeLinks.all()){assert.equal(await chrome.getAttribute('href'),settings.chromeStoreUrl);assert.equal(await chrome.getAttribute('target'),'_blank');assert.match(await chrome.getAttribute('rel'),/noopener/);}
   const edges=page.getByRole('button',{name:/Edge 插件商店/});assert.equal(await edges.count(),2);for(const edge of await edges.all()){assert.equal(await edge.isDisabled(),true);assert.match(await edge.textContent(),/即将上线.*审核中/);assert.equal(await edge.getAttribute('href'),null);}
   const edge=edges.last();
+  assert.match(await page.locator('.usage-scope').textContent(),/缓存加速、字幕同步和 PPT 联动.*浙大智云网课的视频页面/);
+  assert.equal(await page.locator('.quick-links').getByRole('link',{name:/历史问答/}).getAttribute('href'),'/gateway/study');
+  assert.equal(await page.locator('.quick-links').getByRole('link',{name:/随意摘/}).getAttribute('href'),'/gateway/study#clips');
+  assert.equal(await page.locator('.install-zip>a').getAttribute('href'),'/gateway/extension.zip');
+  const qrImage=page.locator('.install-qr img');await qrImage.scrollIntoViewIfNeeded();await qrImage.evaluate(n=>n.decode());
+  const qr=await qrImage.evaluate(n=>{const c=document.createElement('canvas');c.width=n.naturalWidth;c.height=n.naturalHeight;const x=c.getContext('2d');x.drawImage(n,0,0);return {data:Array.from(x.getImageData(0,0,c.width,c.height).data),width:c.width,height:c.height};});
+  assert.equal(require('jsqr')(new Uint8ClampedArray(qr.data),qr.width,qr.height)?.data,'https://47.77.182.216.sslip.io/gateway/','home download QR is actually scannable');
   assert.equal(await page.getByText('找到你的浏览器插件').count(),0);
   const sync=page.locator('.sync-row .feature-art'),view=page.locator('.view-row .feature-art');const syncBox=await sync.boundingBox(),viewBox=await view.boundingBox();assert.ok(syncBox.width>=800,'second-screen image gets a broad dedicated canvas');assert.ok(viewBox.y>=syncBox.y+syncBox.height+70,'sync and PPT posters no longer squeezed side by side');
   await page.getByRole('link',{name:'获取插件'}).click();await page.waitForURL(/#install$/);assert.ok(await edge.isVisible());
   await page.evaluate(()=>{document.documentElement.style.scrollBehavior='auto';window.scrollTo(0,0);});await page.screenshot({path:'download-page-desktop-preview.png',fullPage:true});await page.screenshot({path:'download-page-hero-preview.png'});await page.locator('#features').screenshot({path:'download-page-classroom-preview.png'});
   for(const width of [390,320,768,1024]){await page.setViewportSize({width,height:844});assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),'no horizontal overflow at '+width);for(const badge of await page.locator('.hero-stores .store-button').all()){const r=await badge.boundingBox();assert.ok(r.x>=0&&r.x+r.width<=width,'hero store badges fit viewport');}await edge.scrollIntoViewIfNeeded();const box=await edge.boundingBox();assert.ok(box.x>=0&&box.x+box.width<=width);if(width===390){await page.evaluate(()=>window.scrollTo(0,0));await page.screenshot({path:'download-page-mobile-preview.png',fullPage:true});}else if(width===320)await page.screenshot({path:'.testdeps/public-page-320.png',fullPage:true});}
+  await page.locator('.quick-links').getByRole('link',{name:/历史问答/}).click();await page.waitForURL(/\/gateway\/study$/);await page.locator('#study-guest').waitFor({state:'visible'});
+  await page.goto(base+'/gateway/');await page.locator('.quick-links').getByRole('link',{name:/随意摘/}).click();await page.waitForURL(/#clips$/);await page.waitForFunction(()=>document.getElementById('study-clips-tab')?.getAttribute('aria-current')==='true');assert.match(await page.locator('h1').textContent(),/随意摘/);
+  await page.goto(base+'/gateway/');
+
   assert.deepEqual(errors,[]);assert.deepEqual(failures,[]);assert.deepEqual(await context.cookies(),[],'viewing the introduction needs no account cookies');
   console.log('PASS: anonymous home/QR/query URLs, all six images and CSP, two direct Chrome/Edge badge pairs, spacious stacked feature canvases, installation anchors and 320/390px layouts.');
  }finally{await browser?.close();fixture.stdin.end('\n');}

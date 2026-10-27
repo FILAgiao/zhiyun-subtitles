@@ -99,9 +99,12 @@ async function startExtension(run){
  // Hidden/navigated pages still invalidate even if they become visible again.
  window.addEventListener('pagehide',revoke);document.addEventListener('visibilitychange',()=>{if(!available())revoke();});
  globalThis.ZY_CLIENT_TYPE='chrome-extension';
- const saved=await chrome.storage.local.get(null);let pending=Promise.resolve();
+ const saved=await chrome.storage.local.get(null);
  const GM_getValue=(key,fallback)=>Object.hasOwn(saved,key)?saved[key]:fallback;
- const persist=fn=>{pending=pending.then(fn).catch(()=>{console.warn('上课爽：本地设置未保存，请检查浏览器存储空间。');});};
+ // Dispatch while this document is alive. Chaining the next browser operation to
+ // a prior Promise leaves it in the content script when navigation destroys it.
+ const storageWarning=()=>console.warn('上课爽：本地设置未保存，请检查浏览器存储空间。');
+ const persist=fn=>{try{Promise.resolve(fn()).catch(storageWarning);}catch(_){storageWarning();}};
  const GM_setValue=(key,value)=>{saved[key]=value;persist(()=>chrome.storage.local.set({[key]:value}));};
  const GM_deleteValue=key=>{delete saved[key];persist(()=>chrome.storage.local.remove(key));};
  const GM_registerMenuCommand=()=>{};

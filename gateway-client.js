@@ -2,7 +2,7 @@
 (function(root,factory){const api=factory();if(typeof module==='object'&&module.exports)module.exports=api;else root.ZYGateway=api;})(globalThis,function(){
 'use strict';
 const DEFAULT_ORIGIN='';
-const CLIENT_VERSION='0.20.83';
+const CLIENT_VERSION='0.20.88';
 function clientHeaders(){return {'X-Client-Version':CLIENT_VERSION,'X-Client-Channel':'userscript'};}
 const KEY='gateway-account-v1',APP='zhiyun-subtitles',CLIENT=globalThis.ZY_CLIENT_TYPE||'userscript';
 function baseURL(value){const u=new URL(String(value).trim());if(u.username||u.password||u.search||u.hash||!['/','/gateway','/gateway/'].includes(u.pathname)||(u.protocol!=='https:'&&!(u.protocol==='http:'&&['localhost','127.0.0.1'].includes(u.hostname))))throw Error('请填写 HTTPS 服务地址；本机调试可使用 http://127.0.0.1:8080');return u.origin+(u.pathname==='/'?'':'/gateway');}
@@ -29,11 +29,34 @@ function accessSummary(data,now=Date.now()){
  return {plan,trial,expired,remaining,expires,text,quota,deadline,low:!expired&&(seconds!=null&&seconds<=86400||remaining!=null&&remaining<=3)};
 }
 function create({request,getValue,setValue}){
- let refreshUI=null,changeListener=null,accessProfile=null,accessToken='',accessOrigin='',accessPending=null,showAccount=()=>{},queueUsageRefresh=()=>{},serverOffset=0,cleanupMounted=()=>{};
+ let refreshUI=null,changeListener=null,accessProfile=null,accessToken='',accessOrigin='',accessPending=null,showAccount=()=>{},queueUsageRefresh=()=>{},serverOffset=0,cleanupMounted=()=>{},recoveryPending=null,reloadAccess=()=>ensureAccess();
  const account=()=>{const saved=getValue(KEY,{})||{};return{...saved,url:DEFAULT_ORIGIN||saved.url||''};};
  const configured=()=>!!account().url;
  const credential=()=>configured()?(account().token||''):'';
  function accessReady(){return !!credential()&&accessToken===credential()&&accessOrigin===baseURL(account().url)&&!!accessProfile;}
+ // The verified account ID survives token renewal; never persist a session token as an owner marker.
+ function studyIdentity(){
+  if(!accessReady())return '';
+  const id=accessProfile.id,email=accessProfile.email;
+  const owner=Number.isSafeInteger(id)&&id>0?'id:'+id:typeof email==='string'&&email.trim()?'email:'+email.trim().toLowerCase():'';
+  return owner?JSON.stringify([accessOrigin,owner]):'';
+ }
+ function studyClipLimits(){
+  const defaults={max_edge:1600,max_image:1500000,max_thumbnail_edge:320,max_thumbnail:80000};
+  const limits=accessReady()?accessProfile.capabilities?.study_clip_limits:null;
+  if(!limits||typeof limits!=='object')return defaults;
+  const maximum={max_edge:3840,max_image:4000000,max_thumbnail_edge:320,max_thumbnail:80000};
+  return Object.fromEntries(Object.entries(defaults).map(([key,fallback])=>[key,Number.isSafeInteger(limits[key])&&limits[key]>0?Math.min(limits[key],maximum[key]):fallback]));
+ }
+ async function studyWrite(path,body,options={}){
+  const bound=account(),token=bound.token||'',origin=bound.url?baseURL(bound.url):'';
+  if(!token||!origin)throw Object.assign(Error('请先登录账号。'),{code:'login_required'});
+  const same=()=>{const current=account();return credential()===token&&!!current.url&&baseURL(current.url)===origin&&(!options.identity||studyIdentity()===options.identity);};
+  if(options.account!==undefined&&options.account!==token||!same())throw Object.assign(Error('学习账号已切换，请在当前账号重新同步。'),{code:'account_changed'});
+  const data=await call(path,body,token,origin);
+  if(!same())throw Object.assign(Error('学习账号已切换，已忽略上一账号的同步结果。'),{code:'account_changed'});
+  return data;
+ }
  function rememberAccess(data,token=credential(),url=account().url){if(!token||token!==credential()||baseURL(url)!==baseURL(account().url))return false;accessProfile=data;accessToken=token;accessOrigin=baseURL(url);if(Number.isFinite(data.server_time))serverOffset=data.server_time*1000-Date.now();return true;}
  function ensureAccess(force=false){
   const bound=account(),origin=bound.url?baseURL(bound.url):'',token=bound.token||'';
@@ -57,7 +80,17 @@ function create({request,getValue,setValue}){
   return p[key]===undefined?Number(accessProfile.usage?.request_limit)>0:p[key]===true;
  }
  function statusSummary(){return accessReady()?accessSummary(accessProfile,Date.now()+serverOffset):null;}
- function requireFeature(feature='learning'){if(canUse(feature))return true;showAccount(!credential()?'请先登录账号。':accessProfile?.membership?.state==='expired'||statusSummary()?.expired?(accessProfile?.membership?.plan==='trial'?'免费体验已结束，基础功能仍可使用。':'套餐已到期，基础功能仍可使用。'):'申请免费体验或开通 PRO / Ultra 后可使用此功能。');return false;}
+ function requireFeature(feature='learning'){if(canUse(feature))return true;
+  if(credential()&&!accessReady()){
+   showAccount('正在重新读取账号权限，请稍候…');
+   if(!recoveryPending){
+    const bound=account(),same=()=>credential()===bound.token&&account().url===bound.url;
+    const pending=reloadAccess().then(()=>{if(same())showAccount('账号服务已恢复，请返回页面继续操作。');}).catch(error=>{if(same())showAccount('暂时无法读取账号权限：'+error.message+'；可再次点击重试。');}).finally(()=>{if(recoveryPending===pending)recoveryPending=null;});
+    recoveryPending=pending;
+   }
+   return false;
+  }
+  showAccount(!credential()?'请先登录账号。':accessProfile?.membership?.state==='expired'||statusSummary()?.expired?(accessProfile?.membership?.plan==='trial'?'免费体验已结束，基础功能仍可使用。':'套餐已到期，基础功能仍可使用。'):'申请免费体验或开通 PRO / Ultra 后可使用此功能。');return false;}
  function incremental(options,a,headers){
   let stopped=false,current=null,timer=null,networkTimer=null,jobId='',raw='',lastText='';
   const emit=event=>{if(stopped)return;raw+='data: '+JSON.stringify(event)+'\n\n';options.onprogress?.({status:200,responseText:raw});};
@@ -188,11 +221,12 @@ function create({request,getValue,setValue}){
   const refresh=()=>{const signed=!!credential(),membership=accessToken===credential()?accessProfile?.membership:null,ready=accessToken===credential()&&!!accessProfile,paid=canUse('learning');if($('compact'))$('compact').textContent=signed?'🐥 上课爽':'🐥 上课爽 · 去登录';$('gateway-login-form').hidden=signed;$('gateway-member').hidden=!signed;$('gateway-name').textContent=signed?(profile||'我的学习账号'):'登录，继续你的学习';$('gateway-quota-section').hidden=!signed;$('gateway-basic-note').hidden=signed;$('gateway-intro').hidden=signed;$('gateway-state').textContent=!signed?'基础功能免登录可以使用':!ready?'已登录 · 正在读取套餐':membership?.state==='expired'||statusSummary()?.expired?(membership?.plan==='trial'?'已登录 · 免费体验已结束':'已登录 · 套餐已到期'):paid?'已登录 · '+({trial:'免费体验',pro:'PRO',ultra:'Ultra'}[membership?.plan]||'原有授权'):'已登录 · 免费账号（未充值）';$('gateway-avatar').replaceChildren();if(signed)$('gateway-avatar').textContent=(profile||'我').slice(0,1);else if(typeof ZY_STUDY_MASCOT!=='undefined'){const logo=document.createElement('img');logo.alt='';logo.src=ZY_STUDY_MASCOT;$('gateway-avatar').append(logo);}else $('gateway-avatar').textContent='爽';const summary=statusSummary();$('gateway-membership').hidden=!signed||!summary;if(summary){$('gateway-membership-title').textContent=summary.trial?'免费体验资格':'账号有效期';$('gateway-membership-value').textContent=summary.text;$('gateway-membership-deadline').textContent=summary.deadline;$('gateway-membership').dataset.ended=String(summary.expired);}$('gateway-plan-badge').hidden=!signed||!ready;$('gateway-plan-badge').textContent=summary?.trial?'免费体验':({pro:'PRO',ultra:'Ultra'}[membership?.plan]||(paid?'已开通':'基础免费'));$('account-guide').textContent=summary?.trial?summary.text:signed?'● 已登录':'○ 游客';$('account-guide').title=summary?[summary.quota,summary.deadline].join(' · '):'';$('account-open').textContent=signed?'账号':'登录';for(const id of ['ai-open','ai-capture','slide-explain','transcript-open','web-ask','web-page-ask']){const b=$(id);if(b){b.dataset.loginRequired=String(!signed);b.title=signed?'':'登录后使用；点击查看账号';b.setAttribute('aria-disabled',String(!signed));}}if(!signed){usageData=null;permissions=null;}for(const id of ['ai-open','ai-capture','slide-explain','transcript-open','web-ask','web-page-ask','sync-toggle']){const b=$(id),feature=['ai-capture','web-page-ask'].includes(id)?'clips':id==='sync-toggle'?'speech':id==='transcript-open'?'learning_records':'learning';if(b){const preparing=feature==='speech'&&signed&&!accessReady();b.dataset.gatewayFeature=feature;b.dataset.loginRequired=String(!signed);b.dataset.featureBlocked=String(signed&&!canUse(feature)&&!preparing);b.setAttribute('aria-disabled',String(!canUse(feature)&&!preparing));b.title=preparing?'点击后等待账号与语音服务就绪':!signed?'登录后使用体验资格或套餐':!canUse(feature)?'申请体验或开通套餐后使用':'';}}renderQuota();const both=$('mode')?.querySelector('[value="both"]');if(both){both.textContent=signed&&!canUse('translation')?'中外对照（需开通套餐）':'中外对照';both.disabled=false;}previousAccess=canUse('learning');shadow.dispatchEvent(new CustomEvent('zy-account-state'));};refreshUI=refresh;
   const run=async(fn)=>{if(busy)return;busy=true;box.querySelectorAll('button').forEach(b=>b.disabled=true);try{await fn();}catch(e){$('gateway-status').dataset.error='true';$('gateway-status').textContent=e.message;}finally{busy=false;box.querySelectorAll('button').forEach(b=>b.disabled=false);refresh();}};
   const usage=async()=>{const initial=!accessReady(),previous=JSON.stringify([accessToken,accessProfile?.permissions,accessProfile?.membership]),token=credential(),origin=account().url,data=await ensureAccess(true);if(!rememberAccess(data,token,origin))return;permissions=data.permissions||null;profile=data.username||data.email||'我的学习账号';const u=data.usage;usageData=u; $('gateway-status').dataset.error='false';$('gateway-status').textContent='额度已更新';refresh();if(previous!==JSON.stringify([accessToken,accessProfile?.permissions,accessProfile?.membership]))onChange({initial});};
+  reloadAccess=usage;
   $('gateway-login-form').onsubmit=e=>{e.preventDefault();run(async()=>{if(!configured())throw Error('服务尚未配置，请联系管理员更新插件。');$('gateway-status').dataset.error='false';$('gateway-status').textContent='正在登录…';await login(account().url,$('gateway-email').value,$('gateway-password').value);$('gateway-password').value='';$('gateway-password').type='password';$('gateway-password-toggle').textContent='显示';$('gateway-password-toggle').setAttribute('aria-pressed','false');$('gateway-password-toggle').setAttribute('aria-label','显示密码');profile=$('gateway-email').value;$('gateway-status').textContent='登录成功，正在读取权限和额度';onChange();refresh();heartbeat();await usage();});};
   $('gateway-usage').onclick=()=>run(usage);$('gateway-logout').onclick=()=>run(async()=>{try{await logout();}finally{profile='';usageData=null;permissions=null;$('gateway-password').value='';$('gateway-status').textContent='已退出登录，原文字幕、手动同步和缓存仍可使用。';onChange();}});
   let quotaTimer=null,lastQuotaRefresh=0;queueUsageRefresh=()=>{if(!credential()||quotaTimer)return;quotaTimer=setTimeout(()=>{quotaTimer=null;lastQuotaRefresh=Date.now();if(credential())usage().catch(()=>{});},Math.max(700,5000-(Date.now()-lastQuotaRefresh)));};
   const expiryTimer=setInterval(()=>{const changed=canUse('learning')!==previousAccess;refresh();if(changed)onChange();},60000);
-  const heartbeat=()=>{if(credential()&&document.visibilityState!=='hidden')call('/v1/activity',{}).catch(()=>{});};const heartbeatTimer=setInterval(heartbeat,60000);document.addEventListener('visibilitychange',heartbeat);cleanupMounted=()=>{clearInterval(expiryTimer);clearInterval(heartbeatTimer);clearTimeout(quotaTimer);document.removeEventListener('visibilitychange',heartbeat);queueUsageRefresh=()=>{};refreshUI=null;changeListener=null;showAccount=()=>{};};heartbeat();refresh();
+  const heartbeat=()=>{if(credential()&&document.visibilityState!=='hidden'){call('/v1/activity',{}).catch(()=>{});if(!accessReady())usage().catch(e=>{$('gateway-status').textContent='账号服务暂不可用，可点击智能功能重试：'+e.message;});}};const heartbeatTimer=setInterval(heartbeat,60000);document.addEventListener('visibilitychange',heartbeat);cleanupMounted=()=>{clearInterval(expiryTimer);clearInterval(heartbeatTimer);clearTimeout(quotaTimer);document.removeEventListener('visibilitychange',heartbeat);queueUsageRefresh=()=>{};refreshUI=null;changeListener=null;showAccount=()=>{};reloadAccess=()=>ensureAccess();};heartbeat();refresh();
   if(credential())usage().catch(e=>{$('gateway-status').textContent=e.message;});
 
   if($('sync-toggle')){
@@ -284,7 +318,7 @@ function create({request,getValue,setValue}){
 
  }
 
- return{speechStream:{supported:streamSupported,bindTransport:bindSpeechStreamTransport},study:{account:credential,save:body=>call('/v1/study/conversations',body),saveClip:body=>call('/v1/study/clips',body)},prompts:{account:credential,list:()=>call('/v1/prompts'),save:body=>call('/v1/prompts/save',body),remove:body=>call('/v1/prompts/delete',body)},transport,configured,credential,login,logout,call,ensureAccess,mount,destroy:()=>cleanupMounted(),canUse,requireFeature,statusSummary,openAccount:(message='')=>showAccount(message),features:()=>({webSearch:!configured()||getValue('gateway-capabilities-v1',{}).web_search===true})};
+ return{speechStream:{supported:streamSupported,bindTransport:bindSpeechStreamTransport},study:{account:credential,identity:studyIdentity,clipLimits:studyClipLimits,save:(body,options)=>studyWrite('/v1/study/conversations',body,options),saveClip:(body,options)=>studyWrite('/v1/study/clips',body,options)},prompts:{account:credential,list:()=>call('/v1/prompts'),save:body=>call('/v1/prompts/save',body),remove:body=>call('/v1/prompts/delete',body)},transport,configured,credential,login,logout,call,ensureAccess,mount,destroy:()=>cleanupMounted(),canUse,requireFeature,statusSummary,openAccount:(message='')=>showAccount(message),features:()=>({webSearch:!configured()||getValue('gateway-capabilities-v1',{}).web_search===true})};
 }
 return{create,baseURL,accessSummary};
 });

@@ -1,3 +1,4 @@
+async function closePpt(ui){if(await ui.locator('#panel').isHidden())await ui.locator('#compact').click();for(let i=0;i<2&&await ui.locator('#slides').isVisible();i++)await ui.locator('#show-slides').click();}
 const fs=require('node:fs'),assert=require('node:assert/strict'),{chromium}=require('playwright');
 (async()=>{const browser=await chromium.launch({headless:true,executablePath:process.env.PLAYWRIGHT_EXECUTABLE_PATH});try{
  const page=await browser.newPage({viewport:{width:1440,height:900}}),errors=[];page.on('pageerror',e=>errors.push(e.message));
@@ -27,17 +28,17 @@ const fs=require('node:fs'),assert=require('node:assert/strict'),{chromium}=requ
  await ui.locator('.slide-thumb').nth(1).focus();await page.keyboard.press('Escape');assert.equal(await ui.locator('#slide-thumbs').isHidden(),true);assert.equal(await ui.locator('#slide-thumbs-toggle').getAttribute('aria-expanded'),'false');
  await page.waitForTimeout(250);await ui.locator('#slides').hover();await ui.locator('#slide-thumbs-toggle').click();await page.screenshot({path:'ppt-thumbnails-preview.png'});
  await ui.locator('#collapse').click();await page.setViewportSize({width:390,height:844});await page.waitForTimeout(200);const small=await ui.locator('#slides').boundingBox(),inside=await ui.locator('#slide-thumbs').boundingBox();assert.ok(inside.width<=small.width+1);assert.ok(Math.abs(inside.y+inside.height-small.y-small.height+60)<3);await ui.locator('#slide-thumbs-close').click();
- await page.setViewportSize({width:1440,height:900});await ui.locator('#compact').click();await ui.locator('#slides').hover();await ui.locator('#slide-close').click();assert.equal(await ui.locator('#slide-thumbs').isHidden(),true);
+ await page.setViewportSize({width:1440,height:900});await ui.locator('#compact').click();await ui.locator('#slides').hover();await closePpt(ui);assert.equal(await ui.locator('#slide-thumbs').isHidden(),true);
  // Closing from manual browsing resets both live and persisted follow state.
  await ui.locator('#show-slides').click();await page.waitForTimeout(250);await ui.locator('#slides').hover();await ui.locator('#slide-thumbs-toggle').click();await ui.locator('.slide-thumb').nth(79).click();await ui.locator('#slide-thumbs-close').click();
- await ui.locator('#slides').hover();await ui.locator('#slide-close').click();
+ await ui.locator('#slides').hover();await closePpt(ui);
  assert.equal(await ui.locator('#slide-follow').getAttribute('aria-pressed'),'true');assert.equal(await page.evaluate(()=>values['ppt-state:'+JSON.stringify([null,null,null])].follow),true);
  await page.evaluate(()=>videoTime=46);await ui.locator('#show-slides').click();assert.equal(await ui.locator('#slide-page').textContent(),'3 / 100');
  // The main layout button also returns to video-only with follow restored.
  await page.waitForTimeout(250);await ui.locator('#slides').hover();await ui.locator('#slide-thumbs-toggle').click();await ui.locator('.slide-thumb').nth(79).click();await ui.locator('#slide-thumbs-close').click();
  await ui.locator('#show-slides').click();await ui.locator('#show-slides').click();assert.equal(await ui.locator('#slides').isHidden(),true);assert.equal(await ui.locator('#slide-follow').getAttribute('aria-pressed'),'true');
  await page.evaluate(()=>videoTime=66);await ui.locator('#show-slides').click();assert.equal(await ui.locator('#slide-page').textContent(),'4 / 100');assert.equal(await page.evaluate(()=>seeks),0);
- await ui.locator('#slides').hover();await ui.locator('#slide-close').click();
+ await ui.locator('#slides').hover();await closePpt(ui);
  await page.evaluate(()=>{location.hash='#/replay?course_id=new';document.querySelector('#pane-ppt').innerHTML='<div class="tab-ppt"><img src="https://slides.test/new.svg"><span class="time">00:00:00</span></div>';});await page.waitForTimeout(650);
  if(await ui.locator('#panel').isHidden())await ui.locator('#compact').click();await ui.locator('#show-slides').click();await page.waitForTimeout(250);await ui.locator('#slides').hover();await ui.locator('#slide-thumbs-toggle').click();assert.equal(await ui.locator('.slide-thumb').count(),1);await page.waitForFunction(()=>document.getElementById('zy-subtitle-host').shadowRoot.querySelector('.slide-thumb img')?.getAttribute('src'));assert.match(await ui.locator('.slide-thumb img').getAttribute('src'),/new.svg/);
  assert.deepEqual(errors,[]);console.log('PASS: independent subtitle/PPT offsets, 100-page drawer, manual choice without seek, follow restoration, current-page highlight, Escape, narrow viewport, course isolation.');

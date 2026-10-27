@@ -1,3 +1,4 @@
+async function closePpt(ui){if(await ui.locator('#panel').isHidden())await ui.locator('#compact').click();for(let i=0;i<2&&await ui.locator('#slides').isVisible();i++)await ui.locator('#show-slides').click();}
 const fs=require('node:fs');
 const assert=require('node:assert/strict');
 const {chromium}=require(process.env.PLAYWRIGHT_MODULE||'playwright');
@@ -26,14 +27,14 @@ const {chromium}=require(process.env.PLAYWRIGHT_MODULE||'playwright');
   await page.evaluate(()=>location.hash='#/replay?course_id=three');await page.waitForTimeout(650);assert.doesNotMatch(await transcript.textContent(),/old course sentence/);
   await page.evaluate(html=>{document.querySelector('#pane-voice').innerHTML=html;document.querySelector('#pane-ppt img').src='https://slides.test/new.svg';},row(20,'new course sentence'));await page.waitForTimeout(750);
   assert.match(await transcript.textContent(),/new course sentence/);assert.doesNotMatch(await transcript.textContent(),/old course sentence/);
-  if(await ui.locator('#panel').isHidden())await ui.locator('#compact').click();await ui.locator('#show-slides').click();assert.equal(await ui.locator('#slides').isHidden(),false);assert.match(await ui.locator('#slide-image').getAttribute('src'),/new\.svg/);await ui.locator('#slides').hover();await ui.locator('#slide-close').click();
+  if(await ui.locator('#panel').isHidden())await ui.locator('#compact').click();await ui.locator('#show-slides').click();assert.equal(await ui.locator('#slides').isHidden(),false);assert.match(await ui.locator('#slide-image').getAttribute('src'),/new\.svg/);await ui.locator('#slides').hover();await closePpt(ui);
   // Searching/incremental loading within a course still preserves earlier collected rows.
   await page.evaluate(html=>document.querySelector('#pane-voice').innerHTML=html,row(30,'another current course sentence'));await page.waitForTimeout(650);
   assert.match(await transcript.textContent(),/new course sentence/);assert.match(await transcript.textContent(),/another current course sentence/);
   // DOM changes first in the same SPA transaction: accept it immediately after the hash changes.
   await page.evaluate(html=>{document.querySelector('#pane-voice').innerHTML=html;document.querySelector('#pane-ppt img').src='https://slides.test/four.svg';location.hash='#/replay?course_id=four';},row(40,'already new DOM sentence'));await page.waitForTimeout(750);
   assert.match(await transcript.textContent(),/already new DOM sentence/);assert.doesNotMatch(await transcript.textContent(),/new course sentence|another current/);
-  if(await ui.locator('#panel').isHidden())await ui.locator('#compact').click();await ui.locator('#show-slides').click();assert.equal(await ui.locator('#slides').isHidden(),false);assert.match(await ui.locator('#slide-image').getAttribute('src'),/four\.svg/);await ui.locator('#slides').hover();await ui.locator('#slide-close').click();
+  if(await ui.locator('#panel').isHidden())await ui.locator('#compact').click();await ui.locator('#show-slides').click();assert.equal(await ui.locator('#slides').isHidden(),false);assert.match(await ui.locator('#slide-image').getAttribute('src'),/four\.svg/);await ui.locator('#slides').hover();await closePpt(ui);
   // A newly mounted pane is valid even when its text matches the previous lesson exactly.
   await page.evaluate(()=>location.hash='#/replay?course_id=five');await page.waitForTimeout(650);assert.doesNotMatch(await transcript.textContent(),/already new DOM sentence/);
   await page.evaluate(()=>{const old=document.querySelector('#pane-voice');old.replaceWith(old.cloneNode(true));});await page.waitForTimeout(750);assert.match(await transcript.textContent(),/already new DOM sentence/);

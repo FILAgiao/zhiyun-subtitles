@@ -47,16 +47,16 @@ function setupMediaAndClock(){
   await checkEmpty();assert.match(await ui.locator('#classroom-caption-source').textContent(),/字幕/);assert.match(await ui.locator('#classroom-ppt-source').textContent(),/PPT/);
   assert.equal(await ui.locator('#zy-playback').isVisible(),false,'online live lessons use native controls');assert.equal(await video.evaluate(node=>node.controls),true);
   await ui.locator('#show-slides').click();assert.equal(await ui.locator('#slides').isVisible(),false);assert.match(await ui.locator('#slides-status').textContent(),/尚未读取到独立 PPT 图片/);assert.match(await ui.locator('#slides-status').textContent(),/屏幕共享/);
-  await ui.locator('#classroom-source-retry').click();await checkEmpty();
+  await page.waitForTimeout(650);await checkEmpty();
 
   // The active socket row changes in place and carries no timestamp.
-  await appendRow('现在讲授直播课程第一句','The first live sentence');await textIs('original','现在讲授直播课程第一句');assert.match(await ui.locator('#classroom-caption-source').textContent(),/实时|直播/);
+  await appendRow('现在讲授直播课程第一句','The first live sentence');await textIs('original','现在讲授直播课程第一句');assert.match(await ui.locator('#classroom-caption-source').getAttribute('title'),/实时|直播/);
   await ui.locator('#direction').evaluate(node=>{node.value='zh-en';node.dispatchEvent(new Event('change'));});await ui.locator('#mode').evaluate(node=>{node.value='both';});await textIs('translation','The first live sentence');
   await page.evaluate(()=>{const lines=document.querySelector('.trans-item.active .trans-lan').children;lines[0].textContent='流式修订后的完整句子';lines[1].textContent='The revised complete sentence';});await textIs('original','流式修订后的完整句子');await textIs('translation','The revised complete sentence');
   await video.evaluate(node=>node.dataset.testTime='9800');await page.waitForTimeout(250);assert.equal(await caption.textContent(),'流式修订后的完整句子','join-relative media time cannot select untimed live text');
 
-  // Rereading does not reset expiry; a new row with identical words does.
-  await advanceClock(16000);await checkEmpty();await ui.locator('#classroom-source-retry').click();await page.waitForTimeout(650);await checkEmpty();
+  // Automatic source polling does not reset expiry; a new row with identical words does.
+  await advanceClock(16000);await checkEmpty();await page.waitForTimeout(650);await page.waitForTimeout(650);await checkEmpty();
   await appendRow('流式修订后的完整句子','The revised complete sentence');await textIs('original','流式修订后的完整句子');
   await setPaused(true);await page.waitForTimeout(150);await appendRow('暂停期间到达的新句子','A sentence received while paused');await page.waitForTimeout(700);assert.equal(await caption.textContent(),'流式修订后的完整句子','paused playback retains its displayed live caption');
   await setPaused(false);await textIs('original','暂停期间到达的新句子');await textIs('translation','A sentence received while paused');
@@ -72,11 +72,11 @@ function setupMediaAndClock(){
   // Independent images arriving later can open without seeking the shared screen.
   const seekCount=await video.getAttribute('data-test-seek-count');
   await page.evaluate(()=>{const player=document.createElement('div');player.className='ppt-section-wrapper';player.innerHTML='<div class="ppt-item-wrapper activeStatus"><img alt="ppt" src="https://ppt.cmc.zju.edu.cn/current.jpg"></div>';document.body.append(player);document.querySelector('.note-scroll_body').innerHTML='<div class="note-ppt_item"><div class="ppt_wrap"><div class="ppt_order">1</div><img src="https://ppt.cmc.zju.edu.cn/current.jpg"><div class="ppt_mask" style="display:none"></div></div></div>';});
-  await ui.locator('#classroom-source-retry').click();await ui.locator('#show-slides').click();await ui.locator('#slide-image').evaluate(node=>node.decode());assert.equal(await ui.locator('#slides').isVisible(),true);assert.equal(await ui.locator('#slide-page').textContent(),'1 / 1');assert.match(await ui.locator('#slide-image').getAttribute('src'),/current\.jpg$/);assert.equal(await video.getAttribute('data-test-seek-count'),seekCount);assert.match(await ui.locator('#classroom-ppt-source').textContent(),/1/);
-  await ui.locator('#show-slides').click();
+  await page.waitForTimeout(650);await ui.locator('#show-slides').click();await ui.locator('#slide-image').evaluate(node=>node.decode());assert.equal(await ui.locator('#slides').isVisible(),true);assert.equal(await ui.locator('#slide-page').textContent(),'1 / 1');assert.match(await ui.locator('#slide-image').getAttribute('src'),/current\.jpg$/);assert.equal(await video.getAttribute('data-test-seek-count'),seekCount);assert.match(await ui.locator('#classroom-ppt-source').textContent(),/1/);
+  await ui.locator('#show-slides').click();await ui.locator('#show-slides').click();
 
-  // The SPA route changes first. Retry cannot admit the previous lesson's DOM.
-  await page.evaluate(()=>location.hash='#/studentsrs?course_id=89414&sub_id=2023952&tenant_code=112');await checkEmpty();await ui.locator('#classroom-source-retry').click();await page.waitForTimeout(650);await checkEmpty();await ui.locator('#show-slides').click();assert.equal(await ui.locator('#slides').isVisible(),false);assert.match(await ui.locator('#slides-status').textContent(),/等待新课程 PPT/);
+  // The SPA route changes first. Polling cannot admit the previous lesson's DOM.
+  await page.evaluate(()=>location.hash='#/studentsrs?course_id=89414&sub_id=2023952&tenant_code=112');await checkEmpty();await page.waitForTimeout(650);await page.waitForTimeout(650);await checkEmpty();await ui.locator('#show-slides').click();assert.equal(await ui.locator('#slides').isVisible(),false);assert.match(await ui.locator('#slides-status').textContent(),/等待新课程 PPT/);
   await page.evaluate(()=>{document.querySelector('.trans-contain').replaceChildren();document.querySelector('.ppt-section-wrapper').remove();document.querySelector('.note-scroll_body').replaceChildren();});await appendRow('另一节课真实到达的字幕','A fresh subtitle from the next lesson');await textIs('original','另一节课真实到达的字幕');assert.doesNotMatch(await ui.locator('#classroom-caption-source').textContent(),/上一课/);
   await page.screenshot({path:'.test-media/studentsrs-'+(extension?'extension':'userscript')+'.png'});assert.deepEqual(errors,[]);
   console.log('PASS: '+(extension?'Edge MV3 isolated world':'Chrome userscript')+' studentsrs empty/live/revised/repeated/paused/expired captions, media-clock isolation, DVR suppression, native controls, source retry, PPT placeholder/dynamic image and SPA isolation; no cloud APIs.');

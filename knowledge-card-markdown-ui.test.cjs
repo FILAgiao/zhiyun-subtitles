@@ -90,7 +90,7 @@ const fs=require('fs'),assert=require('node:assert/strict'),{chromium}=require('
   assert.equal(authorLabel.y-quoteLabel.y,26,'name is immediately below the final punctuation');
   assert.ok(!result.labels.some(x=>/不止记住答案|把一个疑问|求知手记/.test(x.text)));
   assert.ok(result.smallHeight<1040);assert.ok(result.largeHeight>result.smallHeight);assert.ok(result.bottom<85&&result.bottom>60);
-  assert.equal(jsQR(new Uint8ClampedArray(result.qr.data),result.qr.width,result.qr.height)?.data,'https://47.77.182.216.sslip.io/gateway/download');
+  assert.equal(jsQR(new Uint8ClampedArray(result.qr.data),result.qr.width,result.qr.height)?.data,'https://47.77.182.216.sslip.io/gateway/');
   fs.writeFileSync('knowledge-card-compact-preview.png',Buffer.from(result.small.split(',')[1],'base64'));
   fs.writeFileSync('knowledge-card-markdown-preview.png',Buffer.from(result.large.split(',')[1],'base64'));
   const html=await page.evaluate(()=>window.exported.at(-1).html);

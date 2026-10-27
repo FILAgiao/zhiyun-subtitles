@@ -34,6 +34,18 @@ def password_hash(password,salt): return hashlib.pbkdf2_hmac('sha256',password.e
 class NoRedirect(urllib.request.HTTPRedirectHandler):
     def redirect_request(self,*args,**kwargs): return None
 
+def database_fault(error):
+    # SQLite messages can include file paths, SQL and user data. Only its
+    # documented numeric code and constant name belong in diagnostics.
+    code=getattr(error,'sqlite_errorcode',None)
+    name=getattr(error,'sqlite_errorname',None)
+    diagnostic={'event':'gateway_database_error','error_code':'database_unavailable'}
+    if type(code) is int: diagnostic['sqlite_errorcode']=code
+    if isinstance(name,str) and re.fullmatch(r'SQLITE_[A-Z0-9_]{1,64}',name) and type(getattr(sqlite3,name,None)) is int:
+        diagnostic['sqlite_errorname']=name
+    print(json.dumps(diagnostic),file=sys.stderr,flush=True)
+    return Fault(503,'服务数据库暂时不可用，请稍后重试。','database_unavailable',5)
+
 def speech_status_code(headers):
     # Only this numeric supplier field may cross the gateway boundary. Never
     # copy diagnostic messages, arbitrary response headers or error bodies.
@@ -147,7 +159,7 @@ class Gateway(AdminMixin, PromptMixin, StudyMixin, OperationsMixin):
                 'api_versions':[1],'learning_jobs':True,'speech_requires_login':True,
                 'prompt_catalog':True,'membership':True,'guest_speech':False,'graceful_shutdown':True,
                 'speech_stream':self.speech_streams.configured(),'speech_stream_pcm':True,
-                'study_clips':True,'study_sync':True,'email_registration':True,'mail_configured':self.study_capabilities()['mail_configured'],
+                'study_clips':True,'study_clip_limits':self.clip_limits(),'study_sync':True,'email_registration':True,'mail_configured':self.study_capabilities()['mail_configured'],
                 'compatibility':{'baseline':'0.20.48','version_header_required':False}}
     def client_metadata(self,headers):
         version=headers.get('X-Client-Version','')
@@ -169,11 +181,26 @@ class Gateway(AdminMixin, PromptMixin, StudyMixin, OperationsMixin):
                 if remaining<=0:return False
                 self.lifecycle.wait(min(.1,remaining))
     @contextmanager
-    def db(self):
-        db=sqlite3.connect(self.path,timeout=10); db.row_factory=sqlite3.Row
+    def db(self,readonly=False,timeout=10):
         try:
-            with db: yield db
-        finally: db.close()
+            target=Path(self.path).resolve().as_uri()+'?mode=ro' if readonly else self.path
+            db=sqlite3.connect(target,timeout=timeout,uri=readonly); db.row_factory=sqlite3.Row
+            try:
+                with db: yield db
+            finally: db.close()
+        # Callers already translate expected uniqueness conflicts into 409s.
+        except sqlite3.IntegrityError: raise
+        except sqlite3.DatabaseError as error: raise database_fault(error) from None
+    def check_database(self):
+        # Bounded readiness reads cover the shared authentication/accounting
+        # paths. A fresh read-only connection detects a missing/replaced file
+        # without recreating it; full integrity scans belong in maintenance.
+        with self.db(readonly=True,timeout=1) as db:
+            for table,column in (('users','id'),('sessions','hash'),('grants','user'),
+                                 ('calls','id'),('jobs','id'),('attempts','key'),
+                                 ('activity_sessions','hash'),('activity_client_metadata','hash'),
+                                 ('learning_job_receipts','id'),('speech_stream_receipts','id')):
+                db.execute('SELECT '+column+' FROM '+table+' LIMIT 1').fetchone()
     def add_user(self,email,password,app,requests=1000,audio=3600,username=None,admin=False,permissions=None,plan=None):
         if not 12<=len(password)<=256: raise ValueError('密码为 12–256 个字符')
         salt=secrets.token_hex(16)
@@ -237,6 +264,7 @@ class Gateway(AdminMixin, PromptMixin, StudyMixin, OperationsMixin):
             if paid and self.draining:raise Fault(503,'服务正在更新，请稍后重试；本次请求未扣额度。','server_updating',5)
             self.active_requests+=1
         try:return self._handle(method,path,headers,body,ip,stream_sink)
+        except sqlite3.DatabaseError as error:raise database_fault(error) from None
         finally:
             with self.lifecycle:self.active_requests-=1;self.lifecycle.notify_all()
     def _handle(self,method,path,headers,body,ip,stream_sink=None):
@@ -245,7 +273,9 @@ class Gateway(AdminMixin, PromptMixin, StudyMixin, OperationsMixin):
         if access_public is not None:return access_public
         study_public=self.study_public(method,path,headers,body,ip)
         if study_public is not None:return study_public
-        if method=='GET' and path=='/health': return 200,{}, {'ok':True,'api_version':1,'capabilities':self.capabilities(),'draining':self.draining}
+        if method=='GET' and path=='/health':
+            self.check_database()
+            return 200,{}, {'ok':True,'api_version':1,'capabilities':self.capabilities(),'draining':self.draining}
         if method=='POST' and path=='/v1/auth/login':
             email,password=body.get('email',''),body.get('password','')
             if not isinstance(email,str) or not isinstance(password,str) or len(email)>254 or len(password)>256: raise Fault(400,'登录参数无效')
@@ -515,14 +545,16 @@ def make_server(gateway,host='127.0.0.1',port=8080,allowed_web_origins=()):
                         status,more,result=self.api_request(gateway)
                 if not self.streaming: self.respond(status,more,result,extra)
                 return
-            except Fault as error:
+            except (Fault,sqlite3.DatabaseError) as error:
+                if isinstance(error,sqlite3.DatabaseError):error=database_fault(error)
                 status=error.status
                 more={'Retry-After':str(error.retry_after)} if error.retry_after is not None else {}
                 speech_code=getattr(error,'speech_status_code','')
                 if re.fullmatch(r'[0-9]{8}',speech_code): more['X-Api-Status-Code']=speech_code
                 result={'error':error.message,'error_code':error.code,'request_id':request_id}
+                if self.path=='/health':result['ok']=False
                 # Diagnostics contain no credentials, IP, account name, prompts or media.
-                route=self.path if self.path in ('/v1/ark/responses','/v1/learning/jobs/create','/v1/speech/submit','/v1/speech/query') else 'other'
+                route=self.path if self.path in ('/health','/v1/ark/responses','/v1/learning/jobs/create','/v1/speech/submit','/v1/speech/query') else 'other'
                 print(json.dumps({'event':'gateway_rejection','request_id':request_id,'route':route,'status':status,'error_code':error.code,'elapsed_ms':round((time.monotonic()-began)*1000)}),file=sys.stderr,flush=True)
             except (ValueError,TimeoutError): status,more,result=400,{}, {'error':'请求格式无效'}
             except Exception: status,more,result=500,{}, {'error':'服务暂时不可用'}

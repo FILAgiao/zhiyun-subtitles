@@ -277,16 +277,16 @@
     canvas.dataset.quoteId=quote.id;canvas.dataset.quoteAuthor=quote.author;canvas.dataset.quoteSource=quote.source;canvas.dataset.quoteLines=String(quoteLines.length);
     ctx.fillStyle='#cbdcf1';ctx.font='18px "Microsoft YaHei",sans-serif';ctx.fillText('同步字幕  ·  PPT 讲解  ·  随时提问',76,footer+featuresY);
     ctx.fillStyle='#9fb9d7';ctx.font='16px "Microsoft YaHei",sans-serif';ctx.fillText('浙大上课爽  /  把理解留在这一张',76,footer+brandY);
-    if(qr){round(842,footer-4,174,174,14,'#fff');ctx.imageSmoothingEnabled=false;ctx.drawImage(qr,850,footer+4,158,158);ctx.imageSmoothingEnabled=true;ctx.font='16px "Microsoft YaHei",sans-serif';ctx.fillStyle='#d2e2f5';ctx.save();ctx.textAlign='center';['扫码下载浏览器插件','Chrome / Edge'].forEach((line,i)=>ctx.fillText(line,929,footer+194+i*24));ctx.restore();}
+    if(qr){round(842,footer-4,174,174,14,'#fff');ctx.imageSmoothingEnabled=false;ctx.drawImage(qr,850,footer+4,158,158);ctx.imageSmoothingEnabled=true;ctx.font='16px "Microsoft YaHei",sans-serif';ctx.fillStyle='#d2e2f5';ctx.save();ctx.textAlign='center';['扫码查看插件与功能','Chrome / Edge'].forEach((line,i)=>ctx.fillText(line,929,footer+194+i*24));ctx.restore();}
     canvas.dataset.qrX=String(Math.round(842*scale));canvas.dataset.qrY=String(Math.round((footer-4)*scale));canvas.dataset.qrSize=String(Math.round(174*scale));
-    canvas.dataset.downloadUrl='https://47.77.182.216.sslip.io/gateway/download';
+    canvas.dataset.downloadUrl='https://47.77.182.216.sslip.io/gateway/';
     return canvas;
   }
   // Retain the public helper name; a conversation always exports as one image.
   async function renderKnowledgeCards(doc,options){return [await renderKnowledgeCard(doc,options)];}
 
   function mountLearningAssistant(options) {
-    const {shadow,request,promptStore=null,studyStore=null,getApiKey=()=>'',canUse=()=>!!String(getApiKey()||'').trim(),getCapabilities=()=>({webSearch:true}),getAccountSummary=()=>null,getCourseId=()=>'',onOpenAccount=()=>onOpenSettings('connection'),prepareSlide=()=>{},getSlide=()=>null,getContext=()=>'',getCourseTitle=()=>'',getCaptureTarget=()=>null,getValue=(_,d)=>d,setValue=()=>{},onRequireLogin=()=>{},onOpenSettings=()=>{}}=options;
+    const {shadow,request,promptStore=null,studyStore=null,collapsedEntry=true,getApiKey=()=>'',canUse=()=>!!String(getApiKey()||'').trim(),getCapabilities=()=>({webSearch:true}),getAccountSummary=()=>null,getCourseId=()=>'',onOpenAccount=()=>onOpenSettings('connection'),prepareSlide=()=>{},getSlide=()=>null,getContext=()=>'',getCourseTitle=()=>'',getCaptureTarget=()=>null,getValue=(_,d)=>d,setValue=()=>{},onRequireLogin=()=>{},onOpenSettings=()=>{}}=options;
     if(!shadow || typeof request!=='function')throw new Error('AI 助手缺少 shadow 或 request');
     const doc=shadow.ownerDocument,win=doc.defaultView;
     function ensureAccess(feature='learning'){if(canUse(feature))return true;onRequireLogin(feature);return false;}
@@ -311,12 +311,12 @@
     ].join('\n');style.textContent+='.ai-head{padding:6px 12px;min-height:38px}.ai-head strong{font-size:14px}#ai-learning .ai-head button{padding:3px 7px}.ai-toolbar{flex-wrap:nowrap;padding:5px 12px;gap:6px;min-height:36px}#ai-mode{min-width:0;width:120px;font-size:12px}#ai-learning .ai-toolbar button{padding:4px 8px;white-space:nowrap;font-size:12px}#ai-compose{padding:7px 12px}#ai-question{min-height:42px;height:42px;padding:6px 9px}#ai-compose .ai-actions{margin-top:5px}.ai-card-row{flex-wrap:wrap;padding:0 12px 6px}';style.textContent+=`#ai-card-dialog-layer{pointer-events:auto;position:fixed;inset:0;z-index:2147483646;background:#13283f80;display:flex;align-items:center;justify-content:center;padding:18px;font:14px/1.6 "Microsoft YaHei","Segoe UI",sans-serif;color:#233c54}#ai-card-dialog{box-sizing:border-box;background:#fffdf8;border:1px solid #e4e8ee;border-radius:20px;box-shadow:0 20px 80px #112a4f40;width:620px;max-width:100%;max-height:calc(100vh - 36px);display:flex;flex-direction:column;overflow:hidden}#ai-card-dialog *{box-sizing:border-box}#ai-card-dialog button{font:inherit;cursor:pointer;color:#264563;border:1px solid #d8e1ed;background:#fff;border-radius:10px;padding:9px 13px}#ai-card-dialog button:disabled{opacity:.45;cursor:default}#ai-card-dialog button:focus-visible{outline:3px solid #9cbde3;outline-offset:2px}#ai-card-dialog header{display:flex;justify-content:space-between;gap:12px;padding:22px 24px 12px}#ai-card-dialog header strong{font-size:21px}#ai-card-dialog header p{margin:5px 0 0;color:#6a7b8b}#ai-card-cancel{align-self:flex-start}#ai-card-dialog .ai-card-modes{display:grid;grid-template-columns:1fr 1fr;gap:12px;padding:8px 24px 18px}#ai-card-dialog .ai-card-modes button{text-align:left;font-weight:700;padding:14px}#ai-card-dialog small{display:block;font-size:12px;font-weight:400;margin-top:4px;color:#6a7b8b}#ai-card-dialog button[aria-pressed=true]{background:#e9f1fb;border-color:#28639e;color:#164e73}#ai-card-choices{overflow-y:auto;min-height:0;padding:0 24px 18px;border-top:1px solid #e3e9ef}#ai-card-choices[hidden]{display:none}#ai-card-dialog .ai-card-pair{padding:14px 0;border-bottom:1px solid #e3e9ef}#ai-card-dialog .ai-card-question{font-weight:600;margin:0 0 10px;white-space:pre-wrap;overflow-wrap:anywhere}#ai-card-dialog .ai-card-pair img{display:block;max-height:100px;max-width:100%;margin-bottom:10px}#ai-card-dialog .ai-card-pair-all{font-size:12px;margin-bottom:8px}#ai-card-dialog .ai-card-sentence-choices{display:grid;gap:7px}#ai-card-dialog .ai-sentence-choice{text-align:left;white-space:pre-wrap;overflow-wrap:anywhere}#ai-card-dialog footer{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:16px 24px;border-top:1px solid #e3e9ef}#ai-card-summary{font-size:12px;color:#6a7b8b}#ai-card-dialog #ai-card-confirm{background:#163f73;color:#fff;border-color:#163f73;white-space:nowrap}@media(max-width:480px){#ai-card-dialog header,#ai-card-dialog footer{padding:14px}#ai-card-dialog .ai-card-modes{padding:8px 14px 14px;gap:8px}#ai-card-choices{padding:0 14px 14px}#ai-card-dialog footer{align-items:flex-start;flex-direction:column}#ai-card-confirm{width:100%}}`;shadow.append(style);
     const panel=make('section',{id:'ai-learning',role:'dialog','aria-label':'AI 讲解'});panel.hidden=true;
     style.textContent+="#ai-card-row{flex-wrap:wrap}#ai-study-web{font-size:11px;color:var(--zy-accent,#b94e22);padding:7px 2px;text-decoration:none}#ai-cloud-save{font-size:11px}#ai-card-row [hidden]{display:none!important}@media(max-width:400px){#ai-card-row{gap:6px}#ai-card-row #ai-card-hint{display:none}#ai-card-row button{padding:6px 8px}}";
-    panel.innerHTML='<div class="ai-head"><button id="ai-questions-back" type="button" aria-label="返回问题列表">← 问题列表</button><strong>✦ AI 讲解</strong><button id="ai-settings-open" title="AI 设置" aria-label="AI 设置">⚙</button><button id="ai-close" aria-label="收起 AI 讲解">×</button></div><div class="ai-toolbar"><select id="ai-mode" aria-label="讲解模式"></select><button id="ai-slide-action">讲解本页 PPT</button><button id="ai-screenshot" type="button">截图</button></div><div id="ai-log" role="log" aria-label="课程对话" aria-live="polite"></div><div id="ai-status" role="status"></div><div id="ai-context-badge"></div><div id="ai-card-row" class="ai-card-row" hidden><button id="ai-save-card" type="button" disabled title="选择全部或逐句导出为本地 PNG">↓ 导出知识卡</button><button id="ai-cloud-save" type="button" title="主动保存文字问答到当前账号，截图保留在本机；仅本人可见">保存到账号</button><a id="ai-study-web" href="https://47.77.182.216.sslip.io/gateway/study" target="_blank" rel="noopener noreferrer">网页回看 ↗</a><span id="ai-card-hint" class="ai-hint">保存问答，方便复习</span></div><form id="ai-compose"><div id="ai-attachment" hidden><img alt="待发送的课程截图"><span>截图已就位</span><button type="button" id="ai-remove-image" aria-label="移除截图">×</button></div><textarea id="ai-question" maxlength="4000" placeholder="卡在哪儿了？直接问，也可以粘贴截图。" aria-label="向 AI 提问"></textarea><div class="ai-actions"><button id="ai-clear" type="button" title="清空本课程的对话和图片上下文">新对话</button><button id="ai-stop" type="button" hidden>停止</button><span class="ai-hint">Enter 发送 · Shift 换行</span><button id="ai-send" type="submit">发送 ↗</button></div></form>';
+    panel.innerHTML='<div class="ai-head"><button id="ai-questions-back" type="button" aria-label="返回问题列表">← 问题列表</button><strong>✦ AI 讲解</strong><button id="ai-settings-open" title="AI 设置" aria-label="AI 设置">⚙</button><button id="ai-close" aria-label="收起 AI 讲解">×</button></div><div class="ai-toolbar"><select id="ai-mode" aria-label="讲解模式"></select><button id="ai-slide-action">讲解本页 PPT</button><button id="ai-screenshot" type="button">截图</button></div><div id="ai-log" role="log" aria-label="课程对话" aria-live="polite"></div><div id="ai-status" role="status"></div><div id="ai-context-badge"></div><div id="ai-card-row" class="ai-card-row" hidden><button id="ai-save-card" type="button" disabled title="选择全部或逐句导出为本地 PNG">↓ 导出知识卡</button><button id="ai-cloud-save" type="button" title="文字问答同步到当前账号，截图可另行收藏原图；仅本人可见">保存到账号</button><a id="ai-study-web" href="https://47.77.182.216.sslip.io/gateway/study" target="_blank" rel="noopener noreferrer">网页回看 ↗</a><span id="ai-card-hint" class="ai-hint">保存问答，方便复习</span></div><form id="ai-compose"><div id="ai-attachment" hidden><img alt="待发送的课程截图"><span>截图已就位</span><button type="button" id="ai-remove-image" aria-label="移除截图">×</button></div><textarea id="ai-question" maxlength="4000" placeholder="卡在哪儿了？直接问，也可以粘贴截图。" aria-label="向 AI 提问"></textarea><div class="ai-actions"><button id="ai-clear" type="button" title="清空本课程的对话和图片上下文">新对话</button><button id="ai-stop" type="button" hidden>停止</button><span class="ai-hint">Enter 发送 · Shift 换行</span><button id="ai-send" type="submit">发送 ↗</button></div></form>';
     const accountStrip=make('div',{id:'ai-account-strip'}),accountSummaryButton=make('button',{id:'ai-account-status',type:'button'});accountStrip.hidden=true;accountStrip.append(accountSummaryButton);panel.querySelector('.ai-head').after(accountStrip);
     function updateAccountSummary(){const summary=getAccountSummary();accountStrip.hidden=!summary?.trial;if(!summary?.trial)return;accountSummaryButton.textContent=summary.text+' · '+summary.quota;accountSummaryButton.title=summary.deadline;accountSummaryButton.dataset.low=String(summary.low);accountSummaryButton.setAttribute('aria-label',summary.text+'，'+summary.quota+'，点击查看账号详情');}
     listen(accountSummaryButton,'click',()=>onOpenAccount());listen(shadow,'zy-account-state',updateAccountSummary);updateAccountSummary();
     style.textContent+='#ai-account-strip{display:flex;flex:none;justify-content:flex-end;padding:0 14px 7px;background:var(--zy-card,#fff)}#ai-account-strip[hidden]{display:none!important}#ai-learning #ai-account-status{max-width:100%;padding:3px 7px;font-size:10px;line-height:1.5;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--zy-muted,#68717d);border:1px solid var(--zy-line,#eedccd);border-radius:7px;background:var(--zy-soft,#fdebdd);box-shadow:none}#ai-learning #ai-account-status:hover,#ai-learning #ai-account-status[data-low=true]{color:var(--zy-accent,#c45221)}';
-    style.textContent+=':host([data-ai-workspace]) #panel,:host([data-ai-workspace]) #compact{display:none!important}';
+    style.textContent+=':host([data-ai-workspace]) #panel,:host([data-ai-workspace]) #compact,:host([data-ai-workspace]) #compact-launcher{display:none!important}';
     style.textContent+='#ai-learning>.ai-thread{position:relative;display:flex;flex-direction:column;flex:1;min-height:64px;overflow:hidden}#ai-jump-latest{position:absolute;left:50%;bottom:12px;transform:translateX(-50%);white-space:nowrap;font-size:12px}#ai-jump-latest[hidden]{display:none!important}';
     style.textContent+=(globalThis.ZYWarmTheme?.css||'');shadow.append(panel);globalThis.ZYAppearance?.attach(shadow);const resume=make('button',{id:'ai-resume',text:'✦ 继续对话',type:'button'});resume.hidden=true;shadow.append(resume);const $=id=>panel.querySelector('#'+id);
     // Move the collapsed conversation entry away from page controls.
@@ -382,14 +382,34 @@
     refreshModes();
     function status(message){$('ai-status').textContent=message;}
     function badge(){$('ai-context-badge').textContent=settings.followSlides?'已记住最近 '+recentSlides.length+' 页 · 下次提问时一起看':'';$('ai-context-badge').hidden=!settings.followSlides||!slideContextEnabled;}
-    let followLog=true;
-    const log=$('ai-log'),thread=make('div',{class:'ai-thread'}),jumpLatest=make('button',{id:'ai-jump-latest',type:'button',text:'↓ 回到最新回复'});jumpLatest.hidden=true;log.before(thread);thread.append(log,jumpLatest);
-    function followLatest(){if(followLog)log.scrollTop=log.scrollHeight;jumpLatest.hidden=followLog;}
-    listen(log,'wheel',e=>{if(e.deltaY<0){followLog=false;jumpLatest.hidden=false;}},{passive:true});
-    listen(log,'scroll',()=>{followLog=log.scrollHeight-log.clientHeight-log.scrollTop<=36;jumpLatest.hidden=followLog;},{passive:true});
-    jumpLatest.onclick=()=>{followLog=true;followLatest();};
-    function message(role,text,image){const item=make('div',{class:'ai-message','data-role':role});item.append(make('small',{text:role==='user'?'我':'AI 讲解'}),doc.createTextNode(text));if(role==='assistant'){const content=make('div');renderMarkdown(doc,content,text);item.lastChild.remove();item.append(content);}if(image){const picture=make('img',{src:image,alt:'本次问题附图'});picture.title='点击查看完整截图';picture.tabIndex=0;picture.setAttribute('aria-label','放大本次问题附图');const preview=()=>{const layer=make('div',{id:'ai-image-viewer',role:'dialog','aria-label':'问题附图原图'}),close=make('button',{text:'关闭',type:'button'}),full=make('img',{src:image,alt:'完整问题附图'});layer.append(close,full);const dismiss=()=>{layer.remove();doc.removeEventListener('keydown',key);if(activeImageDismiss===dismiss)activeImageDismiss=null;picture.focus();};const key=e=>{if(e.key==='Escape'){e.stopPropagation();dismiss();}};close.onclick=dismiss;layer.onclick=e=>{if(e.target===layer)dismiss();};doc.addEventListener('keydown',key);activeImageDismiss?.();activeImageDismiss=dismiss;shadow.append(layer);close.focus();};picture.onclick=preview;picture.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();preview();}};item.append(picture);}item._cardTurn={role,text,image};$('ai-log').append(item);followLatest();return item;}
+    let currentQuestionAnchor=null;
+    const log=$('ai-log'),thread=make('div',{class:'ai-thread'}),jumpLatest=make('button',{id:'ai-jump-latest',type:'button',text:'↓ 查看下方回复'});jumpLatest.hidden=true;log.before(thread);thread.append(log,jumpLatest);
+    // Reserve only the space needed to pin a newly sent question at the top.
+    // As its answer grows, the empty space shrinks without moving the reader.
+    const readingSpace=make('div',{'aria-hidden':'true'});readingSpace.style.pointerEvents='none';
+    function followLatest(){
+      if(currentQuestionAnchor?.isConnected&&readingSpace.isConnected){
+        const css=win.getComputedStyle(log),available=log.clientHeight-(parseFloat(css.paddingTop)||0)-(parseFloat(css.paddingBottom)||0);
+        const used=readingSpace.getBoundingClientRect().top-currentQuestionAnchor.getBoundingClientRect().top;
+        readingSpace.style.height=Math.max(0,available-used)+'px';
+      }
+      jumpLatest.hidden=log.scrollHeight-log.clientHeight-log.scrollTop<=36;
+    }
+    function scrollToQuestion(item){
+      currentQuestionAnchor=item;log.append(readingSpace);followLatest();
+      log.scrollTop+=item.getBoundingClientRect().top-log.getBoundingClientRect().top-(parseFloat(win.getComputedStyle(log).paddingTop)||0);
+      followLatest();
+    }
+    listen(log,'scroll',followLatest,{passive:true});
+    jumpLatest.onclick=()=>{log.scrollTop=log.scrollHeight;followLatest();};
+    function message(role,text,image){const item=make('div',{class:'ai-message','data-role':role});item.append(make('small',{text:role==='user'?'我':'AI 讲解'}),doc.createTextNode(text));if(role==='assistant'){const content=make('div');renderMarkdown(doc,content,text);item.lastChild.remove();item.append(content);}if(image){const picture=make('img',{src:image,alt:'本次问题附图'});picture.title='点击查看完整截图';picture.tabIndex=0;picture.setAttribute('aria-label','放大本次问题附图');const preview=()=>{const layer=make('div',{id:'ai-image-viewer',role:'dialog','aria-label':'问题附图原图'}),close=make('button',{text:'关闭',type:'button'}),full=make('img',{src:image,alt:'完整问题附图'});layer.append(close,full);const dismiss=()=>{layer.remove();doc.removeEventListener('keydown',key);if(activeImageDismiss===dismiss)activeImageDismiss=null;picture.focus();};const key=e=>{if(e.key==='Escape'){e.stopPropagation();dismiss();}};close.onclick=dismiss;layer.onclick=e=>{if(e.target===layer)dismiss();};doc.addEventListener('keydown',key);activeImageDismiss?.();activeImageDismiss=dismiss;shadow.append(layer);close.focus();};picture.onclick=preview;picture.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();preview();}};item.append(picture);}item._cardTurn={role,text,image};if(readingSpace.isConnected)log.insertBefore(item,readingSpace);else log.append(item);followLatest();return item;}
     function greeting(){}
+    function refreshSavedSettings(){
+      const stored=getValue(STORAGE_KEY,null);if(!stored||typeof stored!=='object')return;
+      if(typeof stored.mode==='string')preferredPromptMode=stored.mode;
+      settings=settingsOf({...settings,...stored,...(promptStore?{catalog:settings.catalog}:{}),mode:preferredPromptMode});
+      refreshModes();badge();
+    }
     function save(){preferredPromptMode=settings.mode;const stored={...settings};delete stored.catalog;if(promptStore){stored.prompts=legacyPrompts;stored.customPrompt=legacyCustom;}setValue(STORAGE_KEY,stored);$('ai-mode').value=settings.mode;badge();}
     async function syncPrompts(force=false){
       if(!promptStore)return true;
@@ -408,7 +428,7 @@
         const data=await promptStore.list();
         if(destroyed||epoch!==promptEpoch||account!==promptStore.account())return false;
         if(!Array.isArray(data.prompts))throw Error('服务器尚未提供提示词列表，请联系管理员更新服务。');
-        settings=settingsOf({...settings,mode:preferredPromptMode,catalog:data.prompts});promptReady=true;promptCloudReady=true;
+        refreshSavedSettings();settings=settingsOf({...settings,mode:preferredPromptMode,catalog:data.prompts});promptReady=true;promptCloudReady=true;
         promptMessage='已同步：官方 '+data.prompts.filter(p=>p.scope==='official').length+' 个 · 我的云端 '+settings.prompts.length+' 个。';
         refreshModes();redrawPrompts();return true;
       }catch(e){
@@ -433,44 +453,97 @@
       promptReady=false;
       if(!await syncPrompts(true))throw Error('云端已保存，列表读取失败，请刷新后查看。');
     }
-    function open(){if(!ensureAccess())return;questions.hidden=true;panel.hidden=false;resume.hidden=true;clampFloating(panel);badge();fitQuestion();$('ai-question').focus();persist();}
-    function collapse(){resetCardChoices();if(sendPreparing){stop();status('已取消发送，截图已保留。');}else if(capturePending)stop();cleanupCapture?.();panel.hidden=true;resume.hidden=false;clampResume();persist();}
-    let sessionCourse=String(getCourseId()),conversationId='',conversationTitle='',conversationSource='文字提问',conversationCourse='',conversationOrigin='';
+    function open(){if(!ensureAccess())return;refreshSavedSettings();questions.hidden=true;panel.hidden=false;resume.hidden=true;clampFloating(panel);badge();fitQuestion();$('ai-question').focus();persist();}
+    function collapse(){resetCardChoices();if(sendPreparing){stop();status('已取消发送，截图已保留。');}else if(capturePending)stop();cleanupCapture?.();panel.hidden=true;resume.hidden=!collapsedEntry;clampResume();persist();}
+    let sessionCourse=String(getCourseId()),conversationId='',conversationTitle='',conversationSource='文字提问',conversationCourse='',conversationOrigin='',conversationOwner='',conversationSync='';
     const INDEX_KEY='ai-question-index-v1';
     const records=()=>{const value=getValue(INDEX_KEY,[]);return Array.isArray(value)?value:[];};
     const conversationKey=id=>'ai-question-v1:'+id;
     const questions=make('aside',{id:'ai-questions','aria-label':'问题列表'});questions.hidden=true;questions.innerHTML='<header><button id="ai-questions-close" type="button" aria-label="关闭问题列表">← 返回课堂</button><strong>问题列表</strong></header><input id="ai-questions-search" placeholder="搜索问题、课程或网页" aria-label="搜索问题"><div id="ai-questions-list"></div>';shadow.append(questions);
     const syncWorkspace=()=>shadow.host?.toggleAttribute('data-ai-workspace',!panel.hidden||!questions.hidden);
     const workspaceObserver=new win.MutationObserver(syncWorkspace);workspaceObserver.observe(panel,{attributes:true,attributeFilter:['hidden']});workspaceObserver.observe(questions,{attributes:true,attributeFilter:['hidden']});cleanups.push(()=>{workspaceObserver.disconnect();shadow.host?.removeAttribute('data-ai-workspace');});syncWorkspace();
-    function renderQuestions(){const list=questions.querySelector('#ai-questions-list');list.replaceChildren();const query=questions.querySelector('input').value.trim().toLowerCase();const items=records().filter(r=>[r.title,r.questions,r.course,r.source].join(' ').toLowerCase().includes(query));if(!items.length)list.append(make('p',{text:'还没有问题。截图、选中文字或直接提问后会保存在这里。'}));for(const record of items){const row=make('article');const button=make('button',{type:'button',class:'ai-question-record',title:record.questions||record.title});button.append(make('strong',{text:questionTitle(record.title)||'图片提问'}),make('small',{text:record.course+' · '+record.source+' · '+(record.questionCount||1)+' 个问题 · '+new Date(record.updated).toLocaleString()}));button.onclick=()=>loadConversation(record.id);row.append(button);const remove=make('button',{text:'删除',type:'button','aria-label':'删除问题：'+record.title});remove.onclick=()=>{setValue(INDEX_KEY,records().filter(r=>r.id!==record.id));setValue(conversationKey(record.id),null);if(conversationId===record.id)conversationId='';renderQuestions();};row.append(remove);list.append(row);}}
-    function loadConversation(id){if(!ensureAccess('learning_records'))return;const saved=getValue(conversationKey(id),null);if(!saved)return;persist();clear();conversationId=id;conversationTitle=questionTitle(saved.title);conversationSource=saved.source||'文字提问';conversationCourse=saved.course||'';conversationOrigin=saved.origin||'';history=saved.history||[];$('ai-log').replaceChildren();for(const turn of history)message(turn.role,turn.text,turn.image);lastAnswer=saved.lastAnswer||null;$('ai-save-card').disabled=!lastAnswer;$('ai-card-row').hidden=!lastAnswer;questions.hidden=true;open();updateCardSelection();status('已打开历史问题，继续提问会接着这段对话。');}
+    function renderQuestions(){const list=questions.querySelector('#ai-questions-list');list.replaceChildren();const query=questions.querySelector('input').value.trim().toLowerCase();const items=records().filter(r=>[r.title,r.questions,r.course,r.source].join(' ').toLowerCase().includes(query));if(!items.length)list.append(make('p',{text:'还没有问题。截图、选中文字或直接提问后会保存在这里。'}));for(const record of items){const row=make('article');const button=make('button',{type:'button',class:'ai-question-record',title:record.questions||record.title});button.append(make('strong',{text:questionTitle(record.title)||'图片提问'}),make('small',{text:record.course+' · '+record.source+' · '+(record.questionCount||1)+' 个问题 · '+new Date(record.updated).toLocaleString()+(record.cloudSync==='failed'?' · 同步待重试':record.cloudSync==='pending'?' · 待同步':'')}));button.onclick=()=>loadConversation(record.id);row.append(button);const remove=make('button',{text:'删除',type:'button','aria-label':'删除问题：'+record.title});remove.onclick=()=>{setValue(INDEX_KEY,records().filter(r=>r.id!==record.id));setValue(conversationKey(record.id),null);if(conversationId===record.id)conversationId='';renderQuestions();};row.append(remove);list.append(row);}}
+    function loadConversation(id){if(!ensureAccess('learning_records'))return;const saved=getValue(conversationKey(id),null);if(!saved)return;persist();clear();conversationId=id;conversationTitle=questionTitle(saved.title);conversationSource=saved.source||'文字提问';conversationCourse=saved.course||'';conversationOrigin=saved.origin||'';conversationOwner=saved.cloudOwner||'';conversationSync=saved.cloudSync||'';cloudFailure=conversationSync==='failed';lastCloudSignature='';history=saved.history||[];$('ai-log').replaceChildren();for(const turn of history)message(turn.role,turn.text,turn.image);lastAnswer=saved.lastAnswer||null;$('ai-save-card').disabled=!lastAnswer;$('ai-card-row').hidden=!lastAnswer;questions.hidden=true;open();updateCardSelection();status('已打开历史问题，继续提问会接着这段对话。');}
     function showQuestions(){if(!ensureAccess('learning_records'))return;persist();panel.hidden=true;resume.hidden=true;renderQuestions();questions.hidden=false;clampFloating(questions);questions.querySelector('input').focus();}
     listen($('ai-questions-back'),'click',showQuestions);
     listen(questions.querySelector('#ai-questions-close'),'click',()=>{questions.hidden=true;});listen(questions.querySelector('input'),'input',renderQuestions);listen(shadow.getElementById('transcript-open'),'click',()=>{if(questions.hidden)showQuestions();else questions.hidden=true;});
-    function archive(){if(!canUse('learning_records'))return;if(!history.some(t=>t.role==='user'))return;if(!conversationId)conversationId=win.crypto.randomUUID?.()||Date.now().toString(36)+'-'+Math.random().toString(36).slice(2);if(!conversationCourse)conversationCourse=String(getCourseTitle()||doc.title||'网页提问');if(!conversationOrigin)conversationOrigin=String(getCourseId());const saved={history,lastAnswer,title:conversationTitle,source:conversationSource,course:conversationCourse,origin:conversationOrigin};setValue(conversationKey(conversationId),saved);const index=records().filter(r=>r.id!==conversationId);index.unshift({id:conversationId,title:conversationTitle||questionTitle(history.find(t=>t.role==='user').text)||'图片提问',course:conversationCourse,origin:conversationOrigin,source:conversationSource,questions:history.filter(t=>t.role==='user').map(t=>t.text).join('\n'),questionCount:history.filter(t=>t.role==='user').length,updated:Date.now()});setValue(INDEX_KEY,index);if(!questions.hidden)renderQuestions();}
+    function archive(){if(!canUse('learning_records'))return;if(!history.some(t=>t.role==='user'))return;if(!conversationId)conversationId=win.crypto.randomUUID?.()||Date.now().toString(36)+'-'+Math.random().toString(36).slice(2);if(!conversationCourse)conversationCourse=String(getCourseTitle()||doc.title||'网页提问');if(!conversationOrigin)conversationOrigin=String(getCourseId());const saved={history,lastAnswer,title:conversationTitle,source:conversationSource,course:conversationCourse,origin:conversationOrigin,cloudOwner:conversationOwner,cloudSync:conversationSync};setValue(conversationKey(conversationId),saved);const index=records().filter(r=>r.id!==conversationId);index.unshift({id:conversationId,title:conversationTitle||questionTitle(history.find(t=>t.role==='user').text)||'图片提问',course:conversationCourse,origin:conversationOrigin,source:conversationSource,questions:history.filter(t=>t.role==='user').map(t=>t.text).join('\n'),questionCount:history.filter(t=>t.role==='user').length,cloudSync:conversationSync,updated:Date.now()});setValue(INDEX_KEY,index);if(!questions.hidden)renderQuestions();}
     const sessionKey=()=> 'zhiyun-ai-tab-v1:'+sessionCourse;
     const cloudButton=$('ai-cloud-save'),cloudWeb=$('ai-study-web');cloudButton.hidden=!studyStore;cloudWeb.hidden=!studyStore;
-    let savingCloud=false;
-    listen(cloudButton,'click',async()=>{
-      if(savingCloud||!studyStore)return;
-      const owner=studyStore.account();if(!owner){onOpenAccount();return;}
+    const cloudIdentity=()=>String(studyStore?.identity?.()||'');
+    const cloudQueued=new Map(),pendingCloudClaims=new Map();let cloudTimer=null,cloudBusy=false,cloudFailure=false,lastCloudSignature='',cloudInFlight=null,lastCloudAccount=studyStore?.account()||'',lastCloudOwner=cloudIdentity();
+    const cloudSignature=snapshot=>JSON.stringify(snapshot);
+    function cloudSnapshot(saved=null,id=conversationId){if(saved)return {id,title:saved.title||questionTitle(saved.history?.find(t=>t.role==='user')?.text)||'截图提问',course:saved.course||'网页提问',source:saved.source||'文字提问',origin:saved.origin||'',history:(saved.history||[]).filter(t=>['user','assistant'].includes(t.role)).map(t=>({role:t.role,text:String(t.text||(t.image?'截图提问（原图保存在本机）':''))})).filter(t=>t.text.trim())};return {id:conversationId,title:conversationTitle||questionTitle(history.find(t=>t.role==='user')?.text)||'截图提问',course:conversationCourse||String(getCourseTitle()||doc.title||'网页提问'),source:conversationSource,origin:conversationOrigin||String(getCourseId()),history:history.filter(t=>['user','assistant'].includes(t.role)).map(t=>({role:t.role,text:String(t.text||(t.image?'截图提问（原图保存在本机）':''))})).filter(t=>t.text.trim())};}
+    function cloudState(){
+      if(!studyStore)return;
+      const owned=!!conversationOwner&&conversationOwner===cloudIdentity(),otherOwner=!!conversationOwner&&conversationOwner!==cloudIdentity();
+      cloudButton.disabled=cloudBusy||otherOwner;
+      cloudButton.textContent=otherOwner?'切换原账号同步':owned?(cloudFailure?'重试同步':cloudBusy||cloudQueued.size?'正在同步…':lastCloudSignature?'已自动同步':'同步到网页'):'保存到账号';
+      cloudButton.title=owned?'文字问答自动同步到当前账号；截图可通过收藏保存原图':'将这段本机对话保存并绑定当前账号；截图可通过收藏保存原图';
+    }
+    function markCloud(work,state){
+      const key=conversationKey(work.snapshot.id),saved=getValue(key,null);if(!saved)return;
+      if(state==='saved'&&JSON.stringify((saved.history||[]).map(t=>({role:t.role,text:String(t.text||(t.image?'截图提问（原图保存在本机）':''))})))!==JSON.stringify(work.snapshot.history))state='pending';
+      setValue(key,{...saved,cloudSync:state});
+      setValue(INDEX_KEY,records().map(record=>record.id===work.snapshot.id?{...record,cloudSync:state}:record));
+      if(conversationId===work.snapshot.id){conversationSync=state;cloudFailure=state==='failed';}
+      if(!questions.hidden)renderQuestions();
+    }
+    async function flushCloud(){
+      clearTimeout(cloudTimer);cloudTimer=null;if(cloudBusy||destroyed)return;
+      cloudBusy=true;cloudState();
+      try{while(cloudQueued.size&&!destroyed){
+        const [queuedId,work]=cloudQueued.entries().next().value;cloudQueued.delete(queuedId);
+        const current=()=>!destroyed&&studyStore.account()===work.account&&(!work.owner||cloudIdentity()===work.owner);
+        if(!current())continue;
+        cloudInFlight=work;try{
+          await studyStore.save(work.snapshot,{account:work.account,...(work.owner?{identity:work.owner}:{})});
+          if(current()){markCloud(work,'saved');if(conversationId===work.snapshot.id){lastCloudSignature=work.signature;cloudFailure=false;if(work.manual)status('已保存到学习账号。手机登录同一账号即可在网页回看。');}}
+        }catch(_){if(current()){markCloud(work,'failed');if(conversationId===work.snapshot.id)status('云端同步暂未完成，本机记录已保留。点击“重试同步”即可重试。');}}finally{cloudInFlight=null;}
+      }}finally{cloudBusy=false;cloudState();}
+    }
+    function queueCloud(manual=false){
+      if(!studyStore||destroyed||!history.some(t=>t.role==='user'))return;
+      const account=studyStore.account(),owner=cloudIdentity();if(!account)return;
+      if(!manual&&(!owner||conversationOwner!==owner))return;
+      if(manual&&conversationOwner&&conversationOwner!==owner){status('这段对话属于另一账号，请切换原账号查看或开始新对话。');return;}
+      if(manual&&owner){conversationOwner=owner;archive();}
+      const snapshot=cloudSnapshot(),signature=cloudSignature(snapshot);
+      if(!snapshot.id)return;
+      if(!manual&&(cloudFailure||signature===lastCloudSignature||cloudQueued.get(snapshot.id)?.signature===signature||cloudInFlight?.signature===signature)){cloudState();return;}
+      const work={snapshot,signature,account,owner,manual};cloudQueued.set(snapshot.id,work);markCloud(work,'pending');cloudFailure=false;clearTimeout(cloudTimer);cloudState();
+      if(manual)void flushCloud();else cloudTimer=setTimeout(flushCloud,450);
+    }
+    listen(cloudButton,'click',()=>{
+      if(!studyStore||cloudBusy)return;if(!studyStore.account()){onOpenAccount();return;}
       if(!history.some(t=>t.role==='user')){status('先提一个问题，再保存这段问答。');return;}
-      archive();if(!conversationId)conversationId=win.crypto.randomUUID?.()||Date.now().toString(36)+'-'+Math.random().toString(36).slice(2);
-      const snapshot={id:conversationId,title:conversationTitle||questionTitle(history.find(t=>t.role==='user')?.text)||'截图提问',course:conversationCourse||String(getCourseTitle()||doc.title||'网页提问'),source:conversationSource,origin:conversationOrigin||String(getCourseId()),history:history.filter(t=>['user','assistant'].includes(t.role)).map(t=>({role:t.role,text:String(t.text||(t.image?'截图提问（原图保存在本机）':''))})).filter(t=>t.text.trim())};
-      savingCloud=true;cloudButton.disabled=true;status('正在保存文字问答到当前账号，截图仍保留在本机…');
-      try{await studyStore.save(snapshot);if(owner===studyStore.account()){status('已保存到学习账号。手机登录同一账号即可在网页回看；后续追问可再次点击保存。');cloudButton.textContent='再次保存';}}
-      catch(_){if(owner===studyStore.account())status('云端保存未完成，本机记录仍保留。服务器可能尚未启用学习空间，请稍后手动重试。');}
-      finally{savingCloud=false;cloudButton.disabled=false;}
+      archive();queueCloud(true);persist();
     });
-    function persist(){if(!canUse('learning_records'))return;archive();try{win.sessionStorage.setItem(sessionKey(),JSON.stringify({history,conversationId,conversationTitle,conversationSource,conversationCourse,conversationOrigin,lastAnswer,draft:$('ai-question').value,open:!panel.hidden}));}catch(_){} }
-    function restore(){if(!canUse('learning_records'))return;try{const data=JSON.parse(win.sessionStorage.getItem(sessionKey())||'null');if(!data)return;history=(data.history||[]).filter(t=>['user','assistant'].includes(t.role)&&typeof t.text==='string');conversationId=data.conversationId||'';conversationTitle=questionTitle(data.conversationTitle)||questionTitle(getValue(conversationKey(conversationId),null)?.title);conversationSource=data.conversationSource||'文字提问';conversationCourse=data.conversationCourse||'';conversationOrigin=data.conversationOrigin||'';lastAnswer=data.lastAnswer||null;$('ai-save-card').disabled=!lastAnswer;$('ai-card-row').hidden=!lastAnswer;$('ai-log').replaceChildren();if(!history.length)greeting();for(const t of history)message(t.role,t.text,t.image);archive();$('ai-question').value=String(data.draft||'').slice(0,4000);panel.hidden=!data.open;resume.hidden=!!data.open;}catch(_){} }
+    listen(shadow,'zy-account-state',()=>{
+      const account=studyStore?.account()||'',owner=cloudIdentity(),changed=account!==lastCloudAccount||!!(lastCloudOwner&&owner&&lastCloudOwner!==owner),identified=!lastCloudOwner&&!!owner;
+      if(changed){cloudQueued.clear();lastCloudSignature='';clearTimeout(cloudTimer);for(const [id,claim] of pendingCloudClaims)if(claim!==account)pendingCloudClaims.delete(id);}
+      lastCloudAccount=account;lastCloudOwner=owner;
+      if(owner)for(const [id,claim] of pendingCloudClaims){
+        if(claim!==account)continue;pendingCloudClaims.delete(id);
+        const saved=getValue(conversationKey(id),null);if(!saved||saved.cloudOwner)continue;
+        setValue(conversationKey(id),{...saved,cloudOwner:owner});if(conversationId===id)conversationOwner=owner;
+        const snapshot=cloudSnapshot(saved,id),work={snapshot,signature:cloudSignature(snapshot),account,owner,manual:false};cloudQueued.set(id,work);markCloud(work,'pending');
+        clearTimeout(cloudTimer);cloudTimer=setTimeout(flushCloud,450);
+      }
+      if((changed||identified)&&conversationOwner===owner)queueCloud();
+      cloudState();
+    });
+    cleanups.push(()=>{clearTimeout(cloudTimer);cloudQueued.clear();pendingCloudClaims.clear();});
+    cloudState();
+    function persist(){if(!canUse('learning_records'))return;archive();try{win.sessionStorage.setItem(sessionKey(),JSON.stringify({history,conversationId,conversationTitle,conversationSource,conversationCourse,conversationOrigin,lastAnswer,draft:$('ai-question').value,open:!panel.hidden,conversationOwner,conversationSync}));}catch(_){} queueCloud();}
+    function restore(){if(!canUse('learning_records'))return;try{const data=JSON.parse(win.sessionStorage.getItem(sessionKey())||'null');if(!data)return;history=(data.history||[]).filter(t=>['user','assistant'].includes(t.role)&&typeof t.text==='string');conversationId=data.conversationId||'';conversationTitle=questionTitle(data.conversationTitle)||questionTitle(getValue(conversationKey(conversationId),null)?.title);conversationSource=data.conversationSource||'文字提问';conversationCourse=data.conversationCourse||'';conversationOrigin=data.conversationOrigin||'';conversationOwner=getValue(conversationKey(conversationId),null)?.cloudOwner||data.conversationOwner||'';conversationSync=getValue(conversationKey(conversationId),null)?.cloudSync||data.conversationSync||'';cloudFailure=conversationSync==='failed';lastCloudSignature='';lastAnswer=data.lastAnswer||null;$('ai-save-card').disabled=!lastAnswer;$('ai-card-row').hidden=!lastAnswer;$('ai-log').replaceChildren();if(!history.length)greeting();for(const t of history)message(t.role,t.text,t.image);archive();$('ai-question').value=String(data.draft||'').slice(0,4000);panel.hidden=!data.open;resume.hidden=!collapsedEntry||!!data.open;}catch(_){} }
     function refreshAccess(){void syncPrompts(true);stop();cleanupCapture?.();resetCardChoices();questions.hidden=true;panel.hidden=true;resume.hidden=true;if(canUse('learning_records'))restore();}
-    function switchCourse(){resetCardChoices();persist();const allowed=canUse('learning_records'),wasOpen=allowed&&!panel.hidden;questions.hidden=true;stop();cleanupCapture?.();sessionCourse=String(getCourseId());conversationId='';conversationTitle='';conversationCourse='';conversationOrigin='';history=[];recentSlides=[];lastSlideKey='';slideContextEnabled=false;lastAnswer=null;$('ai-save-card').disabled=true;$('ai-card-row').hidden=true;$('ai-question').value='';$('ai-log').replaceChildren();attach(null);greeting();restore();updateCardSelection();panel.hidden=!wasOpen;resume.hidden=!allowed||wasOpen;clampResume();badge();status('已切换课程，对话按课程分别保留。');persist();}
+    function switchCourse(){resetCardChoices();persist();const allowed=canUse('learning_records'),wasOpen=allowed&&!panel.hidden;questions.hidden=true;stop();cleanupCapture?.();sessionCourse=String(getCourseId());conversationId='';conversationTitle='';conversationCourse='';conversationOrigin='';conversationOwner='';conversationSync='';lastCloudSignature='';cloudFailure=false;history=[];recentSlides=[];lastSlideKey='';slideContextEnabled=false;lastAnswer=null;$('ai-save-card').disabled=true;$('ai-card-row').hidden=true;$('ai-question').value='';$('ai-log').replaceChildren();attach(null);greeting();restore();updateCardSelection();panel.hidden=!wasOpen;resume.hidden=!collapsedEntry||!allowed||wasOpen;clampResume();badge();status('已切换课程，对话按课程分别保留。');persist();}
     function fitQuestion(){
       const input=$('ai-question');if(panel.hidden)return;
-      const following=followLog;input.style.height='auto';
+      input.style.height='auto';
       input.style.height=Math.min(input.scrollHeight,parseFloat(win.getComputedStyle(input).maxHeight)||120)+'px';
-      if(following)followLatest();
+      followLatest();
     }
     listen($('ai-question'),'input',()=>{fitQuestion();persist();});listen(win,'pagehide',persist);
     const composeResize=new win.ResizeObserver(()=>fitQuestion());composeResize.observe(panel);cleanups.push(()=>composeResize.disconnect());
@@ -519,6 +592,7 @@
     async function send(question,{slide=null,image=null,fresh=false,source='文字提问'}={}) {
       const before=requestSerial;
       if(!ensureAccess()||sendPreparing||controller||destroyed)return;
+      refreshSavedSettings();
       if(promptStore){
         let ready=false;sendPreparing=true;setBusy(true);status('正在准备提问…');
         try{ready=await syncPrompts();}finally{if(before===requestSerial){sendPreparing=false;setBusy(false);}}
@@ -542,7 +616,9 @@
         const summarize=!conversationTitle;
         const body=makeBody({settings:chosenSettings,history,question,context,images,summarize});
         if(signal.aborted)throw abortError();
-        message('user',question||'请解释这张截图。',currentImage||images.at(-1));history.push({role:'user',text:question||'请解释这张截图。',image:currentImage||images.at(-1)||null});persist();$('ai-question').value='';attach(null);status('正在讲解，约需几秒钟…');
+        // Explicitly sending into an unbound local history claims it for this verified account.
+        if(!conversationOwner)conversationOwner=cloudIdentity();
+        const questionItem=message('user',question||'请解释这张截图。',currentImage||images.at(-1));history.push({role:'user',text:question||'请解释这张截图。',image:currentImage||images.at(-1)||null});persist();if(!conversationOwner&&studyStore?.account())pendingCloudClaims.set(conversationId,studyStore.account());$('ai-question').value='';attach(null);scrollToQuestion(questionItem);status('正在讲解，约需几秒钟…');
         const began=Date.now();feedbackTimer=setInterval(()=>{if(!reply)status((transportConnected?'已连接 AI，正在生成'+(images.length?'截图回复':'回复'):'正在连接 AI 服务')+' · 已等待 '+Math.floor((Date.now()-began)/1000)+' 秒 · 可点击停止');},1000);
         let answer=await requestResponse(request,body,currentKey,signal,text=>{if(destroyed||serial!==requestSerial)return;if(summarize){const parsed=splitLearningReply(text);text=parsed.text;if(!text)return;if(parsed.title)conversationTitle=parsed.title;}if(!reply){replyTurn={role:'assistant',text:''};history.push(replyTurn);reply=message('assistant','');reply.append(make('span',{class:'ai-stream-text'}));}replyTurn.text=text;pendingReply=text;if(renderTimer===null)renderTimer=setTimeout(renderReply,80);status('正在回复…');},()=>{transportConnected=true;});
         if(destroyed || serial!==requestSerial)return;
@@ -554,7 +630,7 @@
       finally{clearInterval(feedbackTimer);clearTimeout(renderTimer);if(flushPendingReply===flushRender)flushPendingReply=null;if(controller===ownController){controller=null;setBusy(false);}}
     }
     async function explainSlide(){const before=requestSerial;let slide=getSlide();if(!ensureAccess())return;if(!slide){await prepareSlide();slide=getSlide();}if(destroyed||before!==requestSerial)return;slideContextEnabled=settings.followSlides;if(!slide){open();status('请先打开本课程的 PPT，再点击讲解本页。');return;}await send('请讲解当前这页 PPT，结合老师附近的字幕说明重点和我需要掌握的内容。',{slide:slide||{},image:null});}
-    function clear(){followLog=true;jumpLatest.hidden=true;activeImageDismiss?.();resetCardChoices();persist();stop();conversationId='';conversationTitle='';conversationSource='文字提问';conversationCourse='';conversationOrigin='';lastAnswer=null;$('ai-save-card').disabled=true;$('ai-card-row').hidden=true;cleanupCapture?.();panel.querySelector('#ai-question').value='';history=[];recentSlides=[];lastSlideKey='';slideContextEnabled=false;$('ai-log').replaceChildren();attach(null);greeting();badge();status('已开始新对话，旧截图与 PPT 上下文已清空。');persist();}
+    function clear(){refreshSavedSettings();currentQuestionAnchor=null;readingSpace.remove();jumpLatest.hidden=true;activeImageDismiss?.();resetCardChoices();persist();stop();conversationId='';conversationTitle='';conversationSource='文字提问';conversationCourse='';conversationOrigin='';conversationOwner='';conversationSync='';lastCloudSignature='';cloudFailure=false;lastAnswer=null;$('ai-save-card').disabled=true;$('ai-card-row').hidden=true;cleanupCapture?.();panel.querySelector('#ai-question').value='';history=[];recentSlides=[];lastSlideKey='';slideContextEnabled=false;$('ai-log').replaceChildren();attach(null);greeting();badge();status('已开始新对话，旧截图与 PPT 上下文已清空。');persist();}
     const captureNotice=make('div',{id:'ai-capture-session',role:'status'});captureNotice.hidden=true;captureNotice.innerHTML='<span>正在截取当前页面…</span><button type="button" id="ai-capture-session-stop">取消截图</button>';shadow.append(captureNotice);
     function hideCaptureNotice(){captureNotice.hidden=true;}
     function captureWait(promise,signal,timeout=12000){
@@ -576,7 +652,7 @@
     async function withCaptureHidden(signal,read){
       // The classroom host also owns the PPT and subtitles. Hide only assistant controls.
       if(captureHideCount++===0){
-        captureHiddenElements=[...shadow.querySelectorAll('#panel,#compact,#settings-dialog,#web-launcher,#web-settings-dialog,#ai-learning,#ai-resume,#ai-questions,#ai-selection-menu,#ai-image-viewer,#ai-crop,#ai-capture-session,#gateway-guide,#transcript,#video-edit-box,#caption-edit-box,#fullscreen-notice')].map(el=>[el,el.getAttribute('data-zy-capture-hidden')]);
+        captureHiddenElements=[...shadow.querySelectorAll('#panel,#compact,#compact-launcher,#settings-dialog,#web-launcher,#web-settings-dialog,#ai-learning,#ai-resume,#ai-questions,#ai-selection-menu,#ai-image-viewer,#ai-crop,#ai-capture-session,#gateway-guide,#transcript,#video-edit-box,#caption-edit-box,#fullscreen-notice')].map(el=>[el,el.getAttribute('data-zy-capture-hidden')]);
         for(const [el] of captureHiddenElements)el.setAttribute('data-zy-capture-hidden','');
       }
       try{await capturePaint(signal);if(signal.aborted)throw abortError();return await read();}
@@ -624,7 +700,7 @@
       let native=globalThis.ZYNativeCapture;
       if(!native?.capture&&globalThis.ZYCaptureBridge?.available&&await globalThis.ZYCaptureBridge.available(signal))native=globalThis.ZYCaptureBridge;
       if(native?.capture){
-        try{return await withCaptureHidden(signal,async()=>{const viewport=captureViewport();return {src:await imageData(await captureWait(native.capture(signal),signal),null,signal),viewport};});}
+        try{return await withCaptureHidden(signal,async()=>{const viewport=captureViewport(),src=await captureWait(native.capture(signal),signal);if(typeof src!=='string'||!/^data:image\/(png|jpeg|webp);base64,/.test(src)||src.length>40000000)throw Error('原生截图格式异常');return {src,viewport};});}
         catch(e){if(signal.aborted||e.name==='AbortError')throw e;const error=new Error(e.code==='BRIDGE_NO_GESTURE'||e.code==='BRIDGE_NOT_ACTIVE'?e.message:'原生截图失败，请检查扩展的网站访问权限或重新加载扩展后重试；也可粘贴系统截图。');error.code='NATIVE_CAPTURE_FAILED';throw error;}
       }
       // A plain userscript can still read an accessible PPT or media element.
@@ -676,8 +752,9 @@
         const src=snapshot.src;
         if(serial!==requestSerial||destroyed)return;
         if(direct){
+          const attachment=await imageData(src,null,own.signal);if(serial!==requestSerial||destroyed)return;
           if(panel.hidden)clear();
-          conversationSource='截图提问';attach(src);open();status('当前页面截图已添加，可补充问题后发送。');
+          conversationSource='截图提问';attach(attachment);open();status('当前页面截图已添加，可补充问题后发送。');
         }else showCrop(src,gesture,wholePage&&!gesture?.slideOnly,snapshot.viewport);
        }catch(e){own.abort();if(serial===requestSerial&&e.name!=='AbortError'){
         open();status(e.message||'截图失败，请重试。');
@@ -759,7 +836,7 @@
         if(clipBusy||!canvas||!ensureAccess())return;
         if(serial!==requestSerial||captureCourse!==String(getCourseId())||captureUrl!==win.location.href){cancel();return;}
         try{
-          const data=canvas.toDataURL('image/jpeg',.85);if(!validImage(data))throw Error('选区过大，请选择更小区域。');
+          const aiCanvas=make('canvas'),aiScale=Math.min(1,1600/Math.max(canvas.width,canvas.height));aiCanvas.width=Math.max(1,Math.round(canvas.width*aiScale));aiCanvas.height=Math.max(1,Math.round(canvas.height*aiScale));aiCanvas.getContext('2d').drawImage(canvas,0,0,aiCanvas.width,aiCanvas.height);let data=aiCanvas.toDataURL('image/jpeg',.85);if(data.length>MAX_IMAGE_CHARS)data=aiCanvas.toDataURL('image/jpeg',.55);if(!validImage(data))throw Error('选区过大，请选择更小区域。');
           const target=destination.value,question=target==='current'?$('ai-question').value.trim():'';
           if(target!=='new'&&target!=='current'&&!getValue(conversationKey(target),null)?.history?.some(t=>t.role==='user')){use.hidden=true;clipStatus.textContent='上次对话已不存在，请选择新对话提问。';return;}
           if(target!=='new'&&target!=='current'&&!ensureAccess('learning_records'))return;
@@ -784,7 +861,7 @@
         try{
           if(!clipSnapshot){
             const encode=edge=>{const c=make('canvas'),scale=Math.min(1,edge/canvas.width,edge/canvas.height);c.width=Math.max(1,Math.round(canvas.width*scale));c.height=Math.max(1,Math.round(canvas.height*scale));c.getContext('2d').drawImage(canvas,0,0,c.width,c.height);return c.toDataURL('image/png');};
-            let image=encode(1600);if(image.length>2000022)image=encode(1100);if(image.length>2000022)throw Error('图片超过 1.5 MB，请缩小选区再收藏。');
+            const clipLimits=studyStore.clipLimits?.()||{max_edge:1600,max_image:1500000},imageLimit=4*Math.ceil(clipLimits.max_image/3)+22;let image=encode(clipLimits.max_edge);for(const edge of [3200,2560,1920,1600,1100,800]){if(image.length<=imageLimit)break;if(edge<clipLimits.max_edge)image=encode(edge);}if(image.length>imageLimit)throw Error('图片超过收藏上限，请缩小选区再收藏。');
             let thumbnail=encode(280);if(thumbnail.length>106688)thumbnail=encode(160);
             if(thumbnail.length>106688)thumbnail=encode(96);
             clipId=clipId||(win.crypto.randomUUID?.()||'clip-'+Date.now().toString(36)+'-'+Math.random().toString(36).slice(2));
@@ -862,9 +939,28 @@
     // Image paste belongs to the explicit AI composer, never the page fallback.
     async function paste(event){if(event.defaultPrevented||panel.hidden||!shadow.host.isConnected||doc.visibilityState==='hidden')return;const serial=requestSerial;const file=[...(event.clipboardData?.items||[])].find(i=>i.type.startsWith('image/'))?.getAsFile();if(!file)return;if(!ensureAccess())return;event.preventDefault();try{const data=await blobToData(file);if(destroyed||serial!==requestSerial||panel.hidden||doc.visibilityState==='hidden')return;if(controller)stop();cleanupCapture?.();showCrop(data,null,true);status('截图已居中，可先圈画，再直接提问或收藏。');}catch(e){status(e.message);}}
     const modified=e=>e.ctrlKey||e.metaKey||e.altKey||e.shiftKey;
-    const middleAllowed=e=>{const target=e.composedPath?.()[0]||e.target;return e.button===1&&settings.middleClick&&!modified(e)&&!target?.closest?.('a,input,textarea,select,[contenteditable],#ai-crop');};
-    const middle=e=>{if(!middleAllowed(e))return;e.preventDefault();e.stopPropagation();startCapture(e);};
-    listen(doc,'mousedown',middle,true);listen(doc,'auxclick',e=>{if(middleAllowed(e))e.preventDefault();},true);
+    const middleAllowed=e=>{
+      if(e.button!==1||!settings.middleClick||modified(e)||e.defaultPrevented)return false;
+      // A link can wrap a shadow host or a slot. The painted child's closest()
+      // alone misses these ancestors, so check the complete event path.
+      const path=e.composedPath?.()||[e.target],elements=path.filter(node=>node?.nodeType===1);
+      const interactive='a,area,button,input,textarea,select,option,label,summary,[contenteditable],[role="link"],[role="button"],[role="menuitem"],[role="tab"],[role="checkbox"],[role="radio"],[role="switch"],[role="slider"],[role="textbox"],[data-href],[data-url],[onclick],[onauxclick],#ai-crop';
+      if(elements.some(node=>node.closest?.(interactive)))return false;
+      // Keep exact classroom PPT/video surface hits available for capture.
+      // Never infer a hit from a large player rectangle.
+      const slide=getSlide(),target=elements[0];
+      if(target&&(target===slide?.imageElement||target===slide?.viewportElement||target===getCaptureTarget()&&target.localName==='video'))return true;
+      // Script-driven cards may have no href or ARIA role. Respect their hand
+      // cursor without guessing a URL or synthesizing a page click.
+      return !elements.some(node=>win.getComputedStyle(node).cursor==='pointer');
+    };
+    let middleCaptureGesture=false;
+    const middle=e=>{middleCaptureGesture=false;if(!middleAllowed(e))return;middleCaptureGesture=true;e.preventDefault();e.stopPropagation();startCapture(e);};
+    listen(doc,'mousedown',middle,true);
+    // The page may replace the clicked node before auxclick. Only suppress a
+    // gesture we actually claimed on mousedown, never reclassify a passed link.
+    listen(doc,'auxclick',e=>{if(e.button!==1)return;const captured=middleCaptureGesture;middleCaptureGesture=false;if(captured)e.preventDefault();},true);
+    listen(win,'blur',()=>{middleCaptureGesture=false;});
     let selectionMenu=null,selectionGesture=null,menuSelection=null;
     const selectionSnapshot=()=>{const selection=win.getSelection();if(!selection||selection.isCollapsed||selection.rangeCount!==1)return null;const range=selection.getRangeAt(0),text=String(selection).trim();if(!text||text.length>4000||shadow.contains(range.startContainer)||shadow.contains(range.endContainer))return null;return {range:range.cloneRange(),text};};
     const sameSelection=(a,b)=>!!a&&!!b&&a.text===b.text&&a.range.startContainer===b.range.startContainer&&a.range.startOffset===b.range.startOffset&&a.range.endContainer===b.range.endContainer&&a.range.endOffset===b.range.endOffset;

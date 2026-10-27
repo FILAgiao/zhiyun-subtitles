@@ -1,6 +1,6 @@
 const fs=require('node:fs'),path=require('node:path'),assert=require('node:assert/strict'),{chromium}=require('playwright');
 (async()=>{
- const extension=path.resolve('dist/extension'),manifest=JSON.parse(fs.readFileSync(path.join(extension,'manifest.json'),'utf8'));assert.ok(manifest.host_permissions.includes('<all_urls>'),'The packaged extension must grant persistent native screenshot access');
+ const extension=path.resolve(process.env.ZY_TEST_EXTENSION_DIR||'dist/extension'),manifest=JSON.parse(fs.readFileSync(path.join(extension,'manifest.json'),'utf8'));assert.ok(manifest.host_permissions.includes('<all_urls>'),'The packaged extension must grant persistent native screenshot access');
  const context=await chromium.launchPersistentContext(path.resolve('.test-media/native-extension-'+Date.now()),{headless:true,executablePath:process.env.PLAYWRIGHT_EXECUTABLE_PATH||'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe',viewport:{width:1200,height:800},args:['--disable-extensions-except='+extension,'--load-extension='+extension]});
  try{
   const worker=context.serviceWorkers()[0]||await context.waitForEvent('serviceworker',{timeout:20000});

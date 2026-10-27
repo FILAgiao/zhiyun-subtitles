@@ -1,4 +1,4 @@
-/* User-scoped saved text questions. No background uploading or model calls. */
+/* User-scoped text questions synchronized by the extension. This reader never calls a model. */
 'use strict';
 (() => {
   const P=window.ZYPortal,$=id=>document.getElementById(id);
@@ -15,7 +15,7 @@
     $('conversation-list').replaceChildren();$('study-empty').hidden=!!filtered.length;
     $('study-columns').hidden=!filtered.length;
     $('empty-title').textContent=records.length?'没有找到相关问答':'还没有保存的问答';
-    $('empty-copy').textContent=records.length?'试试其他关键词，或切换到全部课程。':'回到插件，打开一段对话并选择「保存到账号」。保存后，手机也能查看。';
+    $('empty-copy').textContent=records.length?'试试其他关键词，或切换到全部课程。':'登录插件后，新问答会自动同步到当前账号；旧的本机问答可点「保存到账号」补存。同步完成后，手机也能查看。';
     for(const item of filtered){
       const row=node('div',undefined,'conversation-item'),button=node('button');button.type='button';button.dataset.id=item.id;
       button.setAttribute('aria-current',String(selected===item.id));

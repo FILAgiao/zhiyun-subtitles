@@ -590,8 +590,9 @@ class ProtocolTests(unittest.TestCase):
             def __init__(self):
                 self.sent = []
                 self.parts = queue.Queue()
-            def sendall(self, value):
-                self.sent.append(value)
+            def send(self, value):
+                self.sent.append(bytes(value))
+                return len(value)
             def recv(self, limit):
                 value = self.parts.get_nowait()
                 if isinstance(value, Exception):
@@ -599,7 +600,7 @@ class ProtocolTests(unittest.TestCase):
                 return value
         ws = OfficialWebSocket.__new__(OfficialWebSocket)
         ws.socket, ws.buffer, ws.closed = RawSocket(), bytearray(), False
-        ws.send_lock, ws.fragments, ws.fragmented = threading.Lock(), bytearray(), False
+        ws.send_lock, ws.tls_lock, ws.fragments, ws.fragmented = threading.Lock(), threading.Lock(), bytearray(), False
         ws.send(b'hello')
         sent = ws.socket.sent[0]
         self.assertEqual(sent[:2], b'\x82\x85')
@@ -619,29 +620,23 @@ class ProtocolTests(unittest.TestCase):
 
 
 
-    def test_close_interrupts_blocked_raw_send_without_waiting_for_send_lock(self):
+    def test_close_interrupts_nonblocking_write_readiness_wait(self):
         entered, shut_down = threading.Event(), threading.Event()
-        class BlockingRawSocket:
-            def sendall(self, value):
+        class WaitingSocket:
+            def send(self, value):
                 entered.set()
-                if not shut_down.wait(3):
-                    raise TimeoutError('shutdown did not interrupt raw send')
-                raise OSError('socket was shut down')
-            def shutdown(self, how):
-                shut_down.set()
-            def close(self):
-                shut_down.set()
+                raise ssl.SSLWantWriteError()
+            def shutdown(self, how): shut_down.set()
+            def close(self): shut_down.set()
         ws = OfficialWebSocket.__new__(OfficialWebSocket)
-        ws.socket, ws.closed, ws.send_lock = BlockingRawSocket(), False, threading.Lock()
-        with concurrent.futures.ThreadPoolExecutor(2) as pool:
-            sending = pool.submit(ws.send, b'audio')
-            try:
+        ws.socket, ws.closed = WaitingSocket(), False
+        ws.send_lock, ws.tls_lock = threading.Lock(), threading.Lock()
+        with patch('backend.speech_stream.select.select', side_effect=lambda *args:shut_down.wait(.05)):
+            with concurrent.futures.ThreadPoolExecutor(2) as pool:
+                sending = pool.submit(ws.send, b'audio')
                 self.assertTrue(entered.wait(1))
                 pool.submit(ws.close).result(.5)
-                with self.assertRaises(OSError):
-                    sending.result(.5)
-            finally:
-                shut_down.set()
+                with self.assertRaises(EOFError): sending.result(.5)
         self.assertTrue(ws.closed)
 
 

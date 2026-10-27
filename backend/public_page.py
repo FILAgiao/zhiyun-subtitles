@@ -12,6 +12,7 @@ PUBLIC_PAGE_FILES={
     **{route:page+'.html' for page in ('study','account') for route in ('/'+page,'/'+page+'/','/'+page+'.html')},
     **{'/'+name:name for name in ('clips.css','clips.js','portal.css','portal.js','study.css','study.js','account.css','account.js')},
     '/landing/brand-logo.png':'landing/brand-logo.png',
+    '/landing/plugin-qr.png':'landing/plugin-qr.png',
     **{'/landing/image-'+number+'.webp':'landing/image-'+number+'.webp' for number in ['02','01','03','04','05','06']},
 }
 

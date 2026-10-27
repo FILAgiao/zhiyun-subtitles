@@ -12,7 +12,8 @@ except ImportError:
     from admin_api import Fault
 
 MAX_CLIPS = 500
-MAX_IMAGE = 1500000
+MAX_IMAGE = 4000000
+MAX_IMAGE_EDGE = 3840
 MAX_THUMB = 80000
 MAX_STORAGE = 64 * 1024 * 1024
 
@@ -99,6 +100,10 @@ def summary(row):
 
 
 class ClipsMixin:
+    def clip_limits(self):
+        return {'max_edge': MAX_IMAGE_EDGE, 'max_image': MAX_IMAGE,
+                'max_thumbnail_edge': 320, 'max_thumbnail': MAX_THUMB}
+
     def clips_private(self, method, path, body, user, app):
         route = urlsplit(path)
         if route.path not in ('/v1/study/clips', '/v1/study/clip-image'):
@@ -124,7 +129,7 @@ class ClipsMixin:
             identifier = body.get('id', '')
             if not isinstance(identifier, str) or not re.fullmatch(r'[A-Za-z0-9_-]{1,100}', identifier):
                 raise Fault(400, '收藏编号无效', 'invalid_clip')
-            image, width, height = png(body.get('image'), MAX_IMAGE, 1600)
+            image, width, height = png(body.get('image'), MAX_IMAGE, MAX_IMAGE_EDGE)
             thumbnail, _, _ = png(body.get('thumbnail'), MAX_THUMB, 320)
             title, course = text(body.get('title', ''), 200), text(body.get('course', ''), 200)
             course_key = text(body.get('courseKey', course), 200)

@@ -56,12 +56,18 @@ function seekTime(video,time){
 }
 // A transformed live-player ancestor is the fixed containing block. Measure its
 // actual scale and origin instead of treating its local CSS coordinates as screen coordinates.
+function pairedLayout(bounds,videoRatio=16/9,slideRatio=4/3){
+ const width=Math.max(160,Number(bounds.width)||160),height=Math.max(100,Number(bounds.height)||100),gap=Math.min(12,width*.02),lane=(width-gap)/2;
+ const available={top:bounds.top||0,height:Math.max(100,height-76)};
+ const fit=(left,ratio)=>{ratio=Number.isFinite(ratio)&&ratio>0?ratio:16/9;const w=Math.min(lane,available.height*ratio),h=w/ratio;return{left:left+(lane-w)/2,top:available.top+(available.height-h)/2,width:w,height:h};};
+ return{slide:fit(bounds.left||0,slideRatio),video:fit((bounds.left||0)+lane+gap,videoRatio)};
+}
 function placeVideo(video,r){
- const values={position:'fixed',left:'0px',top:'0px',right:'auto',bottom:'auto',width:r.width+'px',height:r.height+'px',margin:'0','z-index':'20',transform:'none',translate:'none',rotate:'none',scale:'none','box-sizing':'border-box','min-width':'0','min-height':'0','max-width':'none','max-height':'none'};
+ const values={position:'fixed',left:'0px',top:'0px',right:'auto',bottom:'auto',width:r.width+'px',height:r.height+'px',margin:'0','z-index':'20','object-fit':'contain',transform:'none',translate:'none',rotate:'none',scale:'none','box-sizing':'border-box','min-width':'0','min-height':'0','max-width':'none','max-height':'none'};
  for(const [key,value] of Object.entries(values))video.style.setProperty(key,value,'important');
  const origin=video.getBoundingClientRect(),sx=origin.width/r.width||1,sy=origin.height/r.height||1;
  video.style.setProperty('width',r.width/sx+'px','important');video.style.setProperty('height',r.height/sy+'px','important');
  video.style.setProperty('left',(r.left-origin.left)/sx+'px','important');video.style.setProperty('top',(r.top-origin.top)/sy+'px','important');
 }
-root.ZYClassroomMedia={isClassroom,voicePane,voiceContent,voiceRows,slides,imageSelector,imageURL,isLive,timeline,seekTime,placeVideo,videoStyleKeys:['width','height','margin','margin-left','margin-top','margin-right','margin-bottom','position','left','top','right','bottom','z-index','object-fit','transform','translate','rotate','scale','box-sizing','min-width','min-height','max-width','max-height']};
+root.ZYClassroomMedia={isClassroom,voicePane,voiceContent,voiceRows,slides,imageSelector,imageURL,isLive,timeline,seekTime,pairedLayout,placeVideo,videoStyleKeys:['width','height','margin','margin-left','margin-top','margin-right','margin-bottom','position','left','top','right','bottom','z-index','object-fit','transform','translate','rotate','scale','box-sizing','min-width','min-height','max-width','max-height']};
 })(typeof globalThis!=='undefined'?globalThis:this);

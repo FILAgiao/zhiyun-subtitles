@@ -14,3 +14,20 @@ test('native screenshot adapter resolves, validates errors and ignores cancelled
  const control=new AbortController(),cancelled=context.captureExtensionTab(control.signal);control.abort();callback({ok:true,data:'data:image/png;base64,late'});await assert.rejects(cancelled,e=>e.name==='AbortError');
  const timeout=context.captureExtensionTab();await assert.rejects(timeout,/超时/);
 });
+
+
+test('storage writes dispatch before earlier writes finish so navigation cannot strand the last choice',async()=>{
+ const writes=[],pending=[],warnings=[];let api,changed;
+ const storage={get:async()=>({initial:'kept'}),set:body=>{writes.push(['set',structuredClone(body)]);return new Promise((resolve,reject)=>pending.push({resolve,reject}));},remove:key=>{writes.push(['remove',key]);return new Promise((resolve,reject)=>pending.push({resolve,reject}));}};
+ const doc={visibilityState:'visible',addEventListener(){},getElementById(){return null;}};
+ const win={addEventListener(){}};win.top=win;
+ const chrome={runtime:{id:'fixture',onMessage:{addListener(){}}},storage:{local:storage,onChanged:{addListener:fn=>changed=fn}}};
+ const context=vm.createContext({chrome,document:doc,window:win,console:{warn:text=>warnings.push(text)},Promise,setTimeout,clearTimeout,Date,location:{href:'https://example.test/'}});
+ vm.runInContext(fs.readFileSync('extension/adapter.js','utf8'),context);await context.startExtension((request,get,set,remove)=>api={get,set,remove});
+ api.set('sync',{autoSync:true});api.set('sync',{autoSync:false});api.remove('obsolete');
+ assert.deepEqual(writes,[['set',{sync:{autoSync:true}}],['set',{sync:{autoSync:false}}],['remove','obsolete']],'every operation reaches chrome.storage immediately without waiting for a content-script microtask');
+ assert.equal(api.get('sync').autoSync,false);assert.equal(api.get('initial'),'kept');
+ pending[0].reject(Error('quota'));pending[1].resolve();pending[2].resolve();await new Promise(resolve=>setImmediate(resolve));
+ assert.equal(warnings.length,1,'a rejected write is reported without blocking later browser operations');
+ changed({external:{newValue:4}},'local');assert.equal(api.get('external'),4);
+});

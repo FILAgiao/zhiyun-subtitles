@@ -165,3 +165,55 @@ test('standard speech forwards only known safe gateway error meanings without up
  assert.equal(response.gatewaySpeechError.code,'speech_upstream_auth');assert.match(response.gatewaySpeechError.message,/授权失败/);assert.ok(!response.gatewaySpeechError.message.includes('secret-provider-key'));
  api.transport({url:'https://openspeech.bytedance.com/api/v3/auc/bigmodel/query',onload:r=>response=r});calls.at(-1).onload({status:502,responseText:JSON.stringify({error_code:'unknown',error:'secret-provider-key'})});assert.equal(response.gatewaySpeechError,undefined);
 });
+
+
+test('a transient initial account outage can recover on an AI click without logging out',async()=>{
+ const {api,calls,storage}=setup({url:'https://api.test',token:'saved-session'});
+ const initial=api.ensureAccess();calls.at(-1).onload({status:503,responseText:JSON.stringify({error:'账号数据服务暂不可用',error_code:'database_unavailable'})});
+ await assert.rejects(initial);assert.equal(api.canUse('learning'),false);
+ assert.equal(api.requireFeature('learning'),false);assert.equal(api.requireFeature('learning'),false);
+ assert.equal(calls.length,2,'Repeated clicks must share the permission refresh');
+ calls.at(-1).onload({status:200,responseText:JSON.stringify({permissions:{learning:true,speech:true},capabilities:{speech_stream:true},membership:{active:true}})});
+ await new Promise(r=>setImmediate(r));assert.equal(api.canUse('learning'),true);assert.equal(api.speechStream.supported(),true);assert.equal(storage['gateway-account-v1'].token,'saved-session');
+});
+test('failed permission recovery remains retryable and late prior-account data cannot restore access',async()=>{
+ const {api,calls,storage}=setup({url:'https://api.test',token:'saved-session'});
+ api.requireFeature();calls.at(-1).onload({status:503,responseText:'{"error":"unavailable"}'});await new Promise(r=>setImmediate(r));
+ api.requireFeature();assert.equal(calls.length,2);storage['gateway-account-v1'].token='new-session';
+ calls.at(-1).onload({status:200,responseText:'{"permissions":{"learning":true},"membership":{"active":true}}'});await new Promise(r=>setImmediate(r));assert.equal(api.canUse('learning'),false);
+ api.requireFeature();assert.equal(calls.length,3);calls.at(-1).onload({status:200,responseText:'{"permissions":{"learning":true},"membership":{"active":true}}'});await new Promise(r=>setImmediate(r));assert.equal(api.canUse('learning'),true);
+});
+
+
+test('study identity comes from verified account and survives renewal without storing the token',async()=>{
+ const {api,calls,storage}=setup({url:'https://api.test',token:'first-session'});
+ assert.equal(api.study.identity(),'');
+ let read=api.ensureAccess();calls.at(-1).onload({status:200,responseText:JSON.stringify({id:42,email:'learner@example.test',permissions:{learning:true}})});await read;
+ const identity=api.study.identity();assert.equal(identity,JSON.stringify(['https://api.test','id:42']));assert.ok(!identity.includes('first-session'));
+ storage['gateway-account-v1']={url:'https://api.test',token:'renewed-session'};assert.equal(api.study.identity(),'');
+ read=api.ensureAccess();calls.at(-1).onload({status:200,responseText:JSON.stringify({id:42,email:'learner@example.test'})});await read;
+ assert.equal(api.study.identity(),identity);
+});
+
+test('study writes bind credentials and reject owner changes before upload and delayed acknowledgements',async()=>{
+ const {api,calls,storage}=setup({url:'https://api.test',token:'first-session'});
+ const read=api.ensureAccess();calls.at(-1).onload({status:200,responseText:JSON.stringify({id:42})});await read;
+ const identity=api.study.identity(),body={id:'one',history:[{role:'user',text:'question'}]};
+ const before=calls.length;await assert.rejects(api.study.save(body,{account:'old-session',identity}),{code:'account_changed'});assert.equal(calls.length,before);
+ await assert.rejects(api.study.save(body,{account:'first-session',identity:'other-owner'}),{code:'account_changed'});assert.equal(calls.length,before);
+ const pending=api.study.save(body,{account:'first-session',identity});const write=calls.at(-1);assert.equal(write.headers.Authorization,'Bearer first-session');assert.deepEqual(JSON.parse(write.data),body);
+ storage['gateway-account-v1']={url:'https://api.test',token:'other-session'};
+ write.onload({status:200,responseText:'{"ok":true}'});await assert.rejects(pending,{code:'account_changed'});
+ const delayed=api.study.saveClip({id:'clip'});const clipWrite=calls.at(-1);storage['gateway-account-v1']={url:'https://other-api.test',token:'other-session'};clipWrite.onload({status:200,responseText:'{"ok":true}'});await assert.rejects(delayed,{code:'account_changed'});
+ storage['gateway-account-v1']={url:'https://api.test',token:''};await assert.rejects(api.study.save(body),{code:'login_required'});assert.equal(calls.at(-1),clipWrite);
+});
+
+
+test('clip limits require current authenticated server capability and default to the legacy contract',async()=>{
+ const {api,calls,storage}=setup({url:'https://api.test',token:'session'}),legacy={max_edge:1600,max_image:1500000,max_thumbnail_edge:320,max_thumbnail:80000};
+ storage['gateway-capabilities-v1']={study_clip_limits:{max_edge:3840,max_image:4000000}};assert.deepEqual(api.study.clipLimits(),legacy,'cached global capabilities must not authorize oversized images');
+ let read=api.ensureAccess();calls.at(-1).onload({status:200,responseText:'{"id":42,"capabilities":{"study_clips":true}}'});await read;assert.deepEqual(api.study.clipLimits(),legacy,'old production server has no new contract');
+ read=api.ensureAccess(true);calls.at(-1).onload({status:200,responseText:JSON.stringify({id:42,capabilities:{study_clip_limits:{max_edge:3840,max_image:4000000,max_thumbnail_edge:320,max_thumbnail:80000}}})});await read;assert.equal(api.study.clipLimits().max_edge,3840);assert.equal(api.study.clipLimits().max_image,4000000);
+ storage['gateway-account-v1']={url:'https://other-api.test',token:'session'};assert.deepEqual(api.study.clipLimits(),legacy,'changing server immediately removes the larger image permission');
+ read=api.ensureAccess();calls.at(-1).onload({status:200,responseText:JSON.stringify({id:42,capabilities:{study_clip_limits:{max_edge:99999,max_image:-1,max_thumbnail:'bad'}}})});await read;assert.deepEqual(api.study.clipLimits(),{...legacy,max_edge:3840},'advertised limits are bounded and malformed values fall back');
+});

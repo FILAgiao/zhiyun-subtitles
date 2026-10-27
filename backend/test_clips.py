@@ -45,6 +45,20 @@ class ClipsTests(unittest.TestCase):
         self.assertEqual([],self.call('GET',user=1)['items'])
         self.fault('clip_not_found',lambda:self.call('GET','/v1/study/clip-image?id=one',user=1))
         self.fault('invalid_app',lambda:self.call('GET',app='other'))
+    def test_capabilities_advertise_current_image_limits(self):
+        limits=self.gateway.capabilities()['study_clip_limits']
+        self.assertEqual({'max_edge':3840,'max_image':4000000,'max_thumbnail_edge':320,'max_thumbnail':80000},limits)
+
+    def test_high_resolution_image_keeps_pixels_and_is_lazy_loaded(self):
+        original=image(3840,2160)
+        self.call('POST',body=self.payload('high-resolution',image=original))
+        row=self.call('GET')['items'][0]
+        self.assertEqual((3840,2160),(row['width'],row['height']))
+        self.assertNotIn('image',row)
+        self.assertEqual(original,self.call('GET','/v1/study/clip-image?id=high-resolution')['image'])
+        with patch.object(clips_api,'MAX_IMAGE',45):
+            self.fault('invalid_clip_image',lambda:self.call('POST',body=self.payload('too-large',image=original)))
+
     def test_retry_upsert_is_idempotent_and_preserves_creation(self):
         self.call('POST',body=self.payload());created=self.call('GET')['items'][0]['created']
         with concurrent.futures.ThreadPoolExecutor(max_workers=4) as pool:
@@ -55,7 +69,7 @@ class ClipsTests(unittest.TestCase):
         self.assertEqual(1,len(self.call('GET')['items']));self.call('DELETE','/v1/study/clips?id=one')
         self.assertEqual(0,self.call('GET')['usedBytes']);self.fault('clip_not_found',lambda:self.call('GET','/v1/study/clip-image?id=one'))
     def test_invalid_media_and_owner_injection(self):
-        for media in ['data:image/svg+xml;base64,PHN2Zz4=','https://school.test/secret.png',image()[:-8],image(1601,1)]:
+        for media in ['data:image/svg+xml;base64,PHN2Zz4=','https://school.test/secret.png',image()[:-8],image(clips_api.MAX_IMAGE_EDGE+1,1)]:
             self.fault('invalid_clip_image',lambda:self.call('POST',body=self.payload(image=media)))
         self.fault('invalid_clip',lambda:self.call('POST',body=self.payload(user=1)))
         self.fault('invalid_clip',lambda:self.call('POST',body=self.payload(note='Authorization: Bearer secret')))

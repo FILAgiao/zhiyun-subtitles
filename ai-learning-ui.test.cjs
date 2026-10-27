@@ -41,7 +41,7 @@ const {chromium}=require(process.env.PLAYWRIGHT_MODULE||'playwright');
  // Caption hit testing preserves left-click pass-through while reading middle-click text.
  await page.evaluate(()=>{
   window.key='fake-test-key';window.delay=5;
-  const button=document.createElement('button');button.id='under-caption';button.textContent='player';button.style.cssText='position:absolute;left:300px;top:120px;width:300px;height:60px';button.onclick=()=>window.leftPassed=true;document.body.insertBefore(button,document.getElementById('host'));
+  const button=document.createElement('div');button.id='under-caption';button.textContent='player';button.style.cssText='position:absolute;left:300px;top:120px;width:300px;height:60px';button.onclick=()=>window.leftPassed=true;document.body.insertBefore(button,document.getElementById('host'));
   const caption=document.createElement('div');caption.id='caption';caption.style.cssText='position:fixed;left:300px;top:120px;font:28px sans-serif;pointer-events:none';caption.innerHTML='<span id="original">inheritance</span><span id="translation"></span>';document.getElementById('host').shadowRoot.append(caption);
   const unrelated=document.createElement('span');unrelated.id='settings-copy';unrelated.textContent='configuration';unrelated.style.cssText='position:absolute;left:40px;top:220px';document.body.append(unrelated);
  });
