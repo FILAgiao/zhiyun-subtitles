@@ -2,7 +2,14 @@
 (function(root){
 'use strict';
 function isClassroom(page){return page.hostname==='interactivemeta.cmc.zju.edu.cn'||(page.hostname==='classroom.zju.edu.cn'&&/^\/(?:livingpage|livingroom)\/?$/.test(page.pathname));}
-function voicePane(){return document.querySelector('#pane-voice')||document.querySelector('.spoken-language-body .voice-body_wrap')||document.querySelector('.transform-wrapper .trans-list_wrap')||document.querySelector('.trans-contain');}
+function voicePane(){
+ // studentsrs keeps an empty tab shell beside its actual live caption list.
+ // Limit this fallback to that pair: an empty replay caption list must not
+ // fall through to the separate transform-wrapper search results.
+ const replay=document.querySelector('#pane-voice'),live=document.querySelector('.trans-contain');
+ if(replay&&!replay.querySelector('.trans-item')&&live?.querySelector('.trans-item'))return live;
+ return replay||document.querySelector('.spoken-language-body .voice-body_wrap')||document.querySelector('.transform-wrapper .trans-list_wrap')||live;
+}
 function voiceContent(element,parseTime){
  return [...(element?.querySelectorAll('.trans-item')||[])].map(row=>{
   const lines=row.querySelector('.trans-lan')?.children;
@@ -23,18 +30,22 @@ function imageURL(image){
 }
 function imageKey(url){try{const u=new URL(url);return u.origin+u.pathname.replace(/\/s_([^/]+)$/,'/$1');}catch{return url;}}
 function slides(parseTime){
- const replay=document.querySelector('#pane-ppt'),list=document.querySelector('.note-scroll_body');
+ const replayPane=document.querySelector('#pane-ppt'),list=document.querySelector('.note-scroll_body');
+ const replayRows=[...(replayPane?.querySelectorAll('img')||[])].filter(image=>imageURL(image));
+ // An empty/placeholder tab is not a replay PPT source. Live note images and
+ // the current thumbnail remain available even while that tab shell exists.
+ const replay=replayRows.length?replayPane:null;
  const thumbnail=[...document.querySelectorAll('.student-list .video-item')].find(card=>card.querySelector('.tag span')?.textContent.trim()==='PPT')?.querySelector('img');
  const current=[document.querySelector('.ppt-section-wrapper .ppt-item-wrapper img'),thumbnail].find(image=>image&&imageURL(image));
  const images=[...new Set([...document.querySelectorAll(imageSelector),current].filter(Boolean))],full=current?imageURL(current):'',entries=[];
- const rows=replay?[...replay.querySelectorAll('img')]:[...document.querySelectorAll('.note-ppt_item img')];
+ const rows=replay?replayRows:[...document.querySelectorAll('.note-ppt_item img')];
  for(const image of rows){let url=imageURL(image);if(!url)continue;if(full&&imageKey(url)===imageKey(full))url=full;
   const card=image.closest('.tab-ppt,.note-ppt_item');entries.push({url,time:['.time','.ppt_time','.ppt_order'].map(selector=>parseTime(card?.querySelector(selector)?.textContent||'')).find(Number.isFinite)??NaN,image});
  }
  let activeIndex=-1;
  if(full){activeIndex=entries.findIndex(e=>imageKey(e.url)===imageKey(full));if(activeIndex<0&&!replay){activeIndex=entries.length;entries.push({url:full,time:null,image:current});}}
  if(activeIndex<0&&!replay)activeIndex=entries.findIndex(e=>{const mask=e.image.closest('.note-ppt_item')?.querySelector('.ppt_mask');return mask&&getComputedStyle(mask).display==='none';});
- return{element:replay||list||current?.parentElement||null,items:images,entries,activeIndex,signature:JSON.stringify(entries.map(e=>[e.url,e.time]))};
+ return{element:replay||list||current?.parentElement||replayPane||null,items:images,entries,activeIndex,signature:JSON.stringify(entries.map(e=>[e.url,e.time]))};
 }
 function isLive(video){
  if(!video)return false;

@@ -217,3 +217,17 @@ test('clip limits require current authenticated server capability and default to
  storage['gateway-account-v1']={url:'https://other-api.test',token:'session'};assert.deepEqual(api.study.clipLimits(),legacy,'changing server immediately removes the larger image permission');
  read=api.ensureAccess();calls.at(-1).onload({status:200,responseText:JSON.stringify({id:42,capabilities:{study_clip_limits:{max_edge:99999,max_image:-1,max_thumbnail:'bad'}}})});await read;assert.deepEqual(api.study.clipLimits(),{...legacy,max_edge:3840},'advertised limits are bounded and malformed values fall back');
 });
+
+
+test('clip success requires the server acknowledgement for the exact saved image',async()=>{
+ const {api,calls}=setup({url:'https://api.test',token:'current-session'});
+ for(const data of [{}, {ok:false,id:'image-one'}, {ok:true,id:'different-image'}]){
+  const pending=api.study.saveClip({id:'image-one'},{account:'current-session'});
+  calls.at(-1).onload({status:200,responseText:JSON.stringify(data)});
+  await assert.rejects(pending,{code:'clip_unconfirmed'});
+ }
+ const pending=api.study.saveClip({id:'image-one'},{account:'current-session'});
+ calls.at(-1).onload({status:200,responseText:'{"ok":true,"id":"image-one"}'});
+ assert.deepEqual(await pending,{ok:true,id:'image-one'});
+ const before=calls.length;await assert.rejects(api.study.saveClip({id:'image-one'},{account:'previous-session'}),{code:'account_changed'});assert.equal(calls.length,before);
+});

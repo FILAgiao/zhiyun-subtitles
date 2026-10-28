@@ -1,6 +1,6 @@
 {
   "name": "zhiyun-subtitles",
-  "version": "0.20.88",
+  "version": "0.20.90",
   "private": true,
   "description": "浙大上课爽：网课不硬扛，浙大上课爽！同步字幕、PPT 讲解与本机缓存。",
   "scripts": {
@@ -56,11 +56,13 @@
     "test:speech:benchmark": "node speech-alignment-benchmark.cjs",
     "build:speech:release": "node build-userscript.cjs && node build-extension.cjs && node build-speech-release.cjs",
     "test:speech:source": "node speech-stream-native-smoke.test.cjs",
-    "test:studentsrs": "node studentsrs-ui.test.cjs && node studentsrs-ui.test.cjs --extension",
+    "test:studentsrs": "node studentsrs-dom.test.cjs && node studentsrs-ui.test.cjs && node studentsrs-ui.test.cjs --extension",
     "test:clips": "python -m unittest backend.test_clips -q && node clips-ui.test.cjs",
     "test:caption:dom": "node classroom-caption-dom.test.cjs",
     "test:player:loading": "node player-loading-ui.test.cjs && node player-loading-ui.test.cjs --extension",
-    "test:sync:persistence": "node sync-persistence-ui.test.cjs && node sync-persistence-ui.test.cjs --extension"
+    "test:sync:persistence": "node sync-persistence-ui.test.cjs && node sync-persistence-ui.test.cjs --extension",
+    "test:collections": "python -m unittest backend.test_clips backend.test_web_sessions -q && node --test gateway-client.test.cjs portal-auth.test.cjs && node clip-save-ownership-ui.test.cjs && node clips-gallery-ui.test.cjs && node clips-ui.test.cjs",
+    "test:portal:auth": "node --test portal-auth.test.cjs && python -m unittest backend.test_web_sessions backend.test_portal -q && node portal-auth-ui.test.cjs && node portal-auth-real-backend-ui.test.cjs && node portal-auth-manual-race-ui.test.cjs"
   },
   "engines": {
     "node": ">=20.8"

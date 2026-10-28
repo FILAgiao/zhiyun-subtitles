@@ -15,6 +15,28 @@ function allowedRequest(o,runtime=globalThis.chrome?.runtime){
  if(gateway){headers['X-App-Id']='zhiyun-subtitles';headers['X-Client-Type']='chrome-extension';headers['X-Client-Channel']=RELEASE_CHANNEL;const version=runtime?.getManifest?.()?.version||'';if(version)headers['X-Client-Version']=version;}
  return {url:u.href,method,headers,body:method==='POST'?o.data:undefined,credentials:school?'include':'omit',redirect:'error',cache:'no-store'};
 }
+// Only isolated content scripts on our two account pages can request a
+// separately scoped website session. No extension token crosses into the page.
+function portalLocation(raw){
+ try{const u=new URL(raw);if(u.origin!==new URL(GATEWAY).origin||u.username||u.password||!/^\/gateway\/(?:study|account)(?:\/|\.html)?$/.test(u.pathname))return '';return u.origin+u.pathname+u.search;}catch{return '';}
+}
+async function createPortalSession(api,sender,request=globalThis.fetch){
+ if(sender?.id!==api.runtime.id||sender.frameId!==0||!Number.isInteger(sender.tab?.id)||!portalLocation(sender.url))throw Error('网页登录请求无效');
+ const key='gateway-account-v1',saved=await api.storage.local.get(key),account=saved?.[key]||{};
+ let base='';try{const u=new URL(account.url);if(u.origin===new URL(GATEWAY).origin&&!u.username&&!u.password&&!u.search&&!u.hash&&/^\/gateway\/?$/.test(u.pathname))base=u.origin+'/gateway';}catch{}
+ if(!base||typeof account.token!=='string'||!/^[A-Za-z0-9._~-]{8,4096}$/.test(account.token))return {ok:true,token:''};
+ const current=await api.tabs.get(sender.tab.id);if(portalLocation(current.url)!==portalLocation(sender.url))throw Error('页面已跳转，请刷新后重试');
+ const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),8000);
+ try{
+  const version=api.runtime.getManifest?.()?.version||'';
+  const response=await request(GATEWAY+'/v1/auth/web-session',{method:'POST',headers:{'Content-Type':'application/json','X-App-Id':'zhiyun-subtitles','X-Client-Type':'chrome-extension','X-Client-Channel':RELEASE_CHANNEL,...(version?{'X-Client-Version':version}:{}),Authorization:'Bearer '+account.token},body:'{}',credentials:'omit',cache:'no-store',redirect:'error',signal:controller.signal});
+  if(!response.ok)throw Error(response.status===401?'插件登录已过期，请在插件中重新登录':'暂时无法衔接插件登录，请稍后刷新重试');
+  const data=await response.json();if(typeof data.token!=='string'||!/^[A-Za-z0-9._~-]{8,4096}$/.test(data.token)||data.token===account.token)throw Error('网页登录响应异常');
+  const [latest,tab]=await Promise.all([api.storage.local.get(key),api.tabs.get(sender.tab.id)]);
+  if(latest?.[key]?.token!==account.token||latest?.[key]?.url!==account.url||portalLocation(tab.url)!==portalLocation(sender.url))throw Error('账号或页面已切换，请刷新后重试');
+  return {ok:true,token:data.token};
+ }finally{clearTimeout(timer);}
+}
 function toBase64(bytes){let raw='';for(let i=0;i<bytes.length;i+=8192)raw+=String.fromCharCode(...bytes.subarray(i,i+8192));return btoa(raw);}
 // Serialize captures per window to stay within Chromium's two-captures/second limit.
 const captureQueues=new Map(),captureTimes=new Map();
@@ -41,6 +63,7 @@ async function captureSenderTab(api,sender){
 }
 if(typeof chrome!=='undefined'){
  chrome.runtime.onMessage.addListener((message,sender,respond)=>{
+  if(message?.type==='zy-portal-session'){createPortalSession(chrome,sender).then(respond,()=>respond({ok:false,error:'插件登录衔接暂不可用，请刷新重试。'}));return true;}
   if(message?.type!=='zy-capture-visible')return;
   captureSenderTab(chrome,sender).then(data=>respond({ok:true,data}),error=>respond({ok:false,error:error.message||'浏览器原生截图暂不可用。'}));return true;
  });
@@ -67,4 +90,4 @@ if(typeof chrome!=='undefined'){
  chrome.runtime.onInstalled.addListener(()=>chrome.contextMenus.create({id:'zy-ask',title:'问上课爽',contexts:['selection'],documentUrlPatterns:['http://*/*','https://*/*']}));
  chrome.contextMenus.onClicked.addListener(async(info,tab)=>{if(info.menuItemId==='zy-ask'&&tab?.id)try{await chrome.tabs.sendMessage(tab.id,{type:'zy-ask',text:String(info.selectionText||'').slice(0,4000)});}catch(_){}});
 }
-if(typeof module!=='undefined')module.exports={allowedRequest,captureSenderTab};
+if(typeof module!=='undefined')module.exports={allowedRequest,captureSenderTab,portalLocation,createPortalSession};

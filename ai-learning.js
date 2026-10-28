@@ -778,7 +778,7 @@
       use.hidden=destination.options.length<2;
       submit.title='将当前截图和圈画直接发送给 AI';use.title='将当前截图和圈画直接发送到上次对话';
       destination.value=!panel.hidden&&destination.querySelector('[value="current"]')?'current':'new';
-      let start=gesture?.start||null,rect=null,canvas=null,base=null,tool='pen',active=null,strokes=[],clipBusy=false,clipId='',clipSnapshot=null;
+      let start=gesture?.start||null,rect=null,canvas=null,base=null,tool='pen',active=null,strokes=[],clipBusy=false,clipId='',clipSnapshot=null,clipAccount='';
       const captureCourse=String(getCourseId()),captureUrl=win.location.href;
       const draw=layer.querySelector('#ai-crop-draw'),favorite=layer.querySelector('#ai-crop-save'),clipStatus=layer.querySelector('#ai-clip-status');
       layer.querySelector('#ai-clip-title').value=String(getCourseTitle()||doc.title||'截图收藏').slice(0,200);
@@ -855,9 +855,11 @@
         if(clipBusy||!canvas)return;
         if(!studyStore?.saveClip){clipStatus.textContent='当前连接未开放图片收藏，请使用完整扩展和新版后端。';return;}
         const owner=studyStore.account();if(!owner){onOpenAccount();return;}
+        if(clipAccount!==owner){clipSnapshot=null;clipId='';clipAccount=owner;}
         if(serial!==requestSerial||captureCourse!==String(getCourseId())||captureUrl!==win.location.href){clipStatus.textContent='页面已变化，请重新截图。';return;}
         clipBusy=true;favorite.disabled=true;favorite.textContent='收藏中…';for(const id of ['ai-clip-title','ai-clip-note','ai-crop-pen','ai-crop-circle','ai-crop-reset','ai-crop-undo'])layer.querySelector('#'+id).disabled=true;
-        const current=()=>!destroyed&&layer.isConnected&&serial===requestSerial&&owner===studyStore.account()&&captureCourse===String(getCourseId());
+        const activeCrop=()=>!destroyed&&layer.isConnected&&serial===requestSerial&&captureCourse===String(getCourseId())&&captureUrl===win.location.href;
+        const current=()=>activeCrop()&&owner===studyStore.account();
         try{
           if(!clipSnapshot){
             const encode=edge=>{const c=make('canvas'),scale=Math.min(1,edge/canvas.width,edge/canvas.height);c.width=Math.max(1,Math.round(canvas.width*scale));c.height=Math.max(1,Math.round(canvas.height*scale));c.getContext('2d').drawImage(canvas,0,0,c.width,c.height);return c.toDataURL('image/png');};
@@ -872,11 +874,11 @@
             clipSnapshot={id:clipId,title:layer.querySelector('#ai-clip-title').value.trim()||'截图收藏',note:layer.querySelector('#ai-clip-note').value,course:String(getCourseTitle()||doc.title||'网页摘录').slice(0,200),courseKey:digest?Array.from(new Uint8Array(digest),b=>b.toString(16).padStart(2,'0')).join(''):fallbackKey(),origin:origin.href,position:seconds===null?'':Math.floor(seconds/60)+':'+String(seconds%60).padStart(2,'0'),image,thumbnail};
           }
           clipStatus.textContent='正在保存图片和批注，仅当前账号可见…';
-          await studyStore.saveClip(clipSnapshot);if(!current())return;
+          await studyStore.saveClip(clipSnapshot,{account:owner});if(!current())return;
           favorite.textContent='已收藏';favorite.disabled=true;clipDetails.open=false;
-          clipStatus.replaceChildren(make('span',{text:'已保存。手机登录同一账号即可回看。 '}),make('a',{text:'打开收藏夹 ↗',href:'https://47.77.182.216.sslip.io/gateway/study#clips',target:'_blank',rel:'noopener noreferrer'}));
+          clipStatus.replaceChildren(make('span',{text:'已保存到当前账号的收藏夹。 '}),make('a',{text:'查看这张收藏 ↗',href:'https://47.77.182.216.sslip.io/gateway/study?clip='+encodeURIComponent(clipSnapshot.id)+'#clips',target:'_blank',rel:'noopener noreferrer'}));
         }catch(error){if(!current())return;clipStatus.replaceChildren(make('span',{text:(error.status===404?'服务器尚未部署图片收藏。':error.message||'收藏失败。')+' 当前截图仍在预览中，可重试或先下载。 '}));const download=make('a',{text:'下载截图',href:clipSnapshot?.image||canvas.toDataURL('image/png'),download:'随意摘.png'});clipStatus.append(download);favorite.textContent='重试收藏';favorite.disabled=false;}
-        finally{clipBusy=false;if(current()){for(const id of ['ai-clip-title','ai-clip-note','ai-crop-pen','ai-crop-circle','ai-crop-reset'])layer.querySelector('#'+id).disabled=false;layer.querySelector('#ai-crop-undo').disabled=!strokes.length;if(favorite.textContent!=='已收藏'){favorite.disabled=false;if(favorite.textContent==='收藏中…')favorite.textContent='收藏';}layoutPreview();}}
+        finally{clipBusy=false;if(activeCrop()){for(const id of ['ai-clip-title','ai-clip-note','ai-crop-pen','ai-crop-circle','ai-crop-reset'])layer.querySelector('#'+id).disabled=false;layer.querySelector('#ai-crop-undo').disabled=!strokes.length;if(owner!==studyStore.account()){favorite.disabled=false;favorite.textContent='收藏';clipStatus.textContent='账号已切换，请确认当前账号后重新收藏。';}else if(favorite.textContent!=='已收藏'){favorite.disabled=false;if(favorite.textContent==='收藏中…')favorite.textContent='收藏';}layoutPreview();}}
       };
     }
     let cardDialog=null,cardExporting=false;cleanups.push(()=>cardDialog?.dismiss());

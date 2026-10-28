@@ -74,3 +74,12 @@ POST 采用扁平字段：`{id,title,course,source,origin,history:[{role:"user",
 ## 验证
 
 运行 `python -m unittest backend.test_study -v`。测试使用临时 SQLite、动态生成密码和内存邮件函数，覆盖：未配置发信、发送失败、哈希/到期/五次失败/重发节流、注册免费零额度、已有邮箱不变更、并发单次消费，以及按用户/应用隔离、文本限制、分页、上限、更新和删除。测试不读取真实账号配置、不发送邮件、不调用模型。
+
+
+## 0.20.90 扩展到同源网页会话（本地实现，未部署）
+
+已登录父会话可 `POST /v1/auth/web-session`，请求头沿用 `Authorization: Bearer ...` 与 `X-App-Id`，返回 `{token,expires_in,server_time}`。新令牌独立随机生成，过期时间为父会话到期与24小时二者较早；`web_sessions` 保存其摘要、父会话摘要和APP归属，迁移仅增加此表。
+
+派生会话每次验证父会话仍存在、未过期且属于同一用户/APP，仅允许 `/v1/me`、`/v1/auth/logout` 和个人 `/v1/study/conversations`、`clips`、`clip-image`、`capabilities`；不能再次派生会话、调用付费模型或管理接口。撤销父会话同时撤销其派生会话；网页退出只撤销该子会话。密码重置或手动删除父会话也会使子会话鉴权失败。
+
+完整扩展仅在固定官网 `study` / `account` 的顶层页面发起此请求。通用网页网络代理未开放该签发接口；manifest匹配固定官网路径后，桥接和后台再严格校验具体页面，覆盖查询参数、可选末尾斜杠与 `.html`。页面等待桥接完成后再验证 `/v1/me`，失败不把旧账号当作当前插件账号。

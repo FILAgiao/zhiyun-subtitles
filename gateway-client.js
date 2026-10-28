@@ -2,7 +2,7 @@
 (function(root,factory){const api=factory();if(typeof module==='object'&&module.exports)module.exports=api;else root.ZYGateway=api;})(globalThis,function(){
 'use strict';
 const DEFAULT_ORIGIN='';
-const CLIENT_VERSION='0.20.88';
+const CLIENT_VERSION='0.20.90';
 function clientHeaders(){return {'X-Client-Version':CLIENT_VERSION,'X-Client-Channel':'userscript'};}
 const KEY='gateway-account-v1',APP='zhiyun-subtitles',CLIENT=globalThis.ZY_CLIENT_TYPE||'userscript';
 function baseURL(value){const u=new URL(String(value).trim());if(u.username||u.password||u.search||u.hash||!['/','/gateway','/gateway/'].includes(u.pathname)||(u.protocol!=='https:'&&!(u.protocol==='http:'&&['localhost','127.0.0.1'].includes(u.hostname))))throw Error('请填写 HTTPS 服务地址；本机调试可使用 http://127.0.0.1:8080');return u.origin+(u.pathname==='/'?'':'/gateway');}
@@ -55,6 +55,7 @@ function create({request,getValue,setValue}){
   if(options.account!==undefined&&options.account!==token||!same())throw Object.assign(Error('学习账号已切换，请在当前账号重新同步。'),{code:'account_changed'});
   const data=await call(path,body,token,origin);
   if(!same())throw Object.assign(Error('学习账号已切换，已忽略上一账号的同步结果。'),{code:'account_changed'});
+  if(path==='/v1/study/clips'&&(data?.ok!==true||data.id!==body.id))throw Object.assign(Error('未收到这张图片的保存确认，请重试收藏。'),{code:'clip_unconfirmed'});
   return data;
  }
  function rememberAccess(data,token=credential(),url=account().url){if(!token||token!==credential()||baseURL(url)!==baseURL(account().url))return false;accessProfile=data;accessToken=token;accessOrigin=baseURL(url);if(Number.isFinite(data.server_time))serverOffset=data.server_time*1000-Date.now();return true;}

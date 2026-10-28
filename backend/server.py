@@ -10,6 +10,7 @@ PRAGMA journal_mode=WAL;
 CREATE TABLE IF NOT EXISTS users(id INTEGER PRIMARY KEY,email TEXT UNIQUE,salt TEXT,password TEXT);
 CREATE TABLE IF NOT EXISTS grants(user INTEGER,app TEXT,requests INTEGER,audio INTEGER,PRIMARY KEY(user,app));
 CREATE TABLE IF NOT EXISTS sessions(hash TEXT PRIMARY KEY,user INTEGER,expires INTEGER);
+CREATE TABLE IF NOT EXISTS web_sessions(hash TEXT PRIMARY KEY,parent TEXT NOT NULL,app TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS calls(id TEXT PRIMARY KEY,user INTEGER,app TEXT,month TEXT,kind TEXT,state TEXT,input_tokens INTEGER DEFAULT 0,output_tokens INTEGER DEFAULT 0,total_tokens INTEGER DEFAULT 0,web_search INTEGER DEFAULT 0,seconds REAL DEFAULT 0,created INTEGER);
 CREATE TABLE IF NOT EXISTS jobs(id TEXT PRIMARY KEY,user INTEGER,app TEXT,call TEXT,created INTEGER,done INTEGER DEFAULT 0,result TEXT);
 CREATE TABLE IF NOT EXISTS learning_job_receipts(id TEXT PRIMARY KEY,user INTEGER,app TEXT,created INTEGER);
@@ -225,10 +226,16 @@ class Gateway(AdminMixin, PromptMixin, StudyMixin, OperationsMixin):
             count=row['count']+1 if recent else 1
             db.execute('INSERT OR REPLACE INTO attempts VALUES(?,?,?)',(key,row['start'] if recent else now,count))
         if count>limit: raise Fault(429,'请求过于频繁，请稍后再试','rate_limit',max(1,window-(now-(row['start'] if recent else now))))
-    def auth(self,token,app,headers=None):
+    def auth(self,token,app,headers=None,path=None):
         with self.db() as db:
             row=db.execute('SELECT users.id,users.email,users.username,users.is_admin FROM sessions JOIN users ON users.id=sessions.user WHERE hash=? AND expires>?',(digest(token),int(time.time()))).fetchone()
             if not row: raise Fault(401,'请登录或重新登录')
+            web=db.execute('SELECT parent,app FROM web_sessions WHERE hash=?',(digest(token),)).fetchone()
+            if web:
+                parent=db.execute('SELECT 1 FROM sessions WHERE hash=? AND user=? AND expires>?',(web['parent'],row['id'],int(time.time()))).fetchone()
+                if not parent or web['app']!=app: raise Fault(401,'请登录或重新登录')
+                if path not in ('/v1/me','/v1/auth/logout','/v1/study/conversations','/v1/study/clips','/v1/study/clip-image','/v1/study/capabilities'):
+                    raise Fault(403,'网页会话仅用于查看和整理个人学习记录','web_session_scope')
             self.check_grant(db,row['id'],app)
             result=dict(row)
         self.touch_activity(digest(token),*self.client_metadata(headers or {}))
@@ -293,7 +300,7 @@ class Gateway(AdminMixin, PromptMixin, StudyMixin, OperationsMixin):
         token=headers.get('Authorization','').removeprefix('Bearer ')
         if not token and method=='POST' and (path in ('/v1/speech/submit','/v1/speech/query') or path.startswith('/v1/speech/stream/')):
             raise Fault(401,'语音识别现需登录并开通有效体验或套餐；请在设置的“我的账号”中登录。','authentication_required')
-        user=self.auth(token,app,headers)
+        user=self.auth(token,app,headers,path.split('?',1)[0])
         if method=='POST' and path in ('/v1/learning/jobs/poll','/v1/learning/jobs/cancel'):
             return self.learning_job(user['id'],app,path,body)
         if method=='POST' and path.startswith('/v1/speech/stream/'):
@@ -303,8 +310,24 @@ class Gateway(AdminMixin, PromptMixin, StudyMixin, OperationsMixin):
                 with self.db() as db: self.check_grant(db,user['id'],app,'speech')
             return self.speech_streams.handle(user['id'],app,action,body,headers)
         self.throttle('user:'+str(user['id']),90)
+        if method=='POST' and path=='/v1/auth/web-session':
+            # Issue a separate website session; never expose the extension token
+            # to page JavaScript, and keep website logout independent.
+            now=int(time.time());web_token=secrets.token_urlsafe(32)
+            with self.db() as db:
+                parent=db.execute('SELECT expires FROM sessions WHERE hash=?',(digest(token),)).fetchone()
+                if not parent or parent['expires']<=now: raise Fault(401,'请登录或重新登录')
+                expires=min(parent['expires'],now+86400)
+                db.execute('DELETE FROM sessions WHERE expires<=? OR hash IN (SELECT web_sessions.hash FROM web_sessions LEFT JOIN sessions parent ON parent.hash=web_sessions.parent WHERE parent.hash IS NULL OR parent.expires<=?)',(now,now))
+                db.execute('DELETE FROM web_sessions WHERE hash NOT IN (SELECT hash FROM sessions)')
+                db.execute('INSERT INTO sessions VALUES(?,?,?)',(digest(web_token),user['id'],expires))
+                db.execute('INSERT INTO web_sessions VALUES(?,?,?)',(digest(web_token),digest(token),app))
+            self.open_activity(digest(web_token),user['id'],app,'study-web',expires,*self.client_metadata(headers))
+            return 200,{}, {'token':web_token,'expires_in':expires-now,'server_time':now}
         if method=='POST' and path=='/v1/auth/logout':
-            with self.db() as db: db.execute('DELETE FROM sessions WHERE hash=?',(digest(token),))
+            with self.db() as db:
+                db.execute('DELETE FROM sessions WHERE hash=? OR hash IN (SELECT hash FROM web_sessions WHERE parent=?)',(digest(token),digest(token)))
+                db.execute('DELETE FROM web_sessions WHERE hash=? OR parent=?',(digest(token),digest(token)))
             self.close_activity(digest(token))
             return 200,{}, {'ok':True}
         if method=='GET' and path=='/v1/me': return 200,{}, {**user,'app':app,'server_time':int(time.time()),'usage':self.usage(user['id'],app),'capabilities':self.capabilities(),'permissions':self.permissions(user['id'],app),'membership':self.membership(user['id'],app)}

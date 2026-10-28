@@ -43,7 +43,7 @@ class PreviewGateway(Gateway):
         allowed={('GET','/health'),('GET','/v1/me'),('GET','/v1/account/access'),
                  ('GET','/v1/study/clips'),('GET','/v1/study/clip-image'),('POST','/v1/study/clips'),('DELETE','/v1/study/clips'),
                  ('GET','/v1/study/capabilities'),('GET','/v1/study/conversations'),
-                 ('POST','/v1/auth/login'),('POST','/v1/auth/logout'),
+                 ('POST','/v1/auth/login'),('POST','/v1/auth/logout'),('POST','/v1/auth/web-session'),
                  ('POST','/v1/study/conversations'),('DELETE','/v1/study/conversations')}
         if (method,urlsplit(path).path) not in allowed:
             raise Fault(503,'本地验收不开放邮件、模型或管理写入')

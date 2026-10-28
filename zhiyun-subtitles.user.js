@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         浙大上课爽
 // @namespace    zhiyunzimu.local
-// @version      0.20.88
+// @version      0.20.90
 // @description  网课不硬扛，浙大上课爽！智云课堂同步字幕、PPT 讲解与本机缓存。
 // @match        https://*/*
 // @match        http://*/*
@@ -381,7 +381,14 @@ root.ZYStudyUI={mount,mountSettingsShell};
 (function(root){
 'use strict';
 function isClassroom(page){return page.hostname==='interactivemeta.cmc.zju.edu.cn'||(page.hostname==='classroom.zju.edu.cn'&&/^\/(?:livingpage|livingroom)\/?$/.test(page.pathname));}
-function voicePane(){return document.querySelector('#pane-voice')||document.querySelector('.spoken-language-body .voice-body_wrap')||document.querySelector('.transform-wrapper .trans-list_wrap')||document.querySelector('.trans-contain');}
+function voicePane(){
+ // studentsrs keeps an empty tab shell beside its actual live caption list.
+ // Limit this fallback to that pair: an empty replay caption list must not
+ // fall through to the separate transform-wrapper search results.
+ const replay=document.querySelector('#pane-voice'),live=document.querySelector('.trans-contain');
+ if(replay&&!replay.querySelector('.trans-item')&&live?.querySelector('.trans-item'))return live;
+ return replay||document.querySelector('.spoken-language-body .voice-body_wrap')||document.querySelector('.transform-wrapper .trans-list_wrap')||live;
+}
 function voiceContent(element,parseTime){
  return [...(element?.querySelectorAll('.trans-item')||[])].map(row=>{
   const lines=row.querySelector('.trans-lan')?.children;
@@ -402,18 +409,22 @@ function imageURL(image){
 }
 function imageKey(url){try{const u=new URL(url);return u.origin+u.pathname.replace(/\/s_([^/]+)$/,'/$1');}catch{return url;}}
 function slides(parseTime){
- const replay=document.querySelector('#pane-ppt'),list=document.querySelector('.note-scroll_body');
+ const replayPane=document.querySelector('#pane-ppt'),list=document.querySelector('.note-scroll_body');
+ const replayRows=[...(replayPane?.querySelectorAll('img')||[])].filter(image=>imageURL(image));
+ // An empty/placeholder tab is not a replay PPT source. Live note images and
+ // the current thumbnail remain available even while that tab shell exists.
+ const replay=replayRows.length?replayPane:null;
  const thumbnail=[...document.querySelectorAll('.student-list .video-item')].find(card=>card.querySelector('.tag span')?.textContent.trim()==='PPT')?.querySelector('img');
  const current=[document.querySelector('.ppt-section-wrapper .ppt-item-wrapper img'),thumbnail].find(image=>image&&imageURL(image));
  const images=[...new Set([...document.querySelectorAll(imageSelector),current].filter(Boolean))],full=current?imageURL(current):'',entries=[];
- const rows=replay?[...replay.querySelectorAll('img')]:[...document.querySelectorAll('.note-ppt_item img')];
+ const rows=replay?replayRows:[...document.querySelectorAll('.note-ppt_item img')];
  for(const image of rows){let url=imageURL(image);if(!url)continue;if(full&&imageKey(url)===imageKey(full))url=full;
   const card=image.closest('.tab-ppt,.note-ppt_item');entries.push({url,time:['.time','.ppt_time','.ppt_order'].map(selector=>parseTime(card?.querySelector(selector)?.textContent||'')).find(Number.isFinite)??NaN,image});
  }
  let activeIndex=-1;
  if(full){activeIndex=entries.findIndex(e=>imageKey(e.url)===imageKey(full));if(activeIndex<0&&!replay){activeIndex=entries.length;entries.push({url:full,time:null,image:current});}}
  if(activeIndex<0&&!replay)activeIndex=entries.findIndex(e=>{const mask=e.image.closest('.note-ppt_item')?.querySelector('.ppt_mask');return mask&&getComputedStyle(mask).display==='none';});
- return{element:replay||list||current?.parentElement||null,items:images,entries,activeIndex,signature:JSON.stringify(entries.map(e=>[e.url,e.time]))};
+ return{element:replay||list||current?.parentElement||replayPane||null,items:images,entries,activeIndex,signature:JSON.stringify(entries.map(e=>[e.url,e.time]))};
 }
 function isLive(video){
  if(!video)return false;
@@ -2159,7 +2170,7 @@ if(typeof module==='object'&&module.exports)module.exports={create};else root.ZY
       use.hidden=destination.options.length<2;
       submit.title='将当前截图和圈画直接发送给 AI';use.title='将当前截图和圈画直接发送到上次对话';
       destination.value=!panel.hidden&&destination.querySelector('[value="current"]')?'current':'new';
-      let start=gesture?.start||null,rect=null,canvas=null,base=null,tool='pen',active=null,strokes=[],clipBusy=false,clipId='',clipSnapshot=null;
+      let start=gesture?.start||null,rect=null,canvas=null,base=null,tool='pen',active=null,strokes=[],clipBusy=false,clipId='',clipSnapshot=null,clipAccount='';
       const captureCourse=String(getCourseId()),captureUrl=win.location.href;
       const draw=layer.querySelector('#ai-crop-draw'),favorite=layer.querySelector('#ai-crop-save'),clipStatus=layer.querySelector('#ai-clip-status');
       layer.querySelector('#ai-clip-title').value=String(getCourseTitle()||doc.title||'截图收藏').slice(0,200);
@@ -2236,9 +2247,11 @@ if(typeof module==='object'&&module.exports)module.exports={create};else root.ZY
         if(clipBusy||!canvas)return;
         if(!studyStore?.saveClip){clipStatus.textContent='当前连接未开放图片收藏，请使用完整扩展和新版后端。';return;}
         const owner=studyStore.account();if(!owner){onOpenAccount();return;}
+        if(clipAccount!==owner){clipSnapshot=null;clipId='';clipAccount=owner;}
         if(serial!==requestSerial||captureCourse!==String(getCourseId())||captureUrl!==win.location.href){clipStatus.textContent='页面已变化，请重新截图。';return;}
         clipBusy=true;favorite.disabled=true;favorite.textContent='收藏中…';for(const id of ['ai-clip-title','ai-clip-note','ai-crop-pen','ai-crop-circle','ai-crop-reset','ai-crop-undo'])layer.querySelector('#'+id).disabled=true;
-        const current=()=>!destroyed&&layer.isConnected&&serial===requestSerial&&owner===studyStore.account()&&captureCourse===String(getCourseId());
+        const activeCrop=()=>!destroyed&&layer.isConnected&&serial===requestSerial&&captureCourse===String(getCourseId())&&captureUrl===win.location.href;
+        const current=()=>activeCrop()&&owner===studyStore.account();
         try{
           if(!clipSnapshot){
             const encode=edge=>{const c=make('canvas'),scale=Math.min(1,edge/canvas.width,edge/canvas.height);c.width=Math.max(1,Math.round(canvas.width*scale));c.height=Math.max(1,Math.round(canvas.height*scale));c.getContext('2d').drawImage(canvas,0,0,c.width,c.height);return c.toDataURL('image/png');};
@@ -2253,11 +2266,11 @@ if(typeof module==='object'&&module.exports)module.exports={create};else root.ZY
             clipSnapshot={id:clipId,title:layer.querySelector('#ai-clip-title').value.trim()||'截图收藏',note:layer.querySelector('#ai-clip-note').value,course:String(getCourseTitle()||doc.title||'网页摘录').slice(0,200),courseKey:digest?Array.from(new Uint8Array(digest),b=>b.toString(16).padStart(2,'0')).join(''):fallbackKey(),origin:origin.href,position:seconds===null?'':Math.floor(seconds/60)+':'+String(seconds%60).padStart(2,'0'),image,thumbnail};
           }
           clipStatus.textContent='正在保存图片和批注，仅当前账号可见…';
-          await studyStore.saveClip(clipSnapshot);if(!current())return;
+          await studyStore.saveClip(clipSnapshot,{account:owner});if(!current())return;
           favorite.textContent='已收藏';favorite.disabled=true;clipDetails.open=false;
-          clipStatus.replaceChildren(make('span',{text:'已保存。手机登录同一账号即可回看。 '}),make('a',{text:'打开收藏夹 ↗',href:'https://47.77.182.216.sslip.io/gateway/study#clips',target:'_blank',rel:'noopener noreferrer'}));
+          clipStatus.replaceChildren(make('span',{text:'已保存到当前账号的收藏夹。 '}),make('a',{text:'查看这张收藏 ↗',href:'https://47.77.182.216.sslip.io/gateway/study?clip='+encodeURIComponent(clipSnapshot.id)+'#clips',target:'_blank',rel:'noopener noreferrer'}));
         }catch(error){if(!current())return;clipStatus.replaceChildren(make('span',{text:(error.status===404?'服务器尚未部署图片收藏。':error.message||'收藏失败。')+' 当前截图仍在预览中，可重试或先下载。 '}));const download=make('a',{text:'下载截图',href:clipSnapshot?.image||canvas.toDataURL('image/png'),download:'随意摘.png'});clipStatus.append(download);favorite.textContent='重试收藏';favorite.disabled=false;}
-        finally{clipBusy=false;if(current()){for(const id of ['ai-clip-title','ai-clip-note','ai-crop-pen','ai-crop-circle','ai-crop-reset'])layer.querySelector('#'+id).disabled=false;layer.querySelector('#ai-crop-undo').disabled=!strokes.length;if(favorite.textContent!=='已收藏'){favorite.disabled=false;if(favorite.textContent==='收藏中…')favorite.textContent='收藏';}layoutPreview();}}
+        finally{clipBusy=false;if(activeCrop()){for(const id of ['ai-clip-title','ai-clip-note','ai-crop-pen','ai-crop-circle','ai-crop-reset'])layer.querySelector('#'+id).disabled=false;layer.querySelector('#ai-crop-undo').disabled=!strokes.length;if(owner!==studyStore.account()){favorite.disabled=false;favorite.textContent='收藏';clipStatus.textContent='账号已切换，请确认当前账号后重新收藏。';}else if(favorite.textContent!=='已收藏'){favorite.disabled=false;if(favorite.textContent==='收藏中…')favorite.textContent='收藏';}layoutPreview();}}
       };
     }
     let cardDialog=null,cardExporting=false;cleanups.push(()=>cardDialog?.dismiss());
@@ -2507,7 +2520,7 @@ return{failure,create};
 (function(root,factory){const api=factory();if(typeof module==='object'&&module.exports)module.exports=api;else root.ZYGateway=api;})(globalThis,function(){
 'use strict';
 const DEFAULT_ORIGIN="https://47.77.182.216.sslip.io/gateway";
-const CLIENT_VERSION='0.20.88';
+const CLIENT_VERSION='0.20.90';
 function clientHeaders(){return {'X-Client-Version':CLIENT_VERSION,'X-Client-Channel':'userscript'};}
 const KEY='gateway-account-v1',APP='zhiyun-subtitles',CLIENT=globalThis.ZY_CLIENT_TYPE||'userscript';
 function baseURL(value){const u=new URL(String(value).trim());if(u.username||u.password||u.search||u.hash||!['/','/gateway','/gateway/'].includes(u.pathname)||(u.protocol!=='https:'&&!(u.protocol==='http:'&&['localhost','127.0.0.1'].includes(u.hostname))))throw Error('请填写 HTTPS 服务地址；本机调试可使用 http://127.0.0.1:8080');return u.origin+(u.pathname==='/'?'':'/gateway');}
@@ -2560,6 +2573,7 @@ function create({request,getValue,setValue}){
   if(options.account!==undefined&&options.account!==token||!same())throw Object.assign(Error('学习账号已切换，请在当前账号重新同步。'),{code:'account_changed'});
   const data=await call(path,body,token,origin);
   if(!same())throw Object.assign(Error('学习账号已切换，已忽略上一账号的同步结果。'),{code:'account_changed'});
+  if(path==='/v1/study/clips'&&(data?.ok!==true||data.id!==body.id))throw Object.assign(Error('未收到这张图片的保存确认，请重试收藏。'),{code:'clip_unconfirmed'});
   return data;
  }
  function rememberAccess(data,token=credential(),url=account().url){if(!token||token!==credential()||baseURL(url)!==baseURL(account().url))return false;accessProfile=data;accessToken=token;accessOrigin=baseURL(url);if(Number.isFinite(data.server_time))serverOffset=data.server_time*1000-Date.now();return true;}

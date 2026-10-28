@@ -8,7 +8,7 @@
   tabs.innerHTML='<button type="button" id="study-text-tab">我的问答</button><button type="button" id="study-clips-tab">随意摘 · 收藏夹</button>';
   $('study-guest').before(tabs);
   const section=el('section');section.id='clips-workspace';section.hidden=true;
-  section.innerHTML='<div class="clip-intro"><div><p class="eyebrow">留住这一刻的理解</p><h2>随意摘</h2><p>收藏截图和圈画，按课程慢慢回看。</p></div><button type="button" id="clips-resume" class="button subtle" disabled>继续上次阅读</button><button type="button" id="clips-refresh" class="button subtle">刷新收藏</button></div><div class="clip-filters"><label>搜索收藏<input id="clips-search" type="search" placeholder="标题、课程或笔记"></label><label>课程<select id="clips-course"><option value="">全部课程</option></select></label><label>保存日期<input id="clips-date" type="date"></label></div><p id="clips-status" role="status" aria-live="polite"></p><div id="clips-grid" class="clips-grid"></div><p class="data-note">点击截图中的「收藏」才会上传图片和批注。仅本人可见；删除会移除账号中的图片和缩略图。本机问答与已下载图片保留。</p>';
+  section.innerHTML='<div class="clip-intro"><div><p class="eyebrow">留住这一刻的理解</p><h2>随意摘</h2><p>收藏截图和圈画，按课程慢慢回看。</p></div><button type="button" id="clips-resume" class="button subtle" disabled>继续上次阅读</button><button type="button" id="clips-refresh" class="button subtle">刷新收藏</button></div><div class="clip-filters"><label>搜索收藏<input id="clips-search" type="search" placeholder="标题、课程或笔记"></label><label>课程<select id="clips-course"><option value="">全部课程</option></select></label><label>保存日期<input id="clips-date" type="date"></label><label class="clip-name-toggle"><input id="clips-show-name" type="checkbox" checked> 显示名称</label></div><p id="clips-status" role="status" aria-live="polite"></p><div id="clips-grid" class="clips-grid"></div><p class="data-note">点击截图中的「收藏」才会上传图片和批注。仅本人可见；删除会移除账号中的图片和缩略图。本机问答与已下载图片保留。</p>';
   $('study-workspace').after(section);
   const reader=el('dialog');reader.id='clip-reader';reader.setAttribute('aria-labelledby','clip-reader-title');
   reader.innerHTML='<header class="clip-reader-head"><div><p id="clip-reader-course" class="eyebrow"></p><h2 id="clip-reader-title"></h2></div><button type="button" id="clip-close" class="button subtle" aria-label="关闭图片阅读器">×</button></header><div class="clip-course-nav"><button type="button" id="clip-prev-course" class="button subtle">← 上门课</button><select id="clip-reader-courses" aria-label="切换课程"></select><button type="button" id="clip-next-course" class="button subtle">下门课 →</button></div><div id="clip-stage" tabindex="0" role="region" aria-label="图片阅读区：左右切换课程，上下切换图片"><img id="clip-full-image" alt=""><p id="clip-image-status" role="status"></p></div><div class="clip-image-nav"><button type="button" id="clip-prev" class="button subtle">↑ 上一张</button><span id="clip-position" aria-live="polite"></span><button type="button" id="clip-next" class="button subtle">↓ 下一张</button><button type="button" id="clip-zoom" class="button subtle">放大</button></div><div class="clip-reader-note"><p id="clip-note"></p><div class="clip-links"><span id="clip-time"></span><a id="clip-origin" target="_blank" rel="noopener noreferrer">回到来源 ↗</a><button type="button" id="clip-delete" class="text-link danger">删除收藏</button></div></div><footer class="clip-reader-footer"><label><input type="checkbox" id="clip-axes" checked> 双向切换</label><span>图片区：左右换课程，上下换图片；笔记正常滚动。</span></footer>';
@@ -16,29 +16,75 @@
   const zoom=el('dialog');zoom.id='clip-zoom-dialog';zoom.innerHTML='<button type="button" id="clip-zoom-close" class="button subtle">关闭大图</button><img id="clip-zoom-image" alt="收藏完整图片，按比例适应屏幕">';document.body.append(zoom);
   const deletion=el('dialog');deletion.id='clip-delete-dialog';deletion.innerHTML='<h2>删除这张收藏？</h2><p>账号中的截图、批注和缩略图会一并删除。已下载图片仍保留。</p><p id="clip-delete-status" role="status"></p><div class="dialog-actions"><button id="clip-delete-cancel" type="button" class="button subtle">保留</button><button id="clip-delete-confirm" type="button" class="button primary">确认删除</button></div>';document.body.append(deletion);
   let items=[],groups=[],courseIndex=0,imageIndex=0,generation=0,imageGeneration=0,loading=false,deleteBusy=false,lastFocused=null;
-  let positions={},tab=location.hash==='#clips'?'clips':'text';
+  const requestedClip=()=>{const id=new URL(location.href).searchParams.get('clip')||'';return /^[A-Za-z0-9_-]{1,100}$/.test(id)?id:'';};
+  let positions={},pendingClip=requestedClip(),tab=pendingClip||location.hash==='#clips'?'clips':'text',refreshPending=false,returnTimer=null;
+  const namePreference='zy-clips-show-name-v1';
+  try{$('clips-show-name').checked=localStorage.getItem(namePreference)!=='false';}catch{}
   const owner=()=>P.session().token;
   const valid=(own,auth)=>own===generation&&auth===owner()&&!!P.session().profile;
   const memoryKey=()=> 'zy-clip-position-v1:'+String(P.session().profile?.email||P.session().profile?.username||'');
   const current=()=>groups[courseIndex]?.items[imageIndex];
+  let galleryObserver=null,galleryEpoch=0,galleryActive=0,galleryQueue=[];
+  const galleryState=new WeakMap();
+  function resetGallery(){galleryEpoch++;galleryObserver?.disconnect();galleryObserver=null;galleryQueue=[];}
+  function loadVisibleImages(){
+    while(galleryActive<2&&galleryQueue.length){
+      const state=galleryQueue.shift();state.queued=false;
+      if(!state.visible||state.epoch!==galleryEpoch||!state.img.isConnected||!valid(state.generation,state.auth))continue;
+      state.loading=true;galleryActive++;
+      P.api('/v1/study/clip-image?id='+encodeURIComponent(state.item.id),{auth:state.auth}).then(data=>{
+        if(state.visible&&state.epoch===galleryEpoch&&state.img.isConnected&&valid(state.generation,state.auth)&&typeof data.image==='string'&&data.image.startsWith('data:image/png;base64,')){state.img.src=data.image;state.full=true;}
+      }).catch(()=>{}).finally(()=>{state.loading=false;galleryActive--;loadVisibleImages();});
+    }
+  }
+  function observeGallery(){
+    resetGallery();
+    galleryObserver=new IntersectionObserver(entries=>{
+      for(const entry of entries){const state=galleryState.get(entry.target);if(!state||state.epoch!==galleryEpoch)continue;state.visible=entry.isIntersecting;
+        if(!state.visible){state.img.src=state.item.thumbnail;state.full=false;}
+        else if(!state.full&&!state.loading&&!state.queued){state.queued=true;galleryQueue.push(state);}
+      }
+      loadVisibleImages();
+    },{rootMargin:'180px 0px'});
+  }
   function remember(){const item=current();if(!item)return;positions.course=item.courseKey;positions[item.courseKey]=item.id;try{sessionStorage.setItem(memoryKey(),JSON.stringify(positions));}catch{}}
-  function close(){imageGeneration++;reader.close();zoom.close();deletion.close();$('clip-full-image').removeAttribute('src');$('clip-zoom-image').removeAttribute('src');lastFocused?.focus();}
-  function showTab(value){tab=value;if(heading){if(tab==='clips')heading.replaceChildren(document.createTextNode('随意'),el('em','摘。'));else heading.innerHTML=originalHeading;}const signed=!!P.session().profile;$('study-text-tab').setAttribute('aria-current',String(tab==='text'));$('study-clips-tab').setAttribute('aria-current',String(tab==='clips'));$('study-workspace').hidden=!signed||tab!=='text';section.hidden=!signed||tab!=='clips';if(tab==='clips'&&signed&&!items.length&&!loading)load();}
+  function close(){imageGeneration++;reader.close();zoom.close();deletion.close();$('clip-full-image').removeAttribute('src');$('clip-zoom-image').removeAttribute('src');lastFocused?.focus();if(refreshPending)scheduleReturnRefresh();}
+  function showTab(value){tab=value;if(heading){if(tab==='clips')heading.replaceChildren(document.createTextNode('随意'),el('em','摘。'));else heading.innerHTML=originalHeading;}const signed=!!P.session().profile;$('study-text-tab').setAttribute('aria-current',String(tab==='text'));$('study-clips-tab').setAttribute('aria-current',String(tab==='clips'));$('study-workspace').hidden=!signed||tab!=='text';section.hidden=!signed||tab!=='clips';if(tab==='clips'&&signed&&!loading)load({keepVisible:items.length>0});}
   function filters(){const q=$('clips-search').value.trim().toLocaleLowerCase(),course=$('clips-course').value,date=$('clips-date').value;return items.filter(item=>(!q||(item.title+' '+item.course+' '+item.note).toLocaleLowerCase().includes(q))&&(!course||item.courseKey===course)&&(!date||new Date(item.created).toLocaleDateString('sv-SE',{timeZone:'Asia/Shanghai'})===date));}
   function render(){
-    const filtered=filters();$('clips-grid').replaceChildren();
-    for(const item of filtered){const card=el('button',undefined,'clip-card');card.type='button';const img=el('img');img.src=item.thumbnail;img.alt=item.title;img.loading='lazy';card.append(img,el('small',item.course||'网页摘录'),el('strong',item.title),el('span',item.note||'点开查看完整截图','clip-card-note'),el('small',P.date(item.created)+(item.position?' · '+item.position:'')));card.onclick=()=>open(item.id,card);$('clips-grid').append(card);}
+    const filtered=filters();observeGallery();$('clips-grid').replaceChildren();
+    const showName=$('clips-show-name').checked;
+    for(const item of filtered){
+      const card=el('button',undefined,'clip-card');card.type='button';card.dataset.clipId=item.id;card.setAttribute('aria-label','查看收藏：'+item.title+' · '+(item.course||'网页摘录'));
+      const img=el('img');img.src=item.thumbnail;img.alt=item.title;img.loading='lazy';img.decoding='async';
+      const caption=el('span',undefined,'clip-card-caption'),details=[item.course||'网页摘录',P.date(item.created),item.position,item.note?.replace(/\s+/g,' ')].filter(Boolean).join(' · ');
+      if(showName){const name=el('strong',item.title,'clip-card-title');name.title=item.title;caption.append(name);}
+      const meta=el('small',details,'clip-card-meta');meta.title=details;caption.append(meta);card.append(img,caption);card.onclick=()=>open(item.id,card);$('clips-grid').append(card);galleryState.set(img,{img,item,epoch:galleryEpoch,generation,auth:owner(),visible:false,loading:false,queued:false,full:false});galleryObserver.observe(img);
+    }
     if(!filtered.length){const empty=el('div',undefined,'clip-empty');empty.append(el('h3',items.length?'没有找到相关收藏':'还没有收藏的截图'),el('p',items.length?'试试其他关键词或清除日期筛选。':'回到插件，截图后点击「收藏」。不用先问 AI，手机登录同一账号即可回看。'));$('clips-grid').append(empty);}
     $('clips-status').textContent=(filtered.length?'已显示 '+filtered.length+' 张 · ':'')+'图片仅本人可见';
     groups=[];for(const item of filtered.slice().sort((a,b)=>a.created-b.created||a.id.localeCompare(b.id))){let group=groups.find(g=>g.key===item.courseKey);if(!group){group={key:item.courseKey,title:item.course||'网页摘录',items:[]};groups.push(group);}group.items.push(item);}
     $('clips-resume').disabled=!groups.some(g=>g.key===positions.course&&g.items.some(i=>i.id===positions[g.key]));
   }
-  async function load(){
-    if(!P.session().profile)return;const own=++generation,auth=owner();loading=true;$('clips-refresh').disabled=true;$('clips-status').textContent='正在读取收藏…';items=[];$('clips-grid').replaceChildren();
+  function revealRequestedClip(){
+    if(!pendingClip||tab!=='clips')return;
+    const item=items.find(i=>i.id===pendingClip);
+    if(!item){$('clips-status').textContent='当前账号未找到这张收藏。请确认插件与网页使用同一账号，或点击刷新重试。';return;}
+    pendingClip='';$('clips-search').value='';$('clips-date').value='';$('clips-course').value='';render();
+    open(item.id,Array.from($('clips-grid').children).find(card=>card.dataset.clipId===item.id)||$('clips-refresh'));
+  }
+  function scheduleReturnRefresh(){
+    if(tab!=='clips'||!P.session().profile||document.visibilityState==='hidden')return;
+    clearTimeout(returnTimer);
+    if(reader.open){refreshPending=true;return;}
+    returnTimer=setTimeout(()=>{returnTimer=null;if(tab!=='clips'||!P.session().profile||document.visibilityState==='hidden')return;if(reader.open||loading){refreshPending=true;return;}refreshPending=false;load({keepVisible:true});},150);
+  }
+  async function load({keepVisible=false}={}){
+    if(!P.session().profile||loading)return;const own=++generation,auth=owner();loading=true;refreshPending=false;$('clips-refresh').disabled=true;$('clips-status').textContent='正在读取收藏…';if(!keepVisible){resetGallery();items=[];$('clips-grid').replaceChildren();}
     try{let offset=0,all=[];while(true){const data=await P.api('/v1/study/clips?limit=50&offset='+offset,{auth});if(!valid(own,auth))return;if(!Array.isArray(data.items))throw Error('收藏列表返回异常，请重试。');all.push(...data.items);if(data.next_offset===null||data.next_offset===undefined)break;if(!Number.isSafeInteger(data.next_offset)||data.next_offset<=offset||all.length>=500)throw Error('收藏分页异常，请重试。');offset=data.next_offset;}
-      if(!valid(own,auth))return;items=all.slice(0,500);const old=$('clips-course').value;$('clips-course').replaceChildren(new Option('全部课程',''));const courses=new Map(items.map(i=>[i.courseKey,i.course||'网页摘录']));for(const [key,name] of courses)$('clips-course').append(new Option(name,key));if(courses.has(old))$('clips-course').value=old;render();
+      if(!valid(own,auth))return;if(reader.open){refreshPending=true;return;}items=all.slice(0,500);const old=$('clips-course').value,oldName=$('clips-course').selectedOptions[0]?.textContent;$('clips-course').replaceChildren(new Option('全部课程',''));const courses=new Map(items.map(i=>[i.courseKey,i.course||'网页摘录']));for(const [key,name] of courses)$('clips-course').append(new Option(name,key));if(old){if(!courses.has(old))$('clips-course').append(new Option(oldName||old,old));$('clips-course').value=old;}render();revealRequestedClip();
     }catch(error){if(error.name!=='AbortError'&&valid(own,auth))$('clips-status').textContent=error.message+' 可点击刷新重试。';}
-    finally{if(own===generation){loading=false;$('clips-refresh').disabled=false;}}
+    finally{if(own===generation){loading=false;$('clips-refresh').disabled=false;if(refreshPending&&!reader.open)scheduleReturnRefresh();}}
   }
   async function draw(){
     const item=current();if(!item){close();return;}remember();const own=++imageGeneration,auth=owner(),listGeneration=generation;
@@ -65,7 +111,9 @@
   $('clip-delete').onclick=()=>{$('clip-delete-status').textContent='';deletion.showModal();};$('clip-delete-cancel').onclick=()=>deletion.close();
   $('clip-delete-confirm').onclick=async()=>{if(deleteBusy||!current())return;deleteBusy=true;$('clip-delete-confirm').disabled=true;const id=current().id,auth=owner(),own=generation;try{await P.api('/v1/study/clips?id='+encodeURIComponent(id),{method:'DELETE',auth});if(!valid(own,auth))return;items=items.filter(i=>i.id!==id);close();render();}catch(error){if(error.name!=='AbortError'&&valid(own,auth))$('clip-delete-status').textContent=error.message;}finally{deleteBusy=false;$('clip-delete-confirm').disabled=false;}};
   $('study-text-tab').onclick=()=>{history.replaceState(null,'',location.pathname+location.search);showTab('text');};$('study-clips-tab').onclick=()=>{history.replaceState(null,'','#clips');showTab('clips');};window.addEventListener('hashchange',()=>showTab(location.hash==='#clips'?'clips':'text'));
-  for(const id of ['clips-search','clips-course','clips-date'])$(id).addEventListener(id==='clips-search'?'input':'change',()=>{close();render();});$('clips-refresh').onclick=()=>{close();load();};$('clips-resume').onclick=()=>{const group=groups.find(g=>g.key===positions.course),item=group?.items.find(i=>i.id===positions[group.key]);if(item)open(item.id,$('clips-resume'));};
-  function sessionChanged(){generation++;imageGeneration++;loading=false;close();lastFocused=null;items=[];groups=[];positions={};$('clips-resume').disabled=true;$('clips-grid').replaceChildren();$('clips-status').textContent='';$('clips-search').value='';$('clips-date').value='';$('clips-course').replaceChildren(new Option('全部课程',''));try{positions=JSON.parse(sessionStorage.getItem(memoryKey())||'{}')||{};}catch{}showTab(tab);}
+  for(const id of ['clips-search','clips-course','clips-date'])$(id).addEventListener(id==='clips-search'?'input':'change',()=>{close();render();});
+  $('clips-show-name').onchange=()=>{try{localStorage.setItem(namePreference,String($('clips-show-name').checked));}catch{}render();};$('clips-refresh').onclick=()=>{close();load();};$('clips-resume').onclick=()=>{const group=groups.find(g=>g.key===positions.course),item=group?.items.find(i=>i.id===positions[group.key]);if(item)open(item.id,$('clips-resume'));};
+  function sessionChanged(){generation++;imageGeneration++;resetGallery();loading=false;refreshPending=false;clearTimeout(returnTimer);pendingClip=requestedClip();close();lastFocused=null;items=[];groups=[];positions={};$('clips-resume').disabled=true;$('clips-grid').replaceChildren();$('clips-status').textContent='';$('clips-search').value='';$('clips-date').value='';$('clips-course').replaceChildren(new Option('全部课程',''));try{positions=JSON.parse(sessionStorage.getItem(memoryKey())||'{}')||{};}catch{}showTab(tab);}
+  window.addEventListener('focus',scheduleReturnRefresh);document.addEventListener('visibilitychange',scheduleReturnRefresh);window.addEventListener('pageshow',event=>{if(event.persisted)scheduleReturnRefresh();});
   window.addEventListener('portal-session-change',sessionChanged);P.ready.then(()=>showTab(tab));
 })();

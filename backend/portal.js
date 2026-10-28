@@ -63,6 +63,16 @@
     const old=token;clear();if(!old)return;
     try{await api('/v1/auth/logout',{method:'POST',auth:old,body:{}});}catch(error){if(error.name!=='AbortError'){const node=$('study-notice')||$('channel-notice');if(node){node.textContent='本机已退出；服务器会话撤销未成功，请稍后再试。';node.classList.add('error');}}}
   }));
-  const ready=(async()=>{if(token){const own=generation;try{const me=await api('/v1/me');if(own===generation)profile=me;}catch(error){if(error.name!=='AbortError'&&own===generation){sessionNotice=error.message;const node=$('study-notice')||$('channel-notice');if(node){node.textContent=error.message;node.classList.add('error');}}}}update();if(new URLSearchParams(location.search).get('login')==='1'&&!profile)openLogin();})();
+  async function waitForExtension(initialGeneration){
+    let state;try{state=JSON.parse(sessionStorage.getItem('gateway-extension-auth')||'null');}catch{}
+    if(state?.state==='pending'&&Date.now()-state.time<15000)await new Promise(resolve=>{
+      const done=()=>{clearTimeout(timer);window.removeEventListener('zy-portal-session-ready',done);resolve();};
+      const timer=setTimeout(done,10000);window.addEventListener('zy-portal-session-ready',done,{once:true});
+      try{if(JSON.parse(sessionStorage.getItem('gateway-extension-auth')||'null')?.state!=='pending')done();}catch{done();}
+    });
+    if(initialGeneration!==generation){save(token);return;}
+    try{token=sessionStorage.getItem(KEY)||'';const latest=JSON.parse(sessionStorage.getItem('gateway-extension-auth')||'null');if(latest?.notice&&!token){sessionNotice=latest.notice;const node=$('study-notice')||$('channel-notice');if(node){node.textContent=sessionNotice;node.classList.add('error');}}}catch{}
+  }
+  const ready=(async()=>{const initialGeneration=generation;await waitForExtension(initialGeneration);if(initialGeneration!==generation)return;if(token){const own=generation;try{const me=await api('/v1/me');if(own===generation)profile=me;}catch(error){if(error.name!=='AbortError'&&own===generation){sessionNotice=error.message;const node=$('study-notice')||$('channel-notice');if(node){node.textContent=error.message;node.classList.add('error');}}}}update();if(new URLSearchParams(location.search).get('login')==='1'&&!profile)openLogin();})();
   window.ZYPortal={api,session,ready,openLogin,clear,date:(value)=>new Date(value).toLocaleString('zh-CN',{timeZone:'Asia/Shanghai',hour12:false,year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'})};
 })();
