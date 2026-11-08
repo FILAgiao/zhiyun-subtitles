@@ -64,6 +64,37 @@ class Tests(unittest.TestCase):
         finally:
             server.shutdown();server.server_close();thread.join()
 
+    def test_public_privacy_supports_head_without_login(self):
+        from pathlib import Path
+        from socket import create_connection
+        server=make_server(self.gateway,port=0)
+        thread=threading.Thread(target=server.serve_forever,daemon=True);thread.start()
+        try:
+            base='http://127.0.0.1:'+str(server.server_port)
+            policy=Path(__file__).with_name('privacy.html').read_bytes()
+            for path in ('/privacy','/privacy.html','/privacy?source=edge','/privacy.html?source=edge'):
+                with self.subTest(path=path):
+                    with urllib.request.urlopen(base+path) as response:
+                        self.assertEqual(response.status,200)
+                        self.assertEqual(response.read(),policy)
+                        headers=response.headers
+                    request=urllib.request.Request(base+path,method='HEAD')
+                    with urllib.request.urlopen(request) as response:
+                        self.assertEqual(response.status,200)
+                        self.assertEqual(response.headers.get_content_type(),'text/html')
+                        for header in ('Content-Type','Content-Length','Content-Security-Policy'):
+                            self.assertEqual(response.headers[header],headers[header])
+                    with create_connection(('127.0.0.1',server.server_port),timeout=5) as connection:
+                        connection.sendall(f'HEAD {path} HTTP/1.0\r\n\r\n'.encode('ascii'))
+                        with connection.makefile('rb') as wire:
+                            self.assertEqual(wire.read().partition(b'\r\n\r\n')[2],b'')
+            with self.assertRaises(urllib.error.HTTPError) as caught:
+                urllib.request.urlopen(urllib.request.Request(base+'/v1/me',method='HEAD'))
+            with caught.exception as response:
+                self.assertEqual(response.code,501)
+        finally:
+            server.shutdown();server.server_close();thread.join()
+
     def test_learning_defaults_to_server_model(self):
         body={'input':[{'role':'user','content':'hello'}]}
         self.call('/v1/ark/responses',body)
@@ -209,8 +240,8 @@ class Tests(unittest.TestCase):
         self.gateway.add_user('owner@example.test','long-admin-password','zhiyun-subtitles',admin=True,username='owner')
         token=self.call('/v1/auth/login',{'email':'owner','password':'long-admin-password'},headers={'X-App-Id':'zhiyun-subtitles','X-Client-Type':'admin-web'})[2]['token']
         headers={**self.headers,'Authorization':'Bearer '+token}
-        created=self.call('/v1/admin/users',{'email':'new@example.test','username':'新同学','password':'long-new-password','plan':'pro','request_limit':1,'audio_limit':0,'is_admin':True},headers)[2]
-        new_token=self.call('/v1/auth/login',{'email':'新同学','password':'long-new-password'})[2]['token']
+        created=self.call('/v1/admin/users',{'email':'new@example.test','username':'新同学','password':'abc12345','plan':'pro','request_limit':1,'audio_limit':0,'is_admin':True},headers)[2]
+        new_token=self.call('/v1/auth/login',{'email':'新同学','password':'abc12345'})[2]['token']
         new_headers={**self.headers,'Authorization':'Bearer '+new_token}
         self.assertFalse(self.call('/v1/me',headers=new_headers,method='GET')[2]['is_admin'])
         self.call('/v1/ark/responses',self.body,new_headers)

@@ -37,7 +37,7 @@ class CompatibilityTests(unittest.TestCase):
         self.gateway.add_user('owner@example.test','long-admin-password','zhiyun-subtitles',admin=True)
         token=self.call('/v1/auth/login',{'email':'owner@example.test','password':'long-admin-password'})[2]['token']
         owner={**self.headers,'Authorization':'Bearer '+token}
-        base={'username':'old-admin-user','email':'old-admin-user@example.test','password':'long-admin-password','request_limit':20,'audio_limit':30,'learning':False,'translation':True,'speech':False}
+        base={'username':'old-admin-user','email':'old-admin-user@example.test','password':'Abc1234','request_limit':20,'audio_limit':30,'learning':False,'translation':True,'speech':False}
         user=self.call('/v1/admin/users',base,owner)[2]['user_id']
         p=self.gateway.permissions(user,'zhiyun-subtitles')
         self.assertFalse(p['learning']);self.assertTrue(p['translation']);self.assertFalse(p['speech'])

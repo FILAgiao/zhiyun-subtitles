@@ -1,6 +1,11 @@
 """Admin metadata and session activity; never persists prompts, images or tokens."""
 import re, sqlite3, time, json, secrets
 
+PASSWORD_REQUIREMENTS = '密码为 7–256 位，仅使用英文字母或数字'
+
+def valid_new_password(password):
+    return isinstance(password, str) and re.fullmatch(r'[A-Za-z0-9]{7,256}', password) is not None
+
 class Fault(Exception):
     def __init__(self,status,message,code='request_failed',retry_after=None):
         self.status,self.message,self.code,self.retry_after=status,message,code,retry_after
@@ -83,10 +88,9 @@ class AdminMixin:
             if not isinstance(app,str) or not re.fullmatch(r'[A-Za-z0-9_-]{1,64}',app) or type(requests) is not int or not 0<=requests<=1000000 or type(audio) is not int or not 0<=audio<=36000000: raise Fault(400,'APP 或额度参数无效')
             if path.endswith('/users'):
                 email=body.get('email','');password=body.get('password','');name=body.get('username','')
-                if not isinstance(email,str) or not 3<=len(email)<=254 or '@' not in email or any(ch.isspace() for ch in email) or not isinstance(password,str) or not 12<=len(password)<=256 or not isinstance(name,str) or not 1<=len(name.strip())<=40 or any(ord(ch)<32 for ch in name): raise Fault(400,'请填写用户名、邮箱和至少 12 字符的密码')
-                with self.db() as db:
-                    if db.execute('SELECT 1 FROM users WHERE email=? OR username=?',(email.strip().lower(),name.strip())).fetchone(): raise Fault(409,'邮箱或用户名已存在')
-                try: target=self.add_user(email,password,app,requests,audio,username=name.strip(),permissions=options)
+                if not isinstance(email,str) or not 3<=len(email)<=254 or '@' not in email or any(ch.isspace() for ch in email) or not isinstance(name,str) or not 1<=len(name.strip())<=40 or any(ord(ch)<32 for ch in name): raise Fault(400,'请填写有效的用户名和邮箱')
+                if not valid_new_password(password): raise Fault(400,PASSWORD_REQUIREMENTS,'invalid_password')
+                try: target=self.add_user(email,password,app,requests,audio,username=name.strip(),permissions=options,create_only=True)
                 except sqlite3.IntegrityError: raise Fault(409,'邮箱或用户名已存在') from None
                 action='create_user'
             else:
@@ -133,7 +137,7 @@ class AdminMixin:
         salt=hashed=None
         if action=='reset_password':
             password=body.get('password')
-            if not isinstance(password,str) or not 12<=len(password)<=256: raise Fault(400,'密码至少 12 字符')
+            if not valid_new_password(password): raise Fault(400,PASSWORD_REQUIREMENTS,'invalid_password')
             salt=secrets.token_hex(16);hashed=self.hash_password(password,salt)
         with self.db() as db:
             db.execute('BEGIN IMMEDIATE')

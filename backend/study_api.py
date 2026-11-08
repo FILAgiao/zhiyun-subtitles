@@ -15,10 +15,10 @@ from email.message import EmailMessage
 from urllib.parse import parse_qs, urlsplit, urlunsplit
 
 try:
-    from .admin_api import Fault
+    from .admin_api import Fault, PASSWORD_REQUIREMENTS, valid_new_password
     from .clips_api import ClipsMixin, migrate_clips
 except ImportError:
-    from admin_api import Fault
+    from admin_api import Fault, PASSWORD_REQUIREMENTS, valid_new_password
     from clips_api import ClipsMixin, migrate_clips
 
 STUDY_APP = 'zhiyun-subtitles'
@@ -216,8 +216,8 @@ class StudyMixin(ClipsMixin):
         username = body.get('username', '')
         if not isinstance(code, str) or not re.fullmatch(r'[0-9]{6}', code):
             raise Fault(400, '请填写六位邮箱验证码', 'invalid_code')
-        if not isinstance(password, str) or not 12 <= len(password) <= 256:
-            raise Fault(400, '密码需要 12–256 个字符', 'invalid_password')
+        if not valid_new_password(password):
+            raise Fault(400, PASSWORD_REQUIREMENTS, 'invalid_password')
         if not isinstance(username, str) or len(username.strip()) > 40 or any(ord(ch) < 32 for ch in username):
             raise Fault(400, '昵称最多 40 个字符', 'invalid_username')
         self.throttle('registration:verify:ip:' + _digest(ip), 20, 900)
@@ -254,7 +254,7 @@ class StudyMixin(ClipsMixin):
         return 200, {}, {'ok': True, 'next': 'login', 'message': '邮箱验证完成，请使用邮箱和密码登录。'}
 
     def study_private(self, method, path, headers, body, user, app):
-        clips = self.clips_private(method, path, body, user, app)
+        clips = self.clips_private(method, path, body, user, app, headers)
         if clips is not None:
             return clips
         parsed = urlsplit(path)

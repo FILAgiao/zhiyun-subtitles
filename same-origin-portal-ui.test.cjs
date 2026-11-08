@@ -4,10 +4,12 @@ const path=require('node:path');
 const http=require('node:http');
 const {chromium}=require('playwright');
 const root=__dirname,base=path.join(root,'backend');
+const previewDir=process.env.ZY_STUDY_PREVIEW_DIR||root;
+fs.mkdirSync(previewDir,{recursive:true});
 const serve=http.createServer((req,res)=>{
   const route=new URL(req.url,'http://localhost').pathname;
   const name=route==='/gateway/study'?'study.html':route==='/gateway/account'?'account.html':route.replace(/^\/gateway\//,'');
-  if(!/^(?:study\.(?:html|js|css)|account\.(?:html|js|css)|portal\.(?:js|css)|landing\/brand-logo\.png)$/.test(name)){res.writeHead(404);return res.end();}
+  if(!/^(?:study\.(?:html|js|css)|account\.(?:html|js|css)|(?:portal|clips)\.(?:js|css)|landing\/brand-logo\.png)$/.test(name)){res.writeHead(404);return res.end();}
   res.writeHead(200,{'Content-Type':name.endsWith('.js')?'text/javascript':name.endsWith('.css')?'text/css':name.endsWith('.png')?'image/png':'text/html;charset=utf-8'});res.end(fs.readFileSync(path.join(base,name)));
 });
 const hostile='<img src=x onerror="window.__xss=1"><script>window.__xss=2</script>';
@@ -53,7 +55,7 @@ const owners={a:[record('a1','自己的问题 A','程序设计',hostile),record(
     const login=async(user='user-a')=>{await page.locator('[data-login]:visible').first().click();await page.locator('#login-name').fill(user);await page.locator('#login-password').fill('fixture-password-not-real');await page.locator('#login-submit').click();};
     await page.goto(origin+'/gateway/study');await page.locator('#study-guest').waitFor({state:'visible'});await fits('desktop guest overflow');
     assert.equal(apiCalls.filter(c=>c.endpoint==='study/conversations').length,0,'guests must not fetch private records');
-    await page.screenshot({path:path.join(root,'same-origin-study-guest-preview.png')});
+    await page.screenshot({path:path.join(previewDir,'same-origin-study-guest-preview.png')});
     // Wrong credentials are separate from connection failures; duplicate submit never sends twice.
     loginMode='wrong';await login();await page.locator('#login-status').filter({hasText:'账号或密码不正确'}).waitFor();
     assert.equal(await page.locator('#login-dialog').isVisible(),true);assert.equal(await page.evaluate(()=>sessionStorage.getItem('gateway-web-session')),null);
@@ -64,24 +66,39 @@ const owners={a:[record('a1','自己的问题 A','程序设计',hostile),record(
     await page.clock.fastForward(15001);await page.locator('#login-status').filter({hasText:'连接超时（15 秒）'}).waitFor();
     assert.equal(apiCalls.filter(c=>c.endpoint==='auth/login').length,callsBefore);assert.equal(await page.locator('#login-submit').isEnabled(),true);
     await page.clock.resume();loginMode='ok';await page.locator('#login-submit').click();await page.locator('.conversation-item').first().waitFor();assert.equal(await page.locator('.conversation-item').count(),2);
-    await page.locator('.conversation-item button').filter({hasText:'自己的问题 A'}).click();await page.locator('#reader-title').filter({hasText:'自己的问题 A'}).waitFor();
+    slowDetail=true;
+    const firstQuestion=page.locator('.conversation-item button').filter({hasText:'自己的问题 A'});
+    await firstQuestion.click();
+    await page.locator('.reader-loading .study-skeleton').first().waitFor();
+    await page.locator('#reader-title').filter({hasText:'自己的问题 A'}).waitFor();
+    slowDetail=false;
+    await firstQuestion.click();
+    await page.locator('#reader-content').waitFor();
+    assert.equal(apiCalls.filter(c=>c.endpoint==='study/conversations'&&c.url==='?id=a1').length,1,'repeat reads should use the same session cache');
     assert.equal(await page.locator('#reader-messages script,#reader-messages img').count(),0);assert.equal(await page.evaluate(()=>window.__xss||0),0);assert.match(await page.locator('#reader-messages').textContent(),/<img/);
-    await page.locator('.conversation-item button').filter({hasText:'梯度复习'}).click();await page.locator('#reader-title').filter({hasText:'梯度复习'}).waitFor();await page.screenshot({path:path.join(root,'same-origin-study-desktop-preview.png')});
+    await page.locator('.conversation-item button').filter({hasText:'梯度复习'}).click();await page.locator('#reader-title').filter({hasText:'梯度复习'}).waitFor();await page.screenshot({path:path.join(previewDir,'same-origin-study-desktop-preview.png')});
     await page.locator('#study-course').selectOption('机器学习');assert.equal(await page.locator('.conversation-item').count(),1);
     await page.locator('#study-search').fill('不存在');await page.locator('#empty-title').filter({hasText:'没有找到'}).waitFor();
     await page.locator('#study-search').fill('');await page.locator('#study-course').selectOption('');
-    for(const width of [390,320]){await page.setViewportSize({width,height:844});await fits(width+' study overflow');if(await page.locator('#reader-back').isVisible())await page.locator('#reader-back').click();await page.locator('.conversation-item button').filter({hasText:'梯度复习'}).click();await page.locator('#reader-content').waitFor({state:'visible'});await fits(width+' reader overflow');if(width===390){await page.evaluate(()=>scrollTo(0,0));}if(width===390)await page.screenshot({path:path.join(root,'same-origin-study-mobile-preview.png')});await page.locator('#reader-back').click();}
+    for(const width of [390,320]){await page.setViewportSize({width,height:844});await fits(width+' study overflow');if(await page.locator('#reader-back').isVisible())await page.locator('#reader-back').click();await page.locator('.conversation-item button').filter({hasText:'梯度复习'}).click();await page.locator('#reader-content').waitFor({state:'visible'});await fits(width+' reader overflow');if(width===390){await page.evaluate(()=>scrollTo(0,0));}if(width===390)await page.screenshot({path:path.join(previewDir,'same-origin-study-mobile-preview.png')});await page.locator('#reader-back').click();}
     // A late response from account A cannot reappear after logout and account B login.
-    slowDetail=true;await page.locator('.conversation-item button').first().click();await page.locator('[data-logout]').click();await page.locator('#study-guest').waitFor({state:'visible'});await login('user-b');await page.locator('.conversation-item button').filter({hasText:'自己的问题 B'}).waitFor();await page.waitForTimeout(650);
+    owners.a[0].updated++;
+    await page.locator('#study-refresh').click();
+    await page.locator('#study-refresh:enabled').waitFor();
+    slowDetail=true;
+    const freshRead=page.waitForRequest(req=>req.url().endsWith('/study/conversations?id=a1'));
+    await page.locator('.conversation-item button').first().click();
+    await freshRead;
+    await page.locator('[data-logout]').click();await page.locator('#study-guest').waitFor({state:'visible'});await login('user-b');await page.locator('.conversation-item button').filter({hasText:'自己的问题 B'}).waitFor();await page.waitForTimeout(650);
     assert.doesNotMatch(await page.locator('#study-workspace').textContent(),/自己的问题 A|梯度复习/);slowDetail=false;
     await page.locator('.conversation-item button').click();await page.locator('#reader-content').waitFor({state:'visible'});await page.locator('#conversation-delete').click();await page.locator('#delete-cancel').click();assert.equal(owners.b.length,1);
     await page.locator('#conversation-delete').click();await page.locator('#delete-confirm').click();await page.locator('#empty-title').filter({hasText:'还没有保存'}).waitFor();assert.equal(owners.b.length,0);
     // Expired private sessions immediately remove the last user's content and local token.
-    privateExpired=true;await page.locator('#study-refresh').click();await page.locator('#study-guest').waitFor({state:'visible'});assert.equal(await page.evaluate(()=>sessionStorage.getItem('gateway-web-session')),null);assert.match(await page.locator('#study-notice').textContent(),/登录已过期/);privateExpired=false;
+    privateExpired=true;await page.locator('#study-refresh').click();await page.locator('#study-guest').waitFor({state:'visible'});assert.equal(await page.evaluate(()=>sessionStorage.getItem('gateway-web-session')),null);assert.match(await page.locator('#study-notice').textContent(),/登录已失效/);privateExpired=false;
     // Initial restore keeps a useful error; HTML 401 still clears the invalid session.
-    meMode='html401';await page.evaluate(()=>sessionStorage.setItem('gateway-web-session','fixture-a'));await page.goto(origin+'/gateway/study');await page.locator('#study-notice').filter({hasText:'登录已过期'}).waitFor();assert.equal(await page.evaluate(()=>sessionStorage.getItem('gateway-web-session')),null);
-    meMode='network';await page.evaluate(()=>sessionStorage.setItem('gateway-web-session','fixture-a'));await page.goto(origin+'/gateway/study');await page.locator('#study-notice').filter({hasText:'无法连接'}).waitFor();assert.equal(await page.locator('#study-guest').isVisible(),true);
-    meMode='ok';await page.evaluate(()=>sessionStorage.removeItem('gateway-web-session'));
+    meMode='html401';await page.evaluate(()=>{localStorage.removeItem('gateway-web-logged-out');sessionStorage.setItem('gateway-web-session','fixture-a');});await page.goto(origin+'/gateway/study');await page.locator('#study-notice').filter({hasText:'登录已失效'}).waitFor();assert.equal(await page.evaluate(()=>sessionStorage.getItem('gateway-web-session')),null);
+    meMode='network';await page.evaluate(()=>{localStorage.removeItem('gateway-web-logged-out');sessionStorage.setItem('gateway-web-session','fixture-a');});await page.goto(origin+'/gateway/study');await page.locator('#study-notice').filter({hasText:'无法连接'}).waitFor();assert.equal(await page.locator('#study-guest').isVisible(),true);
+    meMode='ok';await page.evaluate(()=>{localStorage.removeItem('gateway-web-session');sessionStorage.removeItem('gateway-web-session');});
     // Manual registration and recharge are closed by default, on unsafe URLs, broken images or API failure.
     for(const tab of ['register','recharge']){
       await page.goto(origin+'/gateway/account?tab='+tab);await page.locator('#channel-notice').filter({hasText:'正在核对'}).waitFor({state:'hidden'}).catch(()=>{});await page.locator('#channel-closed h3').filter({hasText:'暂未开放'}).waitFor();assert.equal(await page.locator('#channel-open').isVisible(),false);
@@ -90,10 +107,10 @@ const owners={a:[record('a1','自己的问题 A','程序设计',hostile),record(
     access={registration:{enabled:true,qr_url:'https://127.0.0.1/private.png',instructions:'不得显示'},recharge:{enabled:true,qr_url:'https://qr.example.org/broken.png',instructions:'不得显示'}};
     await page.goto(origin+'/gateway/account?tab=register');await page.waitForTimeout(80);assert.equal(await page.locator('#channel-qr').getAttribute('src'),null);assert.equal(await page.locator('#channel-open').isVisible(),false);
     await page.goto(origin+'/gateway/account?tab=recharge');await page.locator('#channel-notice').filter({hasText:'无法加载'}).waitFor();assert.equal(await page.locator('#channel-open').isVisible(),false);assert.doesNotMatch(await page.locator('#main').innerText(),/不得显示/);
-    await page.screenshot({path:path.join(root,'same-origin-account-mobile-preview.png')});
+    await page.screenshot({path:path.join(previewDir,'same-origin-account-mobile-preview.png')});
     access={registration:{enabled:true,qr_url:'https://qr.example.org/good.png',instructions:'测试办理说明',contact:'测试联系人'}};await page.goto(origin+'/gateway/account?tab=register');await page.locator('#channel-open').waitFor({state:'visible'});assert.match(await page.locator('#channel-instructions').textContent(),/测试办理说明/);assert.equal(await page.locator('#channel-closed').isVisible(),false);
     access={registration:{enabled:false},recharge:{enabled:false}};await page.goto(origin+'/gateway/account?tab=register');await page.locator('#channel-notice').filter({hasText:'正在核对'}).waitFor({state:'hidden'}).catch(()=>{});
-    await page.setViewportSize({width:1440,height:1050});await page.screenshot({path:path.join(root,'same-origin-account-desktop-preview.png')});
+    await page.setViewportSize({width:1440,height:1050});await page.screenshot({path:path.join(previewDir,'same-origin-account-desktop-preview.png')});
     assert.deepEqual(errors,[]);console.log('Same-origin portal passed: public closed channels, 320/390 layouts, credential/timeout distinction, duplicate submit, user isolation, safe text, search/read/delete and expired session cleanup.');
   }finally{await browser?.close();await new Promise(resolve=>serve.close(resolve));}
 })().catch(error=>{console.error(error);process.exitCode=1;});

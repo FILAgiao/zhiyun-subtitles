@@ -17,21 +17,34 @@ CREATE TABLE IF NOT EXISTS learning_job_receipts(id TEXT PRIMARY KEY,user INTEGE
 CREATE TABLE IF NOT EXISTS attempts(key TEXT PRIMARY KEY,start INTEGER,count INTEGER);
 '''
 try:
-    from .admin_api import AdminMixin, Fault, migrate
+    from .admin_api import AdminMixin, Fault, PASSWORD_REQUIREMENTS, migrate, valid_new_password
     from .prompt_api import PromptMixin, migrate_prompts
     from .study_api import StudyMixin, migrate_study
     from .operations_api import OperationsMixin, migrate_operations
+    from .analytics_api import AnalyticsMixin, migrate_analytics
     from .speech_stream import SpeechStreams
 except ImportError:
-    from admin_api import AdminMixin, Fault, migrate
+    from admin_api import AdminMixin, Fault, PASSWORD_REQUIREMENTS, migrate, valid_new_password
     from prompt_api import PromptMixin, migrate_prompts
     from study_api import StudyMixin, migrate_study
     from operations_api import OperationsMixin, migrate_operations
+    from analytics_api import AnalyticsMixin, migrate_analytics
     from speech_stream import SpeechStreams
 
 def month(): return time.strftime('%Y-%m',time.gmtime())
 def digest(value): return hashlib.sha256(value.encode()).hexdigest()
 def password_hash(password,salt): return hashlib.pbkdf2_hmac('sha256',password.encode(),bytes.fromhex(salt),600000).hex()
+def migrate_persistent_sessions(db):
+    # One-time upgrade: keep valid logins, never resurrect expired/revoked ones.
+    db.execute('CREATE TABLE IF NOT EXISTS session_migrations(name TEXT PRIMARY KEY)')
+    if db.execute("SELECT 1 FROM session_migrations WHERE name='persistent-v1'").fetchone(): return
+    now=int(time.time())
+    db.execute('DELETE FROM sessions WHERE expires<=? OR hash IN (SELECT w.hash FROM web_sessions w LEFT JOIN sessions p ON p.hash=w.parent WHERE p.hash IS NULL OR p.expires<=?)',(now,now))
+    db.execute('DELETE FROM web_sessions WHERE hash NOT IN (SELECT hash FROM sessions)')
+    db.execute('UPDATE sessions SET expires=NULL')
+    db.execute('UPDATE activity_sessions SET expires=NULL WHERE hash IN (SELECT hash FROM sessions) AND ended IS NULL')
+    db.execute("INSERT INTO session_migrations VALUES('persistent-v1')")
+
 class NoRedirect(urllib.request.HTTPRedirectHandler):
     def redirect_request(self,*args,**kwargs): return None
 
@@ -141,7 +154,7 @@ def official_stream(url,headers,body):
     except (urllib.error.HTTPError,urllib.error.URLError,TimeoutError,ValueError):
         raise Fault(502,'官方接口请求未完成，请稍后重试') from None
 
-class Gateway(AdminMixin, PromptMixin, StudyMixin, OperationsMixin):
+class Gateway(AdminMixin, PromptMixin, StudyMixin, OperationsMixin, AnalyticsMixin):
     hash_password=staticmethod(password_hash)
     def __init__(self,path,upstream=official,upstream_stream=official_stream):
         self.path,self.upstream,self.upstream_stream=str(path),upstream,upstream_stream
@@ -154,11 +167,13 @@ class Gateway(AdminMixin, PromptMixin, StudyMixin, OperationsMixin):
             migrate_prompts(db)
             migrate_study(db)
             migrate_operations(db)
+            migrate_analytics(db)
+            migrate_persistent_sessions(db)
         self.speech_streams=SpeechStreams(self)
     def capabilities(self):
         return {'web_search':os.environ.get('ALLOW_WEB_SEARCH')=='1',
                 'api_versions':[1],'learning_jobs':True,'speech_requires_login':True,
-                'prompt_catalog':True,'membership':True,'guest_speech':False,'graceful_shutdown':True,
+                'analytics':True,'prompt_catalog':True,'membership':True,'guest_speech':False,'graceful_shutdown':True,
                 'speech_stream':self.speech_streams.configured(),'speech_stream_pcm':True,
                 'study_clips':True,'study_clip_limits':self.clip_limits(),'study_sync':True,'email_registration':True,'mail_configured':self.study_capabilities()['mail_configured'],
                 'compatibility':{'baseline':'0.20.48','version_header_required':False}}
@@ -202,14 +217,18 @@ class Gateway(AdminMixin, PromptMixin, StudyMixin, OperationsMixin):
                                  ('activity_sessions','hash'),('activity_client_metadata','hash'),
                                  ('learning_job_receipts','id'),('speech_stream_receipts','id')):
                 db.execute('SELECT '+column+' FROM '+table+' LIMIT 1').fetchone()
-    def add_user(self,email,password,app,requests=1000,audio=3600,username=None,admin=False,permissions=None,plan=None):
-        if not 12<=len(password)<=256: raise ValueError('密码为 12–256 个字符')
+    def add_user(self,email,password,app,requests=1000,audio=3600,username=None,admin=False,permissions=None,plan=None,*,create_only=False):
+        if not 7<=len(password)<=256: raise ValueError('密码为 7–256 个字符')
+        email=email.strip().lower()
         salt=secrets.token_hex(16)
         with self.db() as db:
-            row=db.execute('SELECT id,username,is_admin FROM users WHERE email=?',(email.strip().lower(),)).fetchone()
-            user=row['id'] if row else db.execute('INSERT INTO users(email,salt,password) VALUES(?,?,?)',(email.strip().lower(),salt,password_hash(password,salt))).lastrowid
+            if create_only:
+                row=None
+            else:
+                row=db.execute('SELECT id,username,is_admin FROM users WHERE email=?',(email,)).fetchone()
+            user=row['id'] if row else db.execute('INSERT INTO users(email,salt,password) VALUES(?,?,?)',(email,salt,password_hash(password,salt))).lastrowid
             db.execute('INSERT INTO grants(user,app,requests,audio) VALUES(?,?,?,?) ON CONFLICT(user,app) DO UPDATE SET requests=excluded.requests,audio=excluded.audio',(user,app,requests,audio))
-            db.execute('UPDATE users SET username=?,is_admin=? WHERE id=?',(username or (row['username'] if row else email.strip().lower()),1 if admin else row['is_admin'] if row else 0,user))
+            db.execute('UPDATE users SET username=?,is_admin=? WHERE id=?',(username or (row['username'] if row else email),1 if admin else row['is_admin'] if row else 0,user))
             if permissions is not None:
                 db.execute('UPDATE grants SET enabled=?,learning=?,translation=?,speech=?,expires=?,plan=? WHERE user=? AND app=?',(*(permissions[k] for k in ('enabled','learning','translation','speech','expires')),permissions.get('plan','legacy'),user,app))
             elif plan is not None:
@@ -228,11 +247,11 @@ class Gateway(AdminMixin, PromptMixin, StudyMixin, OperationsMixin):
         if count>limit: raise Fault(429,'请求过于频繁，请稍后再试','rate_limit',max(1,window-(now-(row['start'] if recent else now))))
     def auth(self,token,app,headers=None,path=None):
         with self.db() as db:
-            row=db.execute('SELECT users.id,users.email,users.username,users.is_admin FROM sessions JOIN users ON users.id=sessions.user WHERE hash=? AND expires>?',(digest(token),int(time.time()))).fetchone()
+            row=db.execute('SELECT users.id,users.email,users.username,users.is_admin FROM sessions JOIN users ON users.id=sessions.user WHERE hash=? AND (expires IS NULL OR expires>?)',(digest(token),int(time.time()))).fetchone()
             if not row: raise Fault(401,'请登录或重新登录')
             web=db.execute('SELECT parent,app FROM web_sessions WHERE hash=?',(digest(token),)).fetchone()
             if web:
-                parent=db.execute('SELECT 1 FROM sessions WHERE hash=? AND user=? AND expires>?',(web['parent'],row['id'],int(time.time()))).fetchone()
+                parent=db.execute('SELECT 1 FROM sessions WHERE hash=? AND user=? AND (expires IS NULL OR expires>?)',(web['parent'],row['id'],int(time.time()))).fetchone()
                 if not parent or web['app']!=app: raise Fault(401,'请登录或重新登录')
                 if path not in ('/v1/me','/v1/auth/logout','/v1/study/conversations','/v1/study/clips','/v1/study/clip-image','/v1/study/capabilities'):
                     raise Fault(403,'网页会话仅用于查看和整理个人学习记录','web_session_scope')
@@ -262,8 +281,11 @@ class Gateway(AdminMixin, PromptMixin, StudyMixin, OperationsMixin):
     def state(self,call,state,usage=None):
         usage=usage or {}
         def number(v): return v if type(v) is int and v>=0 else 0
+        details=usage.get('input_tokens_details')
+        cached=details.get('cached_tokens') if isinstance(details,dict) else None
+        if type(cached) is not int or not 0<=cached<=number(usage.get('input_tokens')):cached=None
         with self.db() as db:
-            db.execute('UPDATE calls SET state=?,input_tokens=?,output_tokens=?,total_tokens=?,web_search=?,finished=? WHERE id=?',(state,number(usage.get('input_tokens')),number(usage.get('output_tokens')),number(usage.get('total_tokens')),number((usage.get('tool_usage') or {}).get('web_search')),int(time.time()),call))
+            db.execute('UPDATE calls SET state=?,input_tokens=?,output_tokens=?,total_tokens=?,web_search=?,finished=?,cached_input_tokens=? WHERE id=?',(state,number(usage.get('input_tokens')),number(usage.get('output_tokens')),number(usage.get('total_tokens')),number((usage.get('tool_usage') or {}).get('web_search')),int(time.time()),cached,call))
     def handle(self,method,path,headers,body,ip,stream_sink=None):
         # Gate only new paid work; login, account reads and task polling stay available.
         paid=method=='POST' and path in ('/v1/ark/responses','/v1/learning/jobs/create','/v1/speech/submit','/v1/speech/stream/create')
@@ -294,9 +316,9 @@ class Gateway(AdminMixin, PromptMixin, StudyMixin, OperationsMixin):
                 self.check_grant(db,row['id'],app)
                 token=secrets.token_urlsafe(32)
                 db.execute('DELETE FROM sessions WHERE expires<?',(int(time.time()),))
-                db.execute('INSERT INTO sessions VALUES(?,?,?)',(digest(token),row['id'],int(time.time())+604800))
-            self.open_activity(digest(token),row['id'],app,headers.get('X-Client-Type','api'),int(time.time())+604800,*self.client_metadata(headers))
-            return 200,{}, {'token':token,'expires_in':604800,'server_time':int(time.time()),'permissions':self.permissions(row['id'],app),'membership':self.membership(row['id'],app),'capabilities':self.capabilities()}
+                db.execute('INSERT INTO sessions VALUES(?,?,?)',(digest(token),row['id'],None))
+            self.open_activity(digest(token),row['id'],app,headers.get('X-Client-Type','api'),None,*self.client_metadata(headers))
+            return 200,{}, {'token':token,'expires_in':None,'persistent':True,'server_time':int(time.time()),'permissions':self.permissions(row['id'],app),'membership':self.membership(row['id'],app),'capabilities':self.capabilities()}
         token=headers.get('Authorization','').removeprefix('Bearer ')
         if not token and method=='POST' and (path in ('/v1/speech/submit','/v1/speech/query') or path.startswith('/v1/speech/stream/')):
             raise Fault(401,'语音识别现需登录并开通有效体验或套餐；请在设置的“我的账号”中登录。','authentication_required')
@@ -316,14 +338,14 @@ class Gateway(AdminMixin, PromptMixin, StudyMixin, OperationsMixin):
             now=int(time.time());web_token=secrets.token_urlsafe(32)
             with self.db() as db:
                 parent=db.execute('SELECT expires FROM sessions WHERE hash=?',(digest(token),)).fetchone()
-                if not parent or parent['expires']<=now: raise Fault(401,'请登录或重新登录')
-                expires=min(parent['expires'],now+86400)
+                if not parent or (parent['expires'] is not None and parent['expires']<=now): raise Fault(401,'请登录或重新登录')
+                expires=parent['expires']
                 db.execute('DELETE FROM sessions WHERE expires<=? OR hash IN (SELECT web_sessions.hash FROM web_sessions LEFT JOIN sessions parent ON parent.hash=web_sessions.parent WHERE parent.hash IS NULL OR parent.expires<=?)',(now,now))
                 db.execute('DELETE FROM web_sessions WHERE hash NOT IN (SELECT hash FROM sessions)')
                 db.execute('INSERT INTO sessions VALUES(?,?,?)',(digest(web_token),user['id'],expires))
                 db.execute('INSERT INTO web_sessions VALUES(?,?,?)',(digest(web_token),digest(token),app))
             self.open_activity(digest(web_token),user['id'],app,'study-web',expires,*self.client_metadata(headers))
-            return 200,{}, {'token':web_token,'expires_in':expires-now,'server_time':now}
+            return 200,{}, {'token':web_token,'expires_in':None if expires is None else expires-now,'persistent':expires is None,'server_time':now}
         if method=='POST' and path=='/v1/auth/logout':
             with self.db() as db:
                 db.execute('DELETE FROM sessions WHERE hash=? OR hash IN (SELECT hash FROM web_sessions WHERE parent=?)',(digest(token),digest(token)))
@@ -337,6 +359,8 @@ class Gateway(AdminMixin, PromptMixin, StudyMixin, OperationsMixin):
         if study_private is not None:return study_private
         if path in ('/v1/prompts','/v1/prompts/save','/v1/prompts/delete','/v1/admin/prompts','/v1/admin/prompts/save','/v1/admin/prompts/delete'):
             return self.prompt_request(method,path,user,app,body)
+        analytics=self.analytics_request(method,path,user,app,body)
+        if analytics is not None:return analytics
         operations=self.operations_request(method,path,user,body)
         if operations is not None:return operations
         if path.startswith('/v1/admin/'): return self.admin_request(method,path,user,body,month())
@@ -549,18 +573,21 @@ def make_server(gateway,host='127.0.0.1',port=8080,allowed_web_origins=()):
                 self.connection.settimeout(15)
                 if origin:
                     if not (os.environ.get('ALLOW_EXTENSION_ORIGINS')=='1' and re.fullmatch(r'chrome-extension://[a-p]{32}',origin)) and origin not in list(allowed_web_origins)+os.environ.get('ALLOWED_ORIGINS','').split(',')+[os.environ.get('PUBLIC_ORIGIN','')]: raise Fault(403,'来源未开通')
-                    extra={**extra,'Access-Control-Allow-Origin':origin,'Vary':'Origin','Access-Control-Expose-Headers':'X-Api-Status-Code, Retry-After, X-Request-Id'}
+                    extra={**extra,'Access-Control-Allow-Origin':origin,'Vary':'Origin','Access-Control-Expose-Headers':'X-Api-Status-Code, Retry-After, X-Request-Id, ETag'}
                 self.stream_headers=extra
-                if self.command=='OPTIONS': status,more,result=204,{'Access-Control-Allow-Methods':'GET,POST,DELETE,OPTIONS','Access-Control-Allow-Headers':'Authorization,Content-Type,X-App-Id,X-Api-Request-Id,X-Client-Type,X-Client-Version,X-Client-Channel'},None
+                if self.command=='OPTIONS': status,more,result=204,{'Access-Control-Allow-Methods':'GET,POST,DELETE,OPTIONS','Access-Control-Allow-Headers':'Authorization,Content-Type,X-App-Id,X-Api-Request-Id,X-Client-Type,X-Client-Version,X-Client-Channel,If-None-Match'},None
                 else:
                     public_file=public_page_file(self.path)
-                    if self.command=='GET' and (public_file is not None or self.path in ('/admin','/admin/','/admin.js','/admin.css','/install.user.js','/install.meta.js','/privacy','/privacy.html','/extension.zip','/download','/download/','/download.html','/download.css','/chrome.zip','/edge.zip')):
+                    if self.command=='HEAD' and public_file!='privacy.html':
+                        self.send_error(501,'Unsupported method (HEAD)')
+                        return
+                    if self.command in ('GET','HEAD') and (public_file is not None or self.path in ('/admin','/admin/','/admin.js','/admin.css','/install.user.js','/install.meta.js','/extension.zip','/download','/download/','/download.html','/download.css','/chrome.zip','/edge.zip')):
                         if self.path=='/admin/':
                             status,more,result=302,{'Location':'../admin'},None
                         else:
-                            name=public_file or ('admin.html' if self.path=='/admin' else 'privacy.html' if self.path=='/privacy' else 'download.html' if self.path in ('/download','/download/') else 'extension.zip' if self.path in ('/chrome.zip','/edge.zip') else self.path[1:])
+                            name=public_file or ('admin.html' if self.path=='/admin' else 'download.html' if self.path in ('/download','/download/') else 'extension.zip' if self.path in ('/chrome.zip','/edge.zip') else self.path[1:])
                             mime='image/webp' if name.endswith('.webp') else 'image/png' if name.endswith('.png') else 'text/html; charset=utf-8' if name.endswith('.html') else 'text/javascript; charset=utf-8' if name.endswith('.js') else 'application/zip' if name.endswith('.zip') else 'text/css; charset=utf-8'
-                            image_sources="'self' data: https:" if name=='account.html' else "'self' data:"
+                            image_sources="'self' data: https:" if name=='account.html' else "'self' data: blob:" if name=='study.html' else "'self' data:"
                             result=(Path(__file__).parent/name).read_bytes();status,more=200,{'Content-Type':mime,'Content-Security-Policy':"default-src 'self'; script-src 'self'; style-src 'self'; connect-src 'self'; img-src "+image_sources+"; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",'X-Frame-Options':'DENY'}
                             if self.path in ('/chrome.zip','/edge.zip'):
                                 more['Content-Disposition']='attachment; filename="zhiyun-subtitles-'+self.path[1:-4]+'.zip"'
@@ -605,9 +632,10 @@ def make_server(gateway,host='127.0.0.1',port=8080,allowed_web_origins=()):
         def respond(self,status,more,result,extra):
             raw=result if isinstance(result,bytes) else json.dumps(result,ensure_ascii=False).encode() if result is not None else b''
             self.send_response(status)
-            for k,v in {'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store','X-Content-Type-Options':'nosniff',**extra,**more,'Content-Length':str(len(raw))}.items(): self.send_header(k,v)
-            self.end_headers(); self.wfile.write(raw)
-        do_GET=do_POST=do_DELETE=do_OPTIONS=dispatch
+            for k,v in {'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store','X-Content-Type-Options':'nosniff',**extra,**more,**({'Content-Length':str(len(raw))} if status!=304 else {})}.items(): self.send_header(k,v)
+            self.end_headers()
+            if self.command!='HEAD': self.wfile.write(raw)
+        do_GET=do_HEAD=do_POST=do_DELETE=do_OPTIONS=dispatch
     class BoundedServer(ThreadingHTTPServer):
         daemon_threads=True
         def __init__(self,*args):
@@ -647,7 +675,12 @@ if __name__=='__main__':
     args=parser.parse_args(); gateway=Gateway(args.db)
     if args.command=='add-user':
         if not args.email or args.requests<0 or args.audio_seconds<0: parser.error('需要邮箱及非负额度')
-        gateway.add_user(args.email,getpass.getpass('Password (12+ chars): '),args.app,args.requests,args.audio_seconds,username=args.username,admin=args.admin,plan=args.plan)
+        password=getpass.getpass('管理员密码（12–256 字符）: ' if args.admin else PASSWORD_REQUIREMENTS+': ')
+        if args.admin:
+            if not 12<=len(password)<=256: parser.error('管理员密码为 12–256 个字符')
+        elif not valid_new_password(password):
+            parser.error(PASSWORD_REQUIREMENTS)
+        gateway.add_user(args.email,password,args.app,args.requests,args.audio_seconds,username=args.username,admin=args.admin,plan=args.plan)
         print('账号及 APP 额度已配置；已有账号密码保持不变。')
     else:
         print('Listening on loopback; expose through HTTPS reverse proxy.')

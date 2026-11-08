@@ -34,7 +34,7 @@ const BASE='https://47.77.182.216.sslip.io',WEB='isolated-website-session',EXT='
    assert.equal(await page.locator('#login-dialog').evaluate(dialog=>dialog.open),false);
    const entries=await page.evaluate(()=>Object.entries(sessionStorage));assert.ok(!JSON.stringify(entries).includes(EXT),'extension credential must remain outside the page world');assert.equal(await page.evaluate(()=>sessionStorage.getItem('gateway-web-session')),WEB);
   }
-  assert.equal(await worker.evaluate(()=>handoffs.length),2);assert.equal(calls.filter(call=>call.url.endsWith('/auth/login')).length,0);assert.deepEqual(errors,[]);
+  assert.equal(await worker.evaluate(()=>handoffs.length),1);assert.equal(calls.filter(call=>call.url.endsWith('/auth/login')).length,0);assert.deepEqual(errors,[]);
   await page.locator('[data-logout]').first().click();await page.waitForFunction(()=>!window.ZYPortal.session().profile);
   assert.equal(await worker.evaluate(()=>chrome.storage.local.get('gateway-account-v1').then(saved=>saved['gateway-account-v1'].token)),EXT);
   console.log('Native MV3 portal handoff passed: isolated document_start bridge, delayed background request, both official pages, scoped page session and independent logout.');

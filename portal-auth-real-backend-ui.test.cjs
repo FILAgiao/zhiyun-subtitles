@@ -29,8 +29,8 @@ with tempfile.TemporaryDirectory() as folder:
   assert.equal(await page.locator('#clip-reader-title').textContent(),'原生扩展收藏直达');
   await page.locator('#clip-close').click();await page.locator('[data-logout]').first().click();await page.waitForFunction(()=>!window.ZYPortal.session().profile);
   const me=await fetch(base+'/gateway/v1/me',{headers:{'X-App-Id':'zhiyun-subtitles',Authorization:'Bearer '+setup.token}});assert.equal(me.status,200,'website logout retains extension session');
-  await page.goto(gateway+'/account?tab=recharge&login=1');await page.waitForFunction(()=>window.ZYPortal?.session().profile);assert.equal(await page.locator('#login-dialog').evaluate(d=>d.open),false);
-  assert.equal((await worker.evaluate(()=>bridgeCalls.filter(url=>url.endsWith('/v1/auth/web-session')).length)),2);
+  await page.goto(gateway+'/account?tab=recharge&login=1');await page.waitForFunction(()=>window.ZYPortal);await page.evaluate(()=>ZYPortal.ready);assert.equal(await page.evaluate(()=>!!ZYPortal.session().profile),false,'explicit website logout must survive navigation');assert.equal(await page.locator('#login-dialog').evaluate(d=>d.open),true);
+  assert.equal((await worker.evaluate(()=>bridgeCalls.filter(url=>url.endsWith('/v1/auth/web-session')).length)),1);
   const out=await fetch(base+'/gateway/v1/auth/logout',{method:'POST',headers:{'Content-Type':'application/json','X-App-Id':'zhiyun-subtitles',Authorization:'Bearer '+setup.token},body:'{}'});assert.equal(out.status,200);
   await page.goto(gateway+'/study#clips');await page.waitForFunction(()=>window.ZYPortal);await page.evaluate(()=>ZYPortal.ready);assert.equal(await page.evaluate(()=>!!ZYPortal.session().profile),false,'revoked parent cannot silently log in');
   assert.deepEqual(routeErrors,[]);assert.deepEqual(errors,[]);closing=true;console.log('PASS: real Edge MV3 + actual Python scoped sessions + query/hash saved-image deep link; automatic login, account page, independent logout and expired-parent fallback. No production account/model calls.');

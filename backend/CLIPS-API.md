@@ -6,7 +6,8 @@
 | --- | --- |
 | POST /v1/study/clips | 主动新建/覆盖稳定 id 的截图收藏，返回 ok/id；不会调用模型 |
 | GET /v1/study/clips?limit=50&offset=0 | 当前用户缩略图与元数据，next_offset、usedBytes、maxBytes，不读取原图字段 |
-| GET /v1/study/clip-image?id=ID | 鉴权读取单张 PNG data URL；无公开图片 URL |
+| GET /v1/study/clip-image?id=ID | 兼容旧客户端，鉴权读取单张 PNG data URL；无公开图片 URL |
+| GET /v1/study/clip-image?id=ID&format=png | 鉴权读取 PNG 二进制，Content-Type: image/png；支持私有 ETag 重验证 |
 | DELETE /v1/study/clips?id=ID | 只删除当前用户记录及图片、缩略图；不改本机历史 |
 
 POST 字段：id（1–100 位字母数字/下划线/短横线）、title（200）、course（200）、courseKey（200）、origin（2000）、note（4000）、position（100）、image、thumbnail。课程身份由客户端课程标识摘要分组（安全上下文用 SHA256，普通 HTTP 用本地确定性摘要），不把该标识用于账号鉴权。origin 仅 HTTP(S)，删除查询、片段及带用户名密码的地址。
@@ -24,3 +25,9 @@ migrate_study 自动调用 migrate_clips，新表 study_clips 存储元数据与
 部署必须同批包含 clips_api.py、study_api.py、server.py、public_page.py、study.html、clips.js、clips.css，以及完整新扩展。deploy_release.py 已补充编译检查、备份与公网文件校验；不要只发布前端。当前尚未部署，旧服务器会返回未开放提示，可先下载截图。
 
 规格协商：`/v1/me` 的 `capabilities.study_clip_limits` 返回 `max_edge`、`max_image`（字节）、`max_thumbnail_edge`、`max_thumbnail`。客户端只使用当前已验证账号/服务的能力；字段缺失的旧后端回退最长边1600、原图1,500,000字节，不能只根据本机版本发送3840图片。
+
+### 2026-11-07 图片传输优化（本地实现，未部署）
+
+网页阅读器优先使用 `format=png` 返回原始 PNG 字节，省去 Base64 约 33% 的编码膨胀与 JSON 解析副本；原图片像素不变，默认 JSON 接口继续供旧插件使用。响应带 `Cache-Control: private, no-cache`、账号归属相关的 `ETag` 与 `Vary: Authorization, X-App-Id, Origin`。客户端可使用浏览器 `fetch` 默认缓存或 `cache: no-cache` 重验证；匹配 `If-None-Match` 返回无响应体的 304。鉴权、账号归属及图片是否仍存在的检查始终在缓存验证前执行，退出、删除或停用后不能凭旧 ETag 越过授权。公开缓存不得复用这些私有图片。
+
+同源学习页 CSP 仅为 `/study` 允许 `blob:` 图片，以显示带鉴权请求得到的对象 URL。此变更不增加公开图片链接、图片 URL 中的令牌或第三方图片服务。二进制接口测试包含原始字节一致、响应体大小减少、ETag 命中/修改/删除、跨账号隔离与真实 HTTP 未登录拒绝。

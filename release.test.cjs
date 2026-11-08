@@ -15,6 +15,7 @@ assert.ok(!/^\/\/ @require\s/m.test(metadata),'Release must include its modules 
 for(const file of ['warm-theme.js','appearance-theme.js','progressive-cache.bundle.js','cache-storage.js','study-ui.js','classroom-media.js','speech-phonetics.bundle.js','speech-alignment.js','speech-stream.js','player-interactions.js','math-render.bundle.js','card-render.bundle.js','capture-bridge-client.js','ai-learning.js','translation-request.js'])assert.ok(source.includes(fs.readFileSync(file,'utf8')),file+' needs rebuilding');
 assert.equal(source.split('// BEGIN BUNDLED LEARNING MODULES').length,2);
 assert.equal(source.split('// END BUNDLED LEARNING MODULES').length,2);
+assert.ok(source.includes(fs.readFileSync('usage-analytics.js','utf8')),'Usage collector needs rebuilding');
 console.log('PASS: release name, version, update/download URLs, metadata and bundled modules agree.');
 
 const gatewayLiteral=source.match(/const DEFAULT_ORIGIN=([^;]+);/)?.[1];assert.ok(gatewayLiteral,'Gateway adapter must be bundled');const gatewayModule=fs.readFileSync('gateway-client.js','utf8').replace("const DEFAULT_ORIGIN='';",'const DEFAULT_ORIGIN='+gatewayLiteral+';');assert.ok(source.includes(gatewayModule),'Gateway adapter needs rebuilding');

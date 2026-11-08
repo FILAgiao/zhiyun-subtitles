@@ -5,7 +5,8 @@ const GATEWAY='https://47.77.182.216.sslip.io/gateway';
 function allowedRequest(o,runtime=globalThis.chrome?.runtime){
  const u=new URL(o.url),method=(o.method||'GET').toUpperCase();
  if(u.protocol!=='https:'||u.username||u.password||u.hash)throw Error('Request denied');
- const gateway=u.origin===new URL(GATEWAY).origin&&/^\/gateway\/v1\/(?:auth\/(?:login|logout)|me|activity|history|study\/(?:conversations|capabilities|clips)|prompts(?:\/(?:save|delete))?|ark\/responses|speech\/(?:submit|query|stream\/(?:create|push|poll|finish|cancel))|learning\/jobs\/(?:create|poll|cancel))$/.test(u.pathname)&&!u.search;
+ const gateway=u.origin===new URL(GATEWAY).origin&&/^\/gateway\/v1\/(?:auth\/(?:login|logout)|me|activity|analytics\/events|history|study\/(?:conversations|capabilities|clips)|prompts(?:\/(?:save|delete))?|ark\/responses|speech\/(?:submit|query|stream\/(?:create|push|poll|finish|cancel))|learning\/jobs\/(?:create|poll|cancel))$/.test(u.pathname)&&!u.search;
+ if(u.pathname==='/gateway/v1/analytics/events'&&(method!=='POST'||typeof o.data!=='string'||o.data.length>65536))throw Error('Analytics request denied');
  const school=(u.hostname==='cmc.zju.edu.cn'||u.hostname.endsWith('.cmc.zju.edu.cn'))&&method==='GET';
  if(!gateway&&!school||!['GET','POST'].includes(method)||school&&o.data)throw Error('Request denied');
  if(o.data!==undefined&&(typeof o.data!=='string'||o.data.length>7000000))throw Error('Request too large');
@@ -63,10 +64,21 @@ async function captureSenderTab(api,sender){
 }
 if(typeof chrome!=='undefined'){
  chrome.runtime.onMessage.addListener((message,sender,respond)=>{
+  if(message?.type==='zy-analytics-queue'){
+   const tab=sender.tab?.id,storage=chrome.storage?.session;
+   if(!storage||sender.id!==chrome.runtime.id||sender.frameId!==0||!Number.isInteger(tab)||!/^https?:\/\//.test(sender.url||''))return;
+   const key='zy-analytics-queue:'+tab,origin=new URL(sender.url).origin;
+   if(message.action==='load')storage.get(key).then(data=>respond({value:data[key]?.origin===origin?data[key].value:null}),()=>respond(null));
+   else if(message.action==='save'&&typeof message.value==='string'&&message.value.length<250000)storage.set({[key]:{origin,value:message.value}}).then(()=>respond(null),()=>respond(null));
+   else if(message.action==='clear')storage.remove(key).then(()=>respond(null),()=>respond(null));
+   else return;
+   return true;
+  }
   if(message?.type==='zy-portal-session'){createPortalSession(chrome,sender).then(respond,()=>respond({ok:false,error:'插件登录衔接暂不可用，请刷新重试。'}));return true;}
   if(message?.type!=='zy-capture-visible')return;
   captureSenderTab(chrome,sender).then(data=>respond({ok:true,data}),error=>respond({ok:false,error:error.message||'浏览器原生截图暂不可用。'}));return true;
  });
+ chrome.tabs?.onRemoved?.addListener(tab=>{void chrome.storage?.session?.remove('zy-analytics-queue:'+tab).catch(()=>{});});
  chrome.runtime.onConnect.addListener(port=>{
   if(port.name!=='zy-request'||port.sender?.id!==chrome.runtime.id||!/^https?:\/\//.test(port.sender?.url||'')){port.disconnect();return;}
   const controller=new AbortController();let started=false,timer,timedOut=false;

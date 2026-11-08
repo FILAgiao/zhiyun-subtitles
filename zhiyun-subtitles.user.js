@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         浙大上课爽
 // @namespace    zhiyunzimu.local
-// @version      0.20.90
+// @version      0.20.91
 // @description  网课不硬扛，浙大上课爽！智云课堂同步字幕、PPT 讲解与本机缓存。
 // @match        https://*/*
 // @match        http://*/*
@@ -1678,7 +1678,7 @@ if(typeof module==='object'&&module.exports)module.exports={create};else root.ZY
   async function renderKnowledgeCards(doc,options){return [await renderKnowledgeCard(doc,options)];}
 
   function mountLearningAssistant(options) {
-    const {shadow,request,promptStore=null,studyStore=null,collapsedEntry=true,getApiKey=()=>'',canUse=()=>!!String(getApiKey()||'').trim(),getCapabilities=()=>({webSearch:true}),getAccountSummary=()=>null,getCourseId=()=>'',onOpenAccount=()=>onOpenSettings('connection'),prepareSlide=()=>{},getSlide=()=>null,getContext=()=>'',getCourseTitle=()=>'',getCaptureTarget=()=>null,getValue=(_,d)=>d,setValue=()=>{},onRequireLogin=()=>{},onOpenSettings=()=>{}}=options;
+    const {shadow,request,analytics=null,promptStore=null,studyStore=null,collapsedEntry=true,getApiKey=()=>'',canUse=()=>!!String(getApiKey()||'').trim(),getCapabilities=()=>({webSearch:true}),getAccountSummary=()=>null,getCourseId=()=>'',onOpenAccount=()=>onOpenSettings('connection'),prepareSlide=()=>{},getSlide=()=>null,getContext=()=>'',getCourseTitle=()=>'',getCaptureTarget=()=>null,getValue=(_,d)=>d,setValue=()=>{},onRequireLogin=()=>{},onOpenSettings=()=>{}}=options;
     if(!shadow || typeof request!=='function')throw new Error('AI 助手缺少 shadow 或 request');
     const doc=shadow.ownerDocument,win=doc.defaultView;
     function ensureAccess(feature='learning'){if(canUse(feature))return true;onRequireLogin(feature);return false;}
@@ -1982,7 +1982,7 @@ if(typeof module==='object'&&module.exports)module.exports={create};else root.ZY
       return blobToData(await imageBlob(slide.url,signal),signal);
     }
     async function send(question,{slide=null,image=null,fresh=false,source='文字提问'}={}) {
-      const before=requestSerial;
+      const before=requestSerial,analyticsOwner=analytics?.capture(),analyticsOperation=win.crypto?.randomUUID?.()||String(Date.now())+'-'+requestSerial;
       if(!ensureAccess()||sendPreparing||controller||destroyed)return;
       refreshSavedSettings();
       if(promptStore){
@@ -2017,7 +2017,7 @@ if(typeof module==='object'&&module.exports)module.exports={create};else root.ZY
         if(summarize){const parsed=splitLearningReply(answer,{final:true});answer=parsed.text;if(!answer.trim())throw Error('模型没有返回回答正文，请重试。');if(parsed.title)conversationTitle=parsed.title;}
         if(/^联网搜索未开通，本次按普通对话回答。/.test(answer)){answer=answer.replace(/^联网搜索未开通，本次按普通对话回答。\s*/,'');}
         lastAnswer={text:answer,mode:modeFor(chosenSettings,chosenSettings.mode).label,course:conversationCourse||String(getCourseTitle()||getContext()||'我的课堂知识卡').split('\n')[0].slice(0,100),image:currentImage||images.at(-1)||history.find(t=>t.image)?.image||null,question:question};$('ai-card-row').hidden=false;
-        if(replyTurn)replyTurn.text=answer;else history.push({role:'assistant',text:answer});if(reply)reply._cardTurn=replyTurn;if(reply){clearTimeout(renderTimer);renderTimer=null;renderMarkdown(doc,reply.querySelector('.ai-stream-text'),answer);followLatest();}else reply=message('assistant',answer);status(warning||'可以继续追问，或换一种讲法。');persist();
+        if(replyTurn)replyTurn.text=answer;else history.push({role:'assistant',text:answer});if(reply)reply._cardTurn=replyTurn;if(reply){clearTimeout(renderTimer);renderTimer=null;renderMarkdown(doc,reply.querySelector('.ai-stream-text'),answer);followLatest();}else reply=message('assistant',answer);status(warning||'可以继续追问，或换一种讲法。');persist();if(analyticsOwner)analytics?.feature('ai',analyticsOperation,analyticsOwner);
       }catch(e){if(!destroyed && serial===requestSerial){persist();status(e.name==='AbortError'?'已停止。':e.message||'讲解暂时失败，请重试。');if(e.name!=='AbortError'){if(!$('ai-question').value)$('ai-question').value=question;if(currentImage)attach(currentImage);}}}
       finally{clearInterval(feedbackTimer);clearTimeout(renderTimer);if(flushPendingReply===flushRender)flushPendingReply=null;if(controller===ownController){controller=null;setBusy(false);}}
     }
@@ -2140,14 +2140,15 @@ if(typeof module==='object'&&module.exports)module.exports={create};else root.ZY
         if(own.signal.aborted||serial!==requestSerial||destroyed)return;
         setBusy(true);captureNotice.querySelector('span').textContent='正在截取当前页面…';captureNotice.hidden=false;
         captureNotice.querySelector('button').textContent='取消截图';
+        const analyticsOwner=analytics?.capture(),analyticsOperation=win.crypto?.randomUUID?.()||String(Date.now())+'-'+serial;
         const snapshot=await captureSnapshot(own.signal,gesture,direct?slide:null);
         const src=snapshot.src;
         if(serial!==requestSerial||destroyed)return;
         if(direct){
           const attachment=await imageData(src,null,own.signal);if(serial!==requestSerial||destroyed)return;
           if(panel.hidden)clear();
-          conversationSource='截图提问';attach(attachment);open();status('当前页面截图已添加，可补充问题后发送。');
-        }else showCrop(src,gesture,wholePage&&!gesture?.slideOnly,snapshot.viewport);
+          conversationSource='截图提问';attach(attachment);open();status('当前页面截图已添加，可补充问题后发送。');if(analyticsOwner)analytics?.feature('screenshot',analyticsOperation,analyticsOwner);
+        }else showCrop(src,gesture,wholePage&&!gesture?.slideOnly,snapshot.viewport,analyticsOwner,analyticsOperation);
        }catch(e){own.abort();if(serial===requestSerial&&e.name!=='AbortError'){
         open();status(e.message||'截图失败，请重试。');
         if(e.code==='NATIVE_CAPTURE_FAILED'||e.code==='CAPTURE_SELECTION_TOO_SMALL'){
@@ -2157,7 +2158,7 @@ if(typeof module==='object'&&module.exports)module.exports={create};else root.ZY
       }}
       finally{doc.removeEventListener('keydown',cancelKey,true);if(controller===own){capturePending=false;controller=null;setBusy(false);}if(!capturePending)captureNotice.hidden=true;}
     }
-    function showCrop(src,gesture=null,centered=false,sourceViewport=null){
+    function showCrop(src,gesture=null,centered=false,sourceViewport=null,analyticsOwner='',analyticsOperation=''){
       const serial=requestSerial,viewport=sourceViewport||captureViewport();
       if(gesture){const from=gesture.viewport||viewport,convert=p=>({x:Math.max(0,Math.min(viewport.w,p.x*viewport.w/from.w)),y:Math.max(0,Math.min(viewport.h,p.y*viewport.h/from.h))});gesture={...gesture,start:convert(gesture.start),end:convert(gesture.end)};}
       const layer=make('section',{id:'ai-crop',role:'dialog','aria-label':'截图与批注'});
@@ -2207,7 +2208,7 @@ if(typeof module==='object'&&module.exports)module.exports={create};else root.ZY
         img.style.setProperty('display','none','important');stage.style.pointerEvents='none';
         for(const [key,value] of Object.entries({background:centered?'#071519b3':'transparent',border:'0',borderRadius:'0',boxShadow:'none',backdropFilter:'none',pointerEvents:'none'}))layer.style.setProperty(key.replace(/[A-Z]/g,c=>'-'+c.toLowerCase()),value,'important');
         layer.querySelector('strong').textContent='随意摘 · 截图预览';layer.querySelector('#ai-crop-tools').hidden=true;draw.disabled=favorite.disabled=submit.disabled=false;use.disabled=!destination.querySelector('option[value="current"]')&&destination.options.length<2;layer.querySelector('#ai-clip-details').hidden=false;
-        layoutPreview();redraw();
+        layoutPreview();redraw();if(analyticsOwner)analytics?.feature('screenshot',analyticsOperation,analyticsOwner);
         const canvasPoint=e=>{const r=canvas.getBoundingClientRect();return{x:(e.clientX-r.left)*canvas.width/r.width,y:(e.clientY-r.top)*canvas.height/r.height};};
         canvas.onpointerdown=e=>{if(e.button!==0||clipBusy||layer.querySelector('#ai-crop-tools').hidden)return;e.preventDefault();active={tool,points:[canvasPoint(e)]};canvas.setPointerCapture(e.pointerId);redraw();};
         canvas.onpointermove=e=>{if(active){active.points.push(canvasPoint(e));redraw();}};
@@ -2516,11 +2517,122 @@ function create(send,parseResult,{now=Date.now,setTimer=setTimeout,clearTimer=cl
 return{failure,create};
 });
 
+/* Bounded, best-effort usage telemetry. No content, images, URLs or credentials. */
+(function(root,factory){const api=factory();if(typeof module==='object'&&module.exports)module.exports=api;else root.ZYUsageAnalytics=api;})(globalThis,function(){
+'use strict';
+const MAX_EVENTS=400,MAX_BATCH=100,MAX_AGE=7*86400,KEY='zy-usage-pending-v1';
+function opaque(value){return [2166136261,2246822507,3266489909,668265263].map(seed=>{for(const c of String(value))seed=Math.imul(seed^c.codePointAt(0),16777619);return (seed>>>0).toString(16).padStart(8,'0');}).join('');}
+function courseKey(raw){try{const ids=JSON.parse(raw);return Array.isArray(ids)&&ids.length===3&&ids[0]&&ids[1]&&ids.every(v=>v===null||typeof v==='string'&&/^[A-Za-z0-9_-]{1,100}$/.test(v))?opaque('zju-classroom:'+JSON.stringify(ids)):'';}catch{return '';}}
+function create({context=()=>null,send,storage=null,visible=()=>true,now=()=>Date.now(),monotonic=()=>typeof performance!=='undefined'?performance.now():Date.now(),schedule=setTimeout,cancel=clearTimeout,uuid=()=>globalThis.crypto?.randomUUID?.()||opaque(String(Math.random())+Date.now())}={}){
+ let owner='',ownerRaw='',session='',sessionStarted=0,lastActive=0,queue=[],seen=new Set(),segment=null,last=null,watching=false,lastSample=-Infinity,course='',rawCourse=null,restoredCourse='',title='',saved=null,dirty=false,saveTimer=null,inflight=null,nextSend=0,failures=0,disabled=false,closed=false,interactionTimer=null,interactionUntil=0,interactionPrevious=null,dropped=0,batchLimit=MAX_BATCH,loaded=!storage?.load,loading=null,deferred=[];
+ const stats={samples:0,acceptedSamples:0,storageWrites:0,requests:0,dropped:0,ownerHashes:0,courseHashes:0};
+ function readSaved(raw){try{if(typeof raw==='string'&&raw.length<250000)saved=JSON.parse(raw);}catch{}}
+ if(loaded)try{readSaved(storage?.getItem(KEY));}catch{}
+ const stamp=()=>now()/1000;
+ function persist(){cancel(saveTimer);saveTimer=null;if(!dirty||!loaded)return;dirty=false;try{if(owner){storage?.setItem(KEY,JSON.stringify({owner,session,sessionStarted,lastActive,course,title,seen:[...seen],events:queue,dropped}));stats.storageWrites++;}else storage?.removeItem(KEY);}catch{}}
+ function changed(){dirty=true;if(saveTimer===null)saveTimer=schedule(persist,5000);}
+ function bind(){
+  if(closed)return false;let auth;try{auth=context();}catch{return false;}
+  const raw=auth?.enabled&&auth.owner?auth.owner:'';let next=owner;
+  if(raw!==ownerRaw){ownerRaw=raw;next=raw?opaque(raw):'';if(raw)stats.ownerHashes++;}
+  if(next!==owner){
+   // Never attribute a previous account's queue or delayed callback to the new one.
+   queue=[];seen.clear();segment=null;last=null;watching=false;lastSample=-Infinity;course='';rawCourse=null;restoredCourse='';title='';session='';sessionStarted=0;lastActive=0;nextSend=0;failures=0;batchLimit=MAX_BATCH;disabled=false;interactionUntil=0;interactionPrevious=null;cancel(interactionTimer);interactionTimer=null;
+   owner=next;
+   changed();
+  }
+  if(owner&&!loaded){
+   if(!loading)loading=Promise.resolve().then(()=>storage.load()).then(readSaved).catch(()=>{}).then(()=>{loaded=true;loading=null;if(closed)return;bind();const waiting=deferred;deferred=[];for(const e of waiting)feature(e.name,e.id,e.owner,e.at);});
+   return false;
+  }
+  if(owner&&saved){
+   if(saved.owner===owner&&Array.isArray(saved.events)){
+    queue=saved.events.filter(e=>e&&typeof e.id==='string'&&Number.isFinite(e.at)&&e.at>=stamp()-MAX_AGE).slice(-MAX_EVENTS);
+    session=typeof saved.session==='string'?saved.session:'';lastActive=Number(saved.lastActive)||0;sessionStarted=Number(saved.sessionStarted)||lastActive;restoredCourse=String(saved.course||'');seen=new Set(Array.isArray(saved.seen)?saved.seen.slice(0,4):[]);dropped=Number(saved.dropped)||0;
+   }
+   saved=null;changed();
+  }
+  return !!owner&&!disabled;
+ }
+ function begin(at){if(!session||at-lastActive>1800||at-sessionStarted>=86400){finishSegment();session=uuid();sessionStarted=at;seen.clear();}lastActive=at;}
+ function push(event){
+  if(queue.length>=MAX_EVENTS){queue.shift();dropped++;stats.dropped++;}
+  queue.push(event);changed();
+ }
+ function meta(){return course?{course_id:course,course_title:title}:{};}
+ function finishSegment(){if(!segment)return;const e=segment;segment=null;if(e.end>e.start)push(e);}
+ function interval(start,end,watch){
+  if(end<=start)return;watch=!!watch&&!!course;begin(end);
+  if(segment&&(segment.watch!==watch||segment.course_id!==(course||undefined)||segment.session!==session||start>segment.end+.05||end-segment.start>60))finishSegment();
+  if(segment){segment.end=Math.max(segment.end,end);segment.at=segment.end;}
+  else segment={id:uuid(),kind:'activity',at:end,session,...meta(),start,end,watch};
+ }
+ function setCourse(raw,label=''){
+  if(raw===rawCourse)return;rawCourse=raw;stats.courseHashes++;const key=courseKey(raw);if(key===course)return;finishSegment();course=key;
+  // Course labels only; never accept a URL, authentication material or a page title on ordinary sites.
+  title=key?String(label).replace(/https?:\/\/\S+|[\x00-\x1f]/gi,' ').slice(0,200):'';
+  if(key!==restoredCourse){session='';seen.clear();}restoredCourse='';last=null;lastSample=-Infinity;changed();
+ }
+ function feature(name,operationId='',boundOwner='',recordedAt=null){
+  const ready=bind();if(!visible()||boundOwner&&boundOwner!==owner||!['subtitle','translation','screenshot','ai'].includes(name))return false;
+  const at=recordedAt??stamp();
+  if(!ready){if(owner&&loading&&deferred.length<100)deferred.push({name,id:operationId,owner,at});return false;}
+  begin(at);
+  if((name==='subtitle'||name==='translation')&&seen.has(name))return false;
+  if(name==='subtitle'||name==='translation')seen.add(name);
+  const id=operationId?opaque(owner+':'+name+':'+operationId):uuid();
+  if(queue.some(e=>e.id===id))return false;
+  push({id,kind:'feature',at,session,...meta(),feature:name});return true;
+ }
+ function sample(state={}){
+  stats.samples++;const mono=monotonic();if(mono-lastSample<950)return;lastSample=mono;stats.acceptedSamples++;
+  if(!bind()||!visible()){last=null;watching=false;finishSegment();return;}
+  if(state.course!==undefined)setCourse(state.course,state.title);
+  const at=stamp(),playing=!!state.playing,position=Number(state.position),rate=Math.max(.1,Math.min(16,Number(state.rate)||1));
+  const dt=last?(mono-last.mono)/1000:0,wall=last?at-last.at:0,advance=last?position-last.position:0;
+  // A suspended timer, seek, buffer or clock jump must never create catch-up watch time.
+  const moving=last&&playing&&last.playing&&dt>0&&dt<=2.5&&Math.abs(wall-dt)<.5&&advance>0&&advance<=dt*Math.max(rate,last.rate)*1.6+.5;
+  watching=!!moving;
+  if(moving){interval(last.at,at,true);if(state.subtitle)feature('subtitle');if(state.translation)feature('translation');}
+  else finishSegment();
+  last={mono,at,position,playing,rate};
+ }
+ function interactionTick(){
+  interactionTimer=null;if(!bind()||!visible()||!interactionPrevious){interactionPrevious=null;return;}
+  const at=stamp(),mono=monotonic(),dt=(mono-interactionPrevious.mono)/1000,wall=at-interactionPrevious.at;
+  if(!(watching&&last&&mono-last.mono<2500)&&dt>0&&dt<=2.5&&Math.abs(wall-dt)<.5)interval(interactionPrevious.at,Math.min(at,interactionUntil),false);
+  if(at<interactionUntil){interactionPrevious={at,mono};interactionTimer=schedule(interactionTick,1000);}else{interactionPrevious=null;finishSegment();}
+ }
+ function touch(){
+  if(!bind()||!visible())return;const at=stamp();begin(at);interactionUntil=at+30;
+  if(!interactionPrevious)interactionPrevious={at,mono:monotonic()};
+  if(interactionTimer===null)interactionTimer=schedule(interactionTick,1000);
+ }
+ function suspend(){last=null;watching=false;finishSegment();cancel(interactionTimer);interactionTimer=null;interactionPrevious=null;interactionUntil=0;persist();}
+ async function flush(){
+  if(!bind()){if(loading)await loading;else return false;}if(!bind()||disabled||inflight||stamp()<nextSend)return false;
+  finishSegment();queue=queue.filter(e=>(e.start??e.at)>=stamp()-MAX_AGE);persist();if(!queue.length)return false;
+  const own=owner,batch=[];let bytes=20;for(const e of queue.slice(0,batchLimit)){const size=new TextEncoder().encode(JSON.stringify(e)).length+1;if(bytes+size>60000)break;batch.push(e);bytes+=size;}
+  const ids=new Set(batch.map(e=>e.id));stats.requests++;
+  nextSend=stamp()+60;
+  const pending=Promise.resolve().then(()=>send({events:batch},own));inflight=pending;
+  try{const result=await pending;if(owner!==own)return false;if(result?.ok!==true)throw Error('Unconfirmed analytics batch');const rejected=Array.isArray(result.rejected)?result.rejected.filter(e=>ids.has(e.id)).length:0;dropped+=rejected;stats.dropped+=rejected;queue=queue.filter(e=>!ids.has(e.id));failures=0;batchLimit=MAX_BATCH;changed();persist();return true;}
+  catch(error){if(owner===own){failures++;nextSend=stamp()+Math.min(3600,60*2**Math.min(failures,6));if([404,405,501].includes(error.status)){disabled=true;queue=[];changed();persist();}
+   else if([400,409,413].includes(error.status)){nextSend=stamp()+60;if(batch.length>1)batchLimit=Math.floor(batch.length/2);else{queue=queue.filter(e=>!ids.has(e.id));batchLimit=MAX_BATCH;dropped++;stats.dropped++;changed();persist();}}}return false;}
+  finally{if(inflight===pending)inflight=null;}
+ }
+ function capture(){const ready=bind();return ready||loading&&!disabled?owner:'';}
+ function destroy(){suspend();closed=true;cancel(saveTimer);}
+ return {sample,feature,touch,setCourse,flush,suspend,capture,destroy,stats,inspect:()=>({owner,session,queued:queue.length,pending:segment?1:0,disabled,dropped,nextSend}),opaque};
+}
+return {create,opaque,courseKey,MAX_EVENTS,MAX_BATCH};
+});
+
 /* Account and transport adapter; inlined into the installable userscript. */
 (function(root,factory){const api=factory();if(typeof module==='object'&&module.exports)module.exports=api;else root.ZYGateway=api;})(globalThis,function(){
 'use strict';
 const DEFAULT_ORIGIN="https://47.77.182.216.sslip.io/gateway";
-const CLIENT_VERSION='0.20.90';
+const CLIENT_VERSION='0.20.91';
 function clientHeaders(){return {'X-Client-Version':CLIENT_VERSION,'X-Client-Channel':'userscript'};}
 const KEY='gateway-account-v1',APP='zhiyun-subtitles',CLIENT=globalThis.ZY_CLIENT_TYPE||'userscript';
 function baseURL(value){const u=new URL(String(value).trim());if(u.username||u.password||u.search||u.hash||!['/','/gateway','/gateway/'].includes(u.pathname)||(u.protocol!=='https:'&&!(u.protocol==='http:'&&['localhost','127.0.0.1'].includes(u.hostname))))throw Error('请填写 HTTPS 服务地址；本机调试可使用 http://127.0.0.1:8080');return u.origin+(u.pathname==='/'?'':'/gateway');}
@@ -2550,6 +2662,11 @@ function create({request,getValue,setValue}){
  let refreshUI=null,changeListener=null,accessProfile=null,accessToken='',accessOrigin='',accessPending=null,showAccount=()=>{},queueUsageRefresh=()=>{},serverOffset=0,cleanupMounted=()=>{},recoveryPending=null,reloadAccess=()=>ensureAccess();
  const account=()=>{const saved=getValue(KEY,{})||{};return{...saved,url:DEFAULT_ORIGIN||saved.url||''};};
  const configured=()=>!!account().url;
+ const analytics=globalThis.ZYUsageAnalytics?.create({storage:globalThis.ZY_ANALYTICS_STORAGE,
+  context:()=>({enabled:accessReady()&&accessProfile.capabilities?.analytics===true,owner:studyIdentity()}),
+  now:()=>Date.now()+serverOffset,visible:()=>typeof document!=='undefined'&&document.visibilityState!=='hidden',
+  send:(body,owner)=>{if(!accessReady()||globalThis.ZYUsageAnalytics.opaque(studyIdentity())!==owner)throw Object.assign(Error('Analytics account changed'),{status:401});return studyWrite('/v1/analytics/events',body,{identity:studyIdentity()});}
+ });
  const credential=()=>configured()?(account().token||''):'';
  function accessReady(){return !!credential()&&accessToken===credential()&&accessOrigin===baseURL(account().url)&&!!accessProfile;}
  // The verified account ID survives token renewal; never persist a session token as an owner marker.
@@ -2745,7 +2862,7 @@ function create({request,getValue,setValue}){
   $('gateway-usage').onclick=()=>run(usage);$('gateway-logout').onclick=()=>run(async()=>{try{await logout();}finally{profile='';usageData=null;permissions=null;$('gateway-password').value='';$('gateway-status').textContent='已退出登录，原文字幕、手动同步和缓存仍可使用。';onChange();}});
   let quotaTimer=null,lastQuotaRefresh=0;queueUsageRefresh=()=>{if(!credential()||quotaTimer)return;quotaTimer=setTimeout(()=>{quotaTimer=null;lastQuotaRefresh=Date.now();if(credential())usage().catch(()=>{});},Math.max(700,5000-(Date.now()-lastQuotaRefresh)));};
   const expiryTimer=setInterval(()=>{const changed=canUse('learning')!==previousAccess;refresh();if(changed)onChange();},60000);
-  const heartbeat=()=>{if(credential()&&document.visibilityState!=='hidden'){call('/v1/activity',{}).catch(()=>{});if(!accessReady())usage().catch(e=>{$('gateway-status').textContent='账号服务暂不可用，可点击智能功能重试：'+e.message;});}};const heartbeatTimer=setInterval(heartbeat,60000);document.addEventListener('visibilitychange',heartbeat);cleanupMounted=()=>{clearInterval(expiryTimer);clearInterval(heartbeatTimer);clearTimeout(quotaTimer);document.removeEventListener('visibilitychange',heartbeat);queueUsageRefresh=()=>{};refreshUI=null;changeListener=null;showAccount=()=>{};reloadAccess=()=>ensureAccess();};heartbeat();refresh();
+  const heartbeat=()=>{if(document.visibilityState==='hidden'){analytics?.suspend();void analytics?.flush();return;}if(credential()){if(accessReady()&&accessProfile.capabilities?.analytics===true){void analytics?.flush();}else call('/v1/activity',{}).catch(()=>{});if(!accessReady())usage().catch(e=>{$('gateway-status').textContent='账号服务暂不可用，可点击智能功能重试：'+e.message;});}};const heartbeatTimer=setInterval(heartbeat,60000);document.addEventListener('visibilitychange',heartbeat);const analyticsLeave=()=>{analytics?.suspend();void analytics?.flush();};const analyticsTouch=e=>{if(e.isTrusted&&e.target?.closest?.('#ai-learning,#ai-crop,#panel,#slides,#caption'))analytics?.touch();};globalThis.addEventListener?.('pagehide',analyticsLeave);shadow.addEventListener('pointerdown',analyticsTouch,{passive:true});shadow.addEventListener('keydown',analyticsTouch,{passive:true});cleanupMounted=()=>{analytics?.suspend();globalThis.removeEventListener?.('pagehide',analyticsLeave);shadow.removeEventListener('pointerdown',analyticsTouch);shadow.removeEventListener('keydown',analyticsTouch);clearInterval(expiryTimer);clearInterval(heartbeatTimer);clearTimeout(quotaTimer);document.removeEventListener('visibilitychange',heartbeat);queueUsageRefresh=()=>{};refreshUI=null;changeListener=null;showAccount=()=>{};reloadAccess=()=>ensureAccess();};heartbeat();refresh();
   if(credential())usage().catch(e=>{$('gateway-status').textContent=e.message;});
 
   if($('sync-toggle')){
@@ -2837,7 +2954,7 @@ function create({request,getValue,setValue}){
 
  }
 
- return{speechStream:{supported:streamSupported,bindTransport:bindSpeechStreamTransport},study:{account:credential,identity:studyIdentity,clipLimits:studyClipLimits,save:(body,options)=>studyWrite('/v1/study/conversations',body,options),saveClip:(body,options)=>studyWrite('/v1/study/clips',body,options)},prompts:{account:credential,list:()=>call('/v1/prompts'),save:body=>call('/v1/prompts/save',body),remove:body=>call('/v1/prompts/delete',body)},transport,configured,credential,login,logout,call,ensureAccess,mount,destroy:()=>cleanupMounted(),canUse,requireFeature,statusSummary,openAccount:(message='')=>showAccount(message),features:()=>({webSearch:!configured()||getValue('gateway-capabilities-v1',{}).web_search===true})};
+ return{analytics,speechStream:{supported:streamSupported,bindTransport:bindSpeechStreamTransport},study:{account:credential,identity:studyIdentity,clipLimits:studyClipLimits,save:(body,options)=>studyWrite('/v1/study/conversations',body,options),saveClip:(body,options)=>studyWrite('/v1/study/clips',body,options)},prompts:{account:credential,list:()=>call('/v1/prompts'),save:body=>call('/v1/prompts/save',body),remove:body=>call('/v1/prompts/delete',body)},transport,configured,credential,login,logout,call,ensureAccess,mount,destroy:()=>{cleanupMounted();analytics?.destroy();},canUse,requireFeature,statusSummary,openAccount:(message='')=>showAccount(message),features:()=>({webSearch:!configured()||getValue('gateway-capabilities-v1',{}).web_search===true})};
 }
 return{create,baseURL,accessSummary};
 });
@@ -2856,7 +2973,7 @@ function mount({request,getValue,setValue}){
  function settings(name='connection'){settingsShell.open(name);}
  const gateway=ZYGateway.create({request,getValue,setValue});let assistant;
  gateway.mount(shadow,()=>assistant?.refreshAccess(),settings);
- assistant=ZhiyunLearning.mountLearningAssistant({shadow,request:gateway.transport,getValue,setValue,getApiKey:()=>gateway.configured()?gateway.credential():getValue('ark-api-key',''),getCourseId:()=>location.origin+location.pathname,getCourseTitle:()=>document.title,getContext:()=>'',canUse:gateway.canUse,getAccountSummary:gateway.statusSummary,studyStore:gateway.configured()?gateway.study:null,promptStore:gateway.configured()?gateway.prompts:null,onRequireLogin:feature=>gateway.requireFeature(feature),onOpenAccount:()=>gateway.openAccount(),onOpenSettings:()=>settings('ai')});
+ assistant=ZhiyunLearning.mountLearningAssistant({shadow,analytics:gateway.analytics,request:gateway.transport,getValue,setValue,getApiKey:()=>gateway.configured()?gateway.credential():getValue('ark-api-key',''),getCourseId:()=>location.origin+location.pathname,getCourseTitle:()=>document.title,getContext:()=>'',canUse:gateway.canUse,getAccountSummary:gateway.statusSummary,studyStore:gateway.configured()?gateway.study:null,promptStore:gateway.configured()?gateway.prompts:null,onRequireLogin:feature=>gateway.requireFeature(feature),onOpenAccount:()=>gateway.openAccount(),onOpenSettings:()=>settings('ai')});
  const footer=document.createElement('footer');footer.id='web-history-tools';footer.innerHTML='<span>浙大上课爽</span><button id="web-settings-open" aria-label="账号与设置" title="账号与设置">⚙</button>';$('ai-questions').append(footer);footer.prepend($('account-entry'));$('panel-body').remove();
  const compactStyle=document.createElement('style');compactStyle.textContent=`:host([data-zy-web-launcher]) #panel{display:flex;align-items:center;gap:2px;right:20px;bottom:60px;width:auto;padding:5px;border:1px solid var(--zy-border,#eadfd5);border-radius:999px;background:var(--zy-surface,#fffdf9);box-shadow:0 4px 18px #34271b18;overflow:visible}:host([data-zy-web-launcher]) #panel button{display:inline-flex;align-items:center;justify-content:center;gap:6px;flex:none;height:32px;margin:0;padding:0 10px;border:0;border-radius:999px;background:transparent;color:var(--zy-text,#514b45);font:500 13px/1 'Segoe UI','Microsoft YaHei',sans-serif;box-shadow:none}:host([data-zy-web-launcher]) #panel #web-page-ask{background:#fff0df;color:#b84a1d}:host([data-zy-web-launcher]) #panel button:hover{background:#f4e9df}:host([data-zy-web-launcher]) #panel #transcript-open{width:32px;padding:0}:host([data-zy-web-launcher]) #panel svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}:host([data-zy-web-launcher]) .web-divider{height:16px;width:1px;background:#e8dfd5;margin:0 3px}:host([data-zy-web-launcher]) #ai-resume,:host([data-web-settings-open]) #panel{display:none!important}#web-history-tools{display:flex;align-items:center;justify-content:space-between;border-top:1px solid #eadfd5;padding:8px 12px;font-size:12px;color:#807367}#web-history-tools button{padding:4px 8px}@media(max-width:400px){:host([data-zy-web-launcher]) #panel{right:12px;bottom:60px}}@media(pointer:coarse){:host([data-zy-web-launcher]) #panel button{height:44px}:host([data-zy-web-launcher]) #panel #transcript-open{width:44px}}`;shadow.append(compactStyle);
  // Drag from any part of the capsule; ordinary clicks retain their action.
@@ -4944,6 +5061,7 @@ const ZY_ONBOARDING_ARTWORK="data:image/webp;base64,UklGRvzlBwBXRUJQVlA4WAoAAAAw
     $('caption').hidden = !$('enabled').checked || !selected || !(original || translation) || fs?.tagName === 'VIDEO';
     if ($('original').textContent !== original) $('original').textContent = original;
     if ($('translation').textContent !== translation) $('translation').textContent = translation;
+    gateway.analytics?.sample({course:route,title:document.title,playing:!!selected&&!selected.video.paused&&!selected.video.ended&&!selected.video.seeking&&selected.video.readyState>=3,position:selected?.video.currentTime,rate:selected?.video.playbackRate,subtitle:!$('caption').hidden&&!!original,translation:!$('caption').hidden&&!!translation});
     const below = $('placement').value === 'below' && $('enabled').checked && fs?.tagName !== 'VIDEO';
     if (!selected || !below) releaseVideo();
     if (selected) {
@@ -4967,7 +5085,7 @@ const ZY_ONBOARDING_ARTWORK="data:image/webp;base64,UklGRvzlBwBXRUJQVlA4WAoAAAAw
       }
     }
   }
-  learning=ZhiyunLearning.mountLearningAssistant({shadow,collapsedEntry:false,request:gateway.transport,getValue:GM_getValue,setValue:GM_setValue,getCapabilities:gateway.features,getAccountSummary:gateway.statusSummary,studyStore:gateway.configured()?gateway.study:null,promptStore:gateway.configured()?gateway.prompts:null,getCourseId:()=>route,onOpenAccount:()=>gateway.openAccount(),canUse:feature=>gateway.configured()?gateway.canUse(feature):!!GM_getValue('ark-api-key',''),getApiKey:()=>gateway.configured()?gateway.credential():GM_getValue('ark-api-key',''),getCourseTitle:()=>document.title,prepareSlide:async()=>{if($('slides').hidden && showSlides())await $('slide-image').decode().catch(()=>{});},getSlide:()=>{
+  learning=ZhiyunLearning.mountLearningAssistant({shadow,analytics:gateway.analytics,collapsedEntry:false,request:gateway.transport,getValue:GM_getValue,setValue:GM_setValue,getCapabilities:gateway.features,getAccountSummary:gateway.statusSummary,studyStore:gateway.configured()?gateway.study:null,promptStore:gateway.configured()?gateway.prompts:null,getCourseId:()=>route,onOpenAccount:()=>gateway.openAccount(),canUse:feature=>gateway.configured()?gateway.canUse(feature):!!GM_getValue('ark-api-key',''),getApiKey:()=>gateway.configured()?gateway.credential():GM_getValue('ark-api-key',''),getCourseTitle:()=>document.title,prepareSlide:async()=>{if($('slides').hidden && showSlides())await $('slide-image').decode().catch(()=>{});},getSlide:()=>{
     if(route!==courseIdentity(location.hash) || !coursePptReady() || $('slides').hidden || !slideEntries[slideIndex])return null;
     const slide=slideEntries[slideIndex];return {url:slide.url,index:slideIndex,time:slide.time,title:document.title,imageElement:$('slide-image'),viewportElement:$('slide-viewport')};
   },getContext:()=>{

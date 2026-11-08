@@ -1,3 +1,90 @@
 .guest-section{display:grid;grid-template-columns:130px 1fr;gap:28px;padding:65px 0 78px}.guest-section h2{font-size:30px;letter-spacing:-1px;font-weight:550;line-height:1.5;margin-bottom:20px}.guest-section p{font-size:13px;line-height:2;color:var(--muted);margin-bottom:28px}.guest-section .text-link{margin-left:24px}.workspace-tools{display:flex;align-items:end;gap:22px;margin-top:32px}.filter-field{flex:1;min-width:0}.filter-field label{display:block;font-size:10px;letter-spacing:.5px;color:var(--muted);margin-bottom:10px}.filter-field input,.filter-field select{width:100%;height:44px;padding:10px 12px;border:1px solid #d5d4c9;border-radius:3px;background:#fffdf8;color:var(--ink);font-size:13px}.course-field{flex:0 1 230px}.workspace-tools>.button{min-height:44px}.workspace-meta{display:flex;align-items:center;justify-content:space-between;color:var(--muted);font-size:10px;margin:22px 0 15px}.workspace-meta p{margin:0}.study-columns{display:grid;grid-template-columns:minmax(220px,.84fr) minmax(0,1.65fr);border-top:1px solid var(--line);min-height:480px}#conversation-list{border-right:1px solid var(--line);padding-right:28px;max-height:78vh;overflow:auto}.conversation-item{border-bottom:1px solid var(--line)}.conversation-item button{display:block;width:100%;text-align:left;border:0;background:none;padding:23px 16px 23px 0;color:var(--ink)}.conversation-item button:hover,.conversation-item button[aria-current=true]{background:#f4eddf}.conversation-item button[aria-current=true]{box-shadow:inset 3px 0 var(--orange);padding-left:15px}.conversation-course{font-size:9px;line-height:1.8;color:#a36e46;display:block;margin-bottom:10px}.conversation-item strong{display:block;font-size:15px;font-weight:550;line-height:1.7;overflow-wrap:anywhere}.conversation-item small{display:block;font-size:9px;color:var(--muted);margin-top:12px}.conversation-reader{padding:34px 0 35px 42px;min-width:0;overflow-wrap:anywhere}#reader-placeholder{padding-top:44px}#reader-placeholder h2{font-size:35px;font-weight:500;line-height:1.55;letter-spacing:-1px;margin-bottom:22px}#reader-back{display:none}.reader-heading{padding-bottom:24px;border-bottom:1px solid var(--line)}.reader-heading .eyebrow{margin-bottom:14px;letter-spacing:.7px}.reader-heading h2{font-size:26px;font-weight:550;line-height:1.55;letter-spacing:-.5px;margin-bottom:18px}.reader-meta{display:flex;justify-content:space-between;align-items:center;gap:15px;font-size:10px;color:var(--muted)}.reader-meta .text-link{font-size:10px}.message{padding-block:25px;border-bottom:1px solid var(--line)}.message-label{font-size:9px;letter-spacing:1px;color:#a36e46;margin-bottom:12px}.message-body{white-space:pre-wrap;overflow-wrap:anywhere;font-size:13px;line-height:2;margin:0}.message.question .message-body{font-weight:550;font-size:14px}.empty-section{padding:58px 0 68px;display:grid;grid-template-columns:80px 1fr;gap:24px;border-top:1px solid var(--line)}.empty-section h2{font-size:25px;font-weight:500;line-height:1.5;margin-bottom:18px}.empty-section p{color:var(--muted);font-size:12px;line-height:2;max-width:520px}.empty-section .section-number{font-size:48px}.data-note{font-size:10px;line-height:1.9;color:var(--muted);margin:20px 0 0}
 @media(max-width:850px){.conversation-reader{padding-left:28px}#conversation-list{padding-right:20px}.study-columns{grid-template-columns:minmax(200px,.9fr) minmax(0,1.45fr)}}@media(max-width:700px){.guest-section{grid-template-columns:54px 1fr;gap:18px;padding:43px 0 45px}.guest-section h2{font-size:23px;line-height:1.6;margin-bottom:17px}.guest-section p{font-size:11px;line-height:2;margin-bottom:23px}.guest-section br{display:none}.guest-section .text-link{margin:12px 0 0;display:block}.workspace-tools{gap:12px;flex-wrap:wrap;margin-top:25px}.filter-field{flex:1 1 100%}.course-field{flex:1}.workspace-meta{margin-top:20px}.workspace-meta>span{font-size:9px}.study-columns{display:block;min-height:250px}#conversation-list{border:0;max-height:none;padding:0}.conversation-item button{padding-right:8px}.conversation-item strong{font-size:15px}.conversation-item small{font-size:10px}.conversation-course{font-size:10px}.conversation-reader{display:none;padding:20px 0 28px}#reader-back{display:inline-block;margin-bottom:25px}.study-columns.reading #conversation-list{display:none}.study-columns.reading .conversation-reader{display:block}.reader-heading h2{font-size:24px}.reader-heading .eyebrow{font-size:10px}.reader-meta{align-items:start;gap:10px;flex-wrap:wrap}.message-body{font-size:13px}.empty-section{padding:36px 0 45px;grid-template-columns:38px 1fr;gap:15px}.empty-section .section-number{font-size:35px}.empty-section h2{font-size:23px}.empty-section p{font-size:11px}.data-note{font-size:9px;line-height:1.9}}
 
+
+/* Study desk: compact navigation, legible cards, and a quiet paper reader. */
+
+.study-page{--muted:#69736f}
+.study-page .page-heading{padding:38px 0 30px;border-bottom:0}
+.study-page h1{font-size:clamp(34px,4vw,48px);letter-spacing:-1.6px}
+.study-page .page-heading .eyebrow{margin-bottom:12px;font-size:11px}
+.study-page .page-lead{font-size:14px;line-height:1.9}
+.workspace-tools{padding:20px;background:#fffcf7;border:1px solid var(--line);border-radius:16px;gap:16px;margin-top:24px}
+.filter-field label{font-size:12px;letter-spacing:0;margin-bottom:8px}
+.filter-field input,.filter-field select{border-radius:9px;background:#fff;font-size:14px;border-color:#deded5}
+.workspace-tools .button{border-radius:9px}
+.workspace-meta{font-size:12px;margin:22px 2px 16px}
+.workspace-meta>span{font-size:12px}
+.study-columns{grid-template-columns:minmax(260px,.85fr) minmax(0,1.65fr);gap:24px;border:0;align-items:start;min-height:500px}
+#conversation-list{border:0;padding:2px 6px 4px 2px;max-height:80vh;scrollbar-width:thin;scrollbar-color:#d5d2c9 transparent}
+.conversation-item{border:0;margin-bottom:10px}
+.conversation-item button{padding:20px;border:1px solid var(--line);border-radius:14px;background:#fffcf7;transition:border-color .18s,background .18s,box-shadow .18s}
+.conversation-item button:hover{background:#fff;border-color:#d3b29b;box-shadow:0 5px 18px #4c301009}
+.conversation-item button[aria-current=true]{padding:20px;background:#fff3e8;border-color:#d99e73;box-shadow:inset 3px 0 var(--orange)}
+.conversation-course{display:inline-block;font-size:11px;color:#97552e;padding:3px 8px;border-radius:5px;background:#eee7da;margin-bottom:10px}
+.conversation-item strong{font-size:16px;line-height:1.65;font-weight:650}
+.conversation-item small{font-size:11px;margin-top:14px}
+.conversation-reader{border:1px solid var(--line);border-radius:18px;background:#fffefa;padding:30px 34px;min-height:500px;box-shadow:0 8px 32px #443c2605}
+.reader-heading{padding-bottom:20px}
+.reader-heading .eyebrow{font-size:12px;margin-bottom:12px}
+.reader-heading h2{font-size:26px;line-height:1.6}
+.reader-meta,.reader-meta .text-link{font-size:11px}
+.message{border-bottom:0;padding:24px 0 0}
+.message-label{font-size:11px;letter-spacing:.5px;font-weight:650;margin-bottom:10px}
+.message.question{background:#f4f1e9;padding:18px 20px;border-radius:12px;margin-top:24px}
+.message.question .message-label{color:#687266}
+.message-body{font-size:15px;line-height:1.95;white-space:normal}
+.message.question .message-body{font-size:15px;font-weight:500}
+.message-body p{white-space:pre-wrap;margin:0 0 15px}
+.message-body p:last-child{margin-bottom:0}
+.message-body h3{font-size:17px;margin:20px 0 8px;line-height:1.6}
+.message-body ul,.message-body ol{padding-left:23px;margin:10px 0 16px}
+.message-body li{margin:5px 0}
+.message-body code{font-family:Consolas,monospace;font-size:.88em;background:#eeeae1;padding:2px 5px;border-radius:4px}
+.message-body pre{max-width:100%;overflow:auto;background:#f2f0e9;padding:17px;border:1px solid #e6e2d8;border-radius:10px;line-height:1.7}
+.message-body pre code{background:none;padding:0;white-space:pre}
+.data-note{font-size:11px;max-width:900px;line-height:1.9;margin-top:25px}
+#reader-placeholder{padding:55px 12px}
+#reader-placeholder:before{content:'↗';display:flex;align-items:center;justify-content:center;width:52px;height:52px;background:#f3eadc;border:1px solid #e9ddc9;border-radius:16px;font-size:26px;color:#a46e48;margin-bottom:30px}
+#reader-placeholder h2{font-size:30px}
+#reader-placeholder .muted{font-size:13px;line-height:1.9}
+.reader-loading{padding:15px 0}
+.study-skeleton{padding:22px;background:#fffcf7;border:1px solid var(--line);border-radius:14px;margin-bottom:12px}
+.study-skeleton span{display:block;position:relative;overflow:hidden;background:#eae6dc;border-radius:5px;height:12px;margin:12px 0}
+.study-skeleton span:first-child{width:32%;height:10px}
+.study-skeleton span:last-child{width:66%}
+.study-skeleton span:after{content:'';position:absolute;inset:0;transform:translateX(-100%);background:linear-gradient(100deg,transparent,#ffffffb8,transparent);animation:study-shimmer 1.8s ease-in-out infinite}
+.reader-loading .study-skeleton{border:0;padding:12px 0;background:transparent}
+.reader-loading .study-skeleton span{height:15px}
+.reader-loading .study-skeleton span:first-child{width:85%}
+.reader-loading .study-skeleton:nth-child(2){width:90%}
+@keyframes study-shimmer{to{transform:translateX(100%)}}
+@media(max-width:1000px){
+  .study-columns{grid-template-columns:minmax(230px,.8fr) minmax(0,1.4fr);gap:16px}
+.conversation-reader{padding:24px}
+.conversation-item button,.conversation-item button[aria-current=true]{padding:17px}}
+@media(max-width:700px){
+  .study-page .page-heading{padding:28px 0 23px;gap:14px}
+.study-page .page-lead{font-size:13px}
+.study-page .page-lead br{display:none}
+.workspace-tools{padding:15px;gap:12px;margin-top:20px}
+.filter-field label{font-size:12px}
+.workspace-meta{font-size:11px;gap:12px}
+.workspace-meta>span{font-size:10px}
+.study-columns{display:block}
+.conversation-reader{min-height:350px;padding:20px;border-radius:14px}
+.conversation-item button,.conversation-item button[aria-current=true]{padding:18px}
+.conversation-item strong{font-size:16px}
+.conversation-course,.conversation-item small{font-size:11px}
+#conversation-list{padding:0;max-height:none}
+.reader-heading h2{font-size:23px}
+.message-body,.message.question .message-body{font-size:15px}
+.message.question{padding:15px}
+.data-note{font-size:11px}
+#reader-back{margin-bottom:20px}
+.guest-section h2{font-size:24px}
+.guest-section p{font-size:13px}
+.empty-section p{font-size:13px}}
+@media(prefers-reduced-motion:reduce){
+  .study-skeleton span:after{animation:none;display:none}
+.conversation-item button{transition:none}}

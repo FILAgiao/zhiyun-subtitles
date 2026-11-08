@@ -286,7 +286,7 @@
   async function renderKnowledgeCards(doc,options){return [await renderKnowledgeCard(doc,options)];}
 
   function mountLearningAssistant(options) {
-    const {shadow,request,promptStore=null,studyStore=null,collapsedEntry=true,getApiKey=()=>'',canUse=()=>!!String(getApiKey()||'').trim(),getCapabilities=()=>({webSearch:true}),getAccountSummary=()=>null,getCourseId=()=>'',onOpenAccount=()=>onOpenSettings('connection'),prepareSlide=()=>{},getSlide=()=>null,getContext=()=>'',getCourseTitle=()=>'',getCaptureTarget=()=>null,getValue=(_,d)=>d,setValue=()=>{},onRequireLogin=()=>{},onOpenSettings=()=>{}}=options;
+    const {shadow,request,analytics=null,promptStore=null,studyStore=null,collapsedEntry=true,getApiKey=()=>'',canUse=()=>!!String(getApiKey()||'').trim(),getCapabilities=()=>({webSearch:true}),getAccountSummary=()=>null,getCourseId=()=>'',onOpenAccount=()=>onOpenSettings('connection'),prepareSlide=()=>{},getSlide=()=>null,getContext=()=>'',getCourseTitle=()=>'',getCaptureTarget=()=>null,getValue=(_,d)=>d,setValue=()=>{},onRequireLogin=()=>{},onOpenSettings=()=>{}}=options;
     if(!shadow || typeof request!=='function')throw new Error('AI 助手缺少 shadow 或 request');
     const doc=shadow.ownerDocument,win=doc.defaultView;
     function ensureAccess(feature='learning'){if(canUse(feature))return true;onRequireLogin(feature);return false;}
@@ -590,7 +590,7 @@
       return blobToData(await imageBlob(slide.url,signal),signal);
     }
     async function send(question,{slide=null,image=null,fresh=false,source='文字提问'}={}) {
-      const before=requestSerial;
+      const before=requestSerial,analyticsOwner=analytics?.capture(),analyticsOperation=win.crypto?.randomUUID?.()||String(Date.now())+'-'+requestSerial;
       if(!ensureAccess()||sendPreparing||controller||destroyed)return;
       refreshSavedSettings();
       if(promptStore){
@@ -625,7 +625,7 @@
         if(summarize){const parsed=splitLearningReply(answer,{final:true});answer=parsed.text;if(!answer.trim())throw Error('模型没有返回回答正文，请重试。');if(parsed.title)conversationTitle=parsed.title;}
         if(/^联网搜索未开通，本次按普通对话回答。/.test(answer)){answer=answer.replace(/^联网搜索未开通，本次按普通对话回答。\s*/,'');}
         lastAnswer={text:answer,mode:modeFor(chosenSettings,chosenSettings.mode).label,course:conversationCourse||String(getCourseTitle()||getContext()||'我的课堂知识卡').split('\n')[0].slice(0,100),image:currentImage||images.at(-1)||history.find(t=>t.image)?.image||null,question:question};$('ai-card-row').hidden=false;
-        if(replyTurn)replyTurn.text=answer;else history.push({role:'assistant',text:answer});if(reply)reply._cardTurn=replyTurn;if(reply){clearTimeout(renderTimer);renderTimer=null;renderMarkdown(doc,reply.querySelector('.ai-stream-text'),answer);followLatest();}else reply=message('assistant',answer);status(warning||'可以继续追问，或换一种讲法。');persist();
+        if(replyTurn)replyTurn.text=answer;else history.push({role:'assistant',text:answer});if(reply)reply._cardTurn=replyTurn;if(reply){clearTimeout(renderTimer);renderTimer=null;renderMarkdown(doc,reply.querySelector('.ai-stream-text'),answer);followLatest();}else reply=message('assistant',answer);status(warning||'可以继续追问，或换一种讲法。');persist();if(analyticsOwner)analytics?.feature('ai',analyticsOperation,analyticsOwner);
       }catch(e){if(!destroyed && serial===requestSerial){persist();status(e.name==='AbortError'?'已停止。':e.message||'讲解暂时失败，请重试。');if(e.name!=='AbortError'){if(!$('ai-question').value)$('ai-question').value=question;if(currentImage)attach(currentImage);}}}
       finally{clearInterval(feedbackTimer);clearTimeout(renderTimer);if(flushPendingReply===flushRender)flushPendingReply=null;if(controller===ownController){controller=null;setBusy(false);}}
     }
@@ -748,14 +748,15 @@
         if(own.signal.aborted||serial!==requestSerial||destroyed)return;
         setBusy(true);captureNotice.querySelector('span').textContent='正在截取当前页面…';captureNotice.hidden=false;
         captureNotice.querySelector('button').textContent='取消截图';
+        const analyticsOwner=analytics?.capture(),analyticsOperation=win.crypto?.randomUUID?.()||String(Date.now())+'-'+serial;
         const snapshot=await captureSnapshot(own.signal,gesture,direct?slide:null);
         const src=snapshot.src;
         if(serial!==requestSerial||destroyed)return;
         if(direct){
           const attachment=await imageData(src,null,own.signal);if(serial!==requestSerial||destroyed)return;
           if(panel.hidden)clear();
-          conversationSource='截图提问';attach(attachment);open();status('当前页面截图已添加，可补充问题后发送。');
-        }else showCrop(src,gesture,wholePage&&!gesture?.slideOnly,snapshot.viewport);
+          conversationSource='截图提问';attach(attachment);open();status('当前页面截图已添加，可补充问题后发送。');if(analyticsOwner)analytics?.feature('screenshot',analyticsOperation,analyticsOwner);
+        }else showCrop(src,gesture,wholePage&&!gesture?.slideOnly,snapshot.viewport,analyticsOwner,analyticsOperation);
        }catch(e){own.abort();if(serial===requestSerial&&e.name!=='AbortError'){
         open();status(e.message||'截图失败，请重试。');
         if(e.code==='NATIVE_CAPTURE_FAILED'||e.code==='CAPTURE_SELECTION_TOO_SMALL'){
@@ -765,7 +766,7 @@
       }}
       finally{doc.removeEventListener('keydown',cancelKey,true);if(controller===own){capturePending=false;controller=null;setBusy(false);}if(!capturePending)captureNotice.hidden=true;}
     }
-    function showCrop(src,gesture=null,centered=false,sourceViewport=null){
+    function showCrop(src,gesture=null,centered=false,sourceViewport=null,analyticsOwner='',analyticsOperation=''){
       const serial=requestSerial,viewport=sourceViewport||captureViewport();
       if(gesture){const from=gesture.viewport||viewport,convert=p=>({x:Math.max(0,Math.min(viewport.w,p.x*viewport.w/from.w)),y:Math.max(0,Math.min(viewport.h,p.y*viewport.h/from.h))});gesture={...gesture,start:convert(gesture.start),end:convert(gesture.end)};}
       const layer=make('section',{id:'ai-crop',role:'dialog','aria-label':'截图与批注'});
@@ -815,7 +816,7 @@
         img.style.setProperty('display','none','important');stage.style.pointerEvents='none';
         for(const [key,value] of Object.entries({background:centered?'#071519b3':'transparent',border:'0',borderRadius:'0',boxShadow:'none',backdropFilter:'none',pointerEvents:'none'}))layer.style.setProperty(key.replace(/[A-Z]/g,c=>'-'+c.toLowerCase()),value,'important');
         layer.querySelector('strong').textContent='随意摘 · 截图预览';layer.querySelector('#ai-crop-tools').hidden=true;draw.disabled=favorite.disabled=submit.disabled=false;use.disabled=!destination.querySelector('option[value="current"]')&&destination.options.length<2;layer.querySelector('#ai-clip-details').hidden=false;
-        layoutPreview();redraw();
+        layoutPreview();redraw();if(analyticsOwner)analytics?.feature('screenshot',analyticsOperation,analyticsOwner);
         const canvasPoint=e=>{const r=canvas.getBoundingClientRect();return{x:(e.clientX-r.left)*canvas.width/r.width,y:(e.clientY-r.top)*canvas.height/r.height};};
         canvas.onpointerdown=e=>{if(e.button!==0||clipBusy||layer.querySelector('#ai-crop-tools').hidden)return;e.preventDefault();active={tool,points:[canvasPoint(e)]};canvas.setPointerCapture(e.pointerId);redraw();};
         canvas.onpointermove=e=>{if(active){active.points.push(canvasPoint(e));redraw();}};

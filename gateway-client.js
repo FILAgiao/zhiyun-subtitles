@@ -2,7 +2,7 @@
 (function(root,factory){const api=factory();if(typeof module==='object'&&module.exports)module.exports=api;else root.ZYGateway=api;})(globalThis,function(){
 'use strict';
 const DEFAULT_ORIGIN='';
-const CLIENT_VERSION='0.20.90';
+const CLIENT_VERSION='0.20.91';
 function clientHeaders(){return {'X-Client-Version':CLIENT_VERSION,'X-Client-Channel':'userscript'};}
 const KEY='gateway-account-v1',APP='zhiyun-subtitles',CLIENT=globalThis.ZY_CLIENT_TYPE||'userscript';
 function baseURL(value){const u=new URL(String(value).trim());if(u.username||u.password||u.search||u.hash||!['/','/gateway','/gateway/'].includes(u.pathname)||(u.protocol!=='https:'&&!(u.protocol==='http:'&&['localhost','127.0.0.1'].includes(u.hostname))))throw Error('请填写 HTTPS 服务地址；本机调试可使用 http://127.0.0.1:8080');return u.origin+(u.pathname==='/'?'':'/gateway');}
@@ -32,6 +32,11 @@ function create({request,getValue,setValue}){
  let refreshUI=null,changeListener=null,accessProfile=null,accessToken='',accessOrigin='',accessPending=null,showAccount=()=>{},queueUsageRefresh=()=>{},serverOffset=0,cleanupMounted=()=>{},recoveryPending=null,reloadAccess=()=>ensureAccess();
  const account=()=>{const saved=getValue(KEY,{})||{};return{...saved,url:DEFAULT_ORIGIN||saved.url||''};};
  const configured=()=>!!account().url;
+ const analytics=globalThis.ZYUsageAnalytics?.create({storage:globalThis.ZY_ANALYTICS_STORAGE,
+  context:()=>({enabled:accessReady()&&accessProfile.capabilities?.analytics===true,owner:studyIdentity()}),
+  now:()=>Date.now()+serverOffset,visible:()=>typeof document!=='undefined'&&document.visibilityState!=='hidden',
+  send:(body,owner)=>{if(!accessReady()||globalThis.ZYUsageAnalytics.opaque(studyIdentity())!==owner)throw Object.assign(Error('Analytics account changed'),{status:401});return studyWrite('/v1/analytics/events',body,{identity:studyIdentity()});}
+ });
  const credential=()=>configured()?(account().token||''):'';
  function accessReady(){return !!credential()&&accessToken===credential()&&accessOrigin===baseURL(account().url)&&!!accessProfile;}
  // The verified account ID survives token renewal; never persist a session token as an owner marker.
@@ -227,7 +232,7 @@ function create({request,getValue,setValue}){
   $('gateway-usage').onclick=()=>run(usage);$('gateway-logout').onclick=()=>run(async()=>{try{await logout();}finally{profile='';usageData=null;permissions=null;$('gateway-password').value='';$('gateway-status').textContent='已退出登录，原文字幕、手动同步和缓存仍可使用。';onChange();}});
   let quotaTimer=null,lastQuotaRefresh=0;queueUsageRefresh=()=>{if(!credential()||quotaTimer)return;quotaTimer=setTimeout(()=>{quotaTimer=null;lastQuotaRefresh=Date.now();if(credential())usage().catch(()=>{});},Math.max(700,5000-(Date.now()-lastQuotaRefresh)));};
   const expiryTimer=setInterval(()=>{const changed=canUse('learning')!==previousAccess;refresh();if(changed)onChange();},60000);
-  const heartbeat=()=>{if(credential()&&document.visibilityState!=='hidden'){call('/v1/activity',{}).catch(()=>{});if(!accessReady())usage().catch(e=>{$('gateway-status').textContent='账号服务暂不可用，可点击智能功能重试：'+e.message;});}};const heartbeatTimer=setInterval(heartbeat,60000);document.addEventListener('visibilitychange',heartbeat);cleanupMounted=()=>{clearInterval(expiryTimer);clearInterval(heartbeatTimer);clearTimeout(quotaTimer);document.removeEventListener('visibilitychange',heartbeat);queueUsageRefresh=()=>{};refreshUI=null;changeListener=null;showAccount=()=>{};reloadAccess=()=>ensureAccess();};heartbeat();refresh();
+  const heartbeat=()=>{if(document.visibilityState==='hidden'){analytics?.suspend();void analytics?.flush();return;}if(credential()){if(accessReady()&&accessProfile.capabilities?.analytics===true){void analytics?.flush();}else call('/v1/activity',{}).catch(()=>{});if(!accessReady())usage().catch(e=>{$('gateway-status').textContent='账号服务暂不可用，可点击智能功能重试：'+e.message;});}};const heartbeatTimer=setInterval(heartbeat,60000);document.addEventListener('visibilitychange',heartbeat);const analyticsLeave=()=>{analytics?.suspend();void analytics?.flush();};const analyticsTouch=e=>{if(e.isTrusted&&e.target?.closest?.('#ai-learning,#ai-crop,#panel,#slides,#caption'))analytics?.touch();};globalThis.addEventListener?.('pagehide',analyticsLeave);shadow.addEventListener('pointerdown',analyticsTouch,{passive:true});shadow.addEventListener('keydown',analyticsTouch,{passive:true});cleanupMounted=()=>{analytics?.suspend();globalThis.removeEventListener?.('pagehide',analyticsLeave);shadow.removeEventListener('pointerdown',analyticsTouch);shadow.removeEventListener('keydown',analyticsTouch);clearInterval(expiryTimer);clearInterval(heartbeatTimer);clearTimeout(quotaTimer);document.removeEventListener('visibilitychange',heartbeat);queueUsageRefresh=()=>{};refreshUI=null;changeListener=null;showAccount=()=>{};reloadAccess=()=>ensureAccess();};heartbeat();refresh();
   if(credential())usage().catch(e=>{$('gateway-status').textContent=e.message;});
 
   if($('sync-toggle')){
@@ -319,7 +324,7 @@ function create({request,getValue,setValue}){
 
  }
 
- return{speechStream:{supported:streamSupported,bindTransport:bindSpeechStreamTransport},study:{account:credential,identity:studyIdentity,clipLimits:studyClipLimits,save:(body,options)=>studyWrite('/v1/study/conversations',body,options),saveClip:(body,options)=>studyWrite('/v1/study/clips',body,options)},prompts:{account:credential,list:()=>call('/v1/prompts'),save:body=>call('/v1/prompts/save',body),remove:body=>call('/v1/prompts/delete',body)},transport,configured,credential,login,logout,call,ensureAccess,mount,destroy:()=>cleanupMounted(),canUse,requireFeature,statusSummary,openAccount:(message='')=>showAccount(message),features:()=>({webSearch:!configured()||getValue('gateway-capabilities-v1',{}).web_search===true})};
+ return{analytics,speechStream:{supported:streamSupported,bindTransport:bindSpeechStreamTransport},study:{account:credential,identity:studyIdentity,clipLimits:studyClipLimits,save:(body,options)=>studyWrite('/v1/study/conversations',body,options),saveClip:(body,options)=>studyWrite('/v1/study/clips',body,options)},prompts:{account:credential,list:()=>call('/v1/prompts'),save:body=>call('/v1/prompts/save',body),remove:body=>call('/v1/prompts/delete',body)},transport,configured,credential,login,logout,call,ensureAccess,mount,destroy:()=>{cleanupMounted();analytics?.destroy();},canUse,requireFeature,statusSummary,openAccount:(message='')=>showAccount(message),features:()=>({webSearch:!configured()||getValue('gateway-capabilities-v1',{}).web_search===true})};
 }
 return{create,baseURL,accessSummary};
 });

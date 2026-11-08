@@ -14,8 +14,10 @@ import time
 
 try:
     from .admin_api import Fault
+    from .pricing import TokenEstimate, pricing_catalog
 except ImportError:
     from admin_api import Fault
+    from pricing import TokenEstimate, pricing_catalog
 
 COST_NOTE = '按配置的输入/输出/音频/工具单价估算，未含缓存折扣/阶梯与供应商优惠，实际以账单为准。实际账单尚未接入；图片已计入输入 Token，不重复计费。'
 RATE_FIELDS = ('input_per_million', 'output_per_million', 'audio_per_minute', 'web_search_per_call')
@@ -105,10 +107,11 @@ def text_value(value, label, limit):
 
 
 def empty_metrics():
-    return {**{key: 0 for key in METRICS}, '_known': Decimal(0), 'priced_calls': 0, 'unpriced_calls': 0}
+    return {**{key: 0 for key in METRICS}, '_known': Decimal(0), '_token_estimate': TokenEstimate(), 'priced_calls': 0, 'unpriced_calls': 0}
 
 
 def add_call(target, call, cost):
+    target['_token_estimate'].add(call)
     target['requests'] += 1
     for key in ('input_tokens', 'output_tokens', 'total_tokens', 'web_search'):
         target[key] += call[key] or 0
@@ -123,8 +126,9 @@ def add_call(target, call, cost):
 
 
 def finish_metrics(value):
+    token_estimate = value.pop('_token_estimate').result()
     known = format(value.pop('_known').quantize(Decimal('.000001'), rounding=ROUND_HALF_UP), 'f')
-    return {**value, 'known_cost_cny': known,
+    return {**value, 'token_estimate': token_estimate, 'known_cost_cny': known,
             'estimated_cost_cny': known if value['unpriced_calls'] == 0 else None,
             'pricing_coverage': value['priced_calls'] / value['requests'] if value['requests'] else 1,
             'pricing_complete': value['unpriced_calls'] == 0, 'currency': 'CNY'}
@@ -319,4 +323,4 @@ class OperationsMixin:
             entry.pop('payload_hash', None); entry.pop('idempotency_key', None)
         total = finish_metrics(summary)
         total.update(users=len({r['user_id'] for r in people}), active_users=len({r['user_id'] for r in people if r['requests']}), received_amount_cny=format(sum((Decimal(r['amount_cny']) for r in credits if r['kind'] == 'manual_payment' and r['amount_cny'] is not None), Decimal(0)), 'f'), received_unknown_count=sum(1 for r in credits if r['kind'] == 'manual_payment' and r['amount_cny'] is None), gifted_requests=sum(r['request_credit'] for r in credits if r['kind'] == 'gift'))
-        return {'month': period, 'timezone': 'UTC', 'server_time': now, 'summary': total, 'users': people, 'models': models, 'alerts': alerts, 'cost_rates': rates, 'access_settings': self.access_settings(), 'credits': credits, 'cost_note': COST_NOTE, 'actual_billing_connected': False, 'quota_note': '使用量按所选 UTC 月统计；额度和权限使用当前基础配置加该月人工增额，历史基础额度变更尚未重建。'}
+        return {'month': period, 'timezone': 'UTC', 'server_time': now, 'summary': total, 'users': people, 'models': models, 'alerts': alerts, 'cost_rates': rates, 'pricing_catalog': pricing_catalog(), 'access_settings': self.access_settings(), 'credits': credits, 'cost_note': COST_NOTE, 'actual_billing_connected': False, 'quota_note': '使用量按所选 UTC 月统计；额度和权限使用当前基础配置加该月人工增额，历史基础额度变更尚未重建。'}

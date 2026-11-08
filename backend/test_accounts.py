@@ -1,5 +1,6 @@
 import time, sqlite3, unittest
 from backend import test_server as fixture
+from concurrent.futures import ThreadPoolExecutor
 from contextlib import closing
 
 class AccountTests(unittest.TestCase):
@@ -40,12 +41,39 @@ class AccountTests(unittest.TestCase):
         # Restoration does not revive a revoked session.
         self.fails(401,lambda:self.call('/v1/me',method='GET'))
         new=self.call('/v1/auth/login',{'email':'a@example.test','password':'long-test-password'})[2]['token']
-        self.call('/v1/admin/accounts',{'user_id':1,'action':'reset_password','password':'replacement-password'},owner)
+        for password in ('abc123','abc12-3'):
+            self.fails(400,lambda:self.call('/v1/admin/accounts',{'user_id':1,'action':'reset_password','password':password},owner))
+        self.call('/v1/me',headers={**self.headers,'Authorization':'Bearer '+new},method='GET')
+        self.call('/v1/admin/accounts',{'user_id':1,'action':'reset_password','password':'abc1234'},owner)
         self.fails(401,lambda:self.call('/v1/me',headers={**self.headers,'Authorization':'Bearer '+new},method='GET'))
         self.fails(401,lambda:self.call('/v1/auth/login',{'email':'a@example.test','password':'long-test-password'}))
-        self.assertTrue(self.call('/v1/auth/login',{'email':'a@example.test','password':'replacement-password'})[2]['token'])
+        self.assertTrue(self.call('/v1/auth/login',{'email':'a@example.test','password':'abc1234'})[2]['token'])
         actions=self.call('/v1/admin/overview',headers=owner,method='GET')[2]['actions']
-        self.assertEqual(actions[0]['action'],'reset_password');self.assertNotIn('replacement-password',str(actions))
+        self.assertEqual(actions[0]['action'],'reset_password');self.assertNotIn('abc1234',str(actions))
+
+    def test_concurrent_opening_preserves_the_first_account(self):
+        owner=self.owner()
+        account={'username':'new-student','email':'student@example.test','password':'abc12345','plan':'free'}
+        for password in ('abc123','abc123-','字母abc123','abc1234\n','a'*257):
+            self.fails(400,lambda:self.call('/v1/admin/users',{**account,'password':password},owner))
+
+        def create(limit):
+            try:
+                status,_,result=self.call('/v1/admin/users',{**account,'request_limit':limit},owner)
+                return status,result['user_id'],limit
+            except fixture.Fault as error:
+                return error.status,None,limit
+
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            results=sorted(pool.map(create,(1,2)))
+        self.assertEqual([result[0] for result in results],[200,409])
+        _,user_id,limit=results[0]
+        profile=self.call('/v1/auth/login',{'email':'new-student','password':'abc12345'})[2]
+        headers={**self.headers,'Authorization':'Bearer '+profile['token']}
+        me=self.call('/v1/me',headers=headers,method='GET')[2]
+        self.assertEqual(me['id'],user_id)
+        self.assertFalse(me['is_admin'])
+        self.assertEqual(me['usage']['request_limit'],limit)
     def test_admin_protection_and_validation(self):
         owner=self.owner()
         self.fails(403,lambda:self.call('/v1/admin/accounts',{'user_id':1,'action':'disable'}))
@@ -70,8 +98,8 @@ class AccountTests(unittest.TestCase):
 
     def test_free_account_cannot_bypass_paid_endpoints_with_positive_quota(self):
         owner=self.owner()
-        created=self.call('/v1/admin/users',{'plan':'free','username':'free-user','email':'free@example.test','password':'long-free-password','request_limit':100,'audio_limit':300,'learning':True,'translation':True,'speech':True},owner)[2]
-        login=self.call('/v1/auth/login',{'email':'free-user','password':'long-free-password'})[2]
+        created=self.call('/v1/admin/users',{'plan':'free','username':'free-user','email':'free@example.test','password':'abc1234','request_limit':100,'audio_limit':300,'learning':True,'translation':True,'speech':True},owner)[2]
+        login=self.call('/v1/auth/login',{'email':'free-user','password':'abc1234'})[2]
         headers={**self.headers,'Authorization':'Bearer '+login['token']}
         profile=self.call('/v1/me',headers=headers,method='GET')[2]
         self.assertEqual(profile['membership']['plan'],'free');self.assertFalse(profile['membership']['active'])
@@ -115,8 +143,8 @@ class AccountTests(unittest.TestCase):
         owner=self.owner()
         profiles=[]
         for name in ['trial-a','trial-b']:
-            created=self.call('/v1/admin/users',{'username':name,'email':name+'@example.test','password':'long-trial-password','plan':'trial','request_limit':1,'audio_limit':24,'expires':int(time.time())+3600},owner)[2]
-            login=self.call('/v1/auth/login',{'email':name,'password':'long-trial-password'})[2]
+            created=self.call('/v1/admin/users',{'username':name,'email':name+'@example.test','password':'abc12345','plan':'trial','request_limit':1,'audio_limit':24,'expires':int(time.time())+3600},owner)[2]
+            login=self.call('/v1/auth/login',{'email':name,'password':'abc12345'})[2]
             headers={**self.headers,'Authorization':'Bearer '+login['token']}
             me=self.call('/v1/me',headers=headers,method='GET')[2]
             self.assertEqual(me['membership']['state'],'trial');self.assertTrue(me['permissions']['learning'])

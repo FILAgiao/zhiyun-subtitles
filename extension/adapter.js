@@ -99,6 +99,12 @@ async function startExtension(run){
  // Hidden/navigated pages still invalidate even if they become visible again.
  window.addEventListener('pagehide',revoke);document.addEventListener('visibilitychange',()=>{if(!available())revoke();});
  globalThis.ZY_CLIENT_TYPE='chrome-extension';
+ const analyticsQueue=(action,value)=>chrome.runtime.sendMessage({type:'zy-analytics-queue',action,value}).then(result=>result?.value??null);
+ globalThis.ZY_ANALYTICS_STORAGE={
+  load:()=>analyticsQueue('load'),
+  setItem:(_,value)=>{void analyticsQueue('save',value).catch(()=>{});},
+  removeItem:()=>{void analyticsQueue('clear').catch(()=>{});}
+ };
  const saved=await chrome.storage.local.get(null);
  const GM_getValue=(key,fallback)=>Object.hasOwn(saved,key)?saved[key]:fallback;
  // Dispatch while this document is alive. Chaining the next browser operation to

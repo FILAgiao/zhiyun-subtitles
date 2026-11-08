@@ -2,6 +2,8 @@
 (() => {
   const WEB_KEY='gateway-web-session',STATE='gateway-extension-auth',READY='zy-portal-session-ready';
   if(window.top!==window||location.origin!=='https://47.77.182.216.sslip.io'||!/^\/gateway\/(?:study|account)(?:\/|\.html)?$/.test(location.pathname))return;
+  // A saved website login or explicit website logout wins over automatic handoff.
+  try{if(localStorage.getItem(WEB_KEY)||localStorage.getItem('gateway-web-logged-out'))return;}catch{}
   // Set the pending marker synchronously at document_start; portal.js waits
   // before reading sessionStorage, including when extension storage is slow.
   const finish=response=>{

@@ -1,6 +1,9 @@
 """Real temporary DB/API tests. No provider, email or production account access."""
 import base64
 import concurrent.futures
+import http.client
+import json
+import threading
 import struct
 import tempfile
 import unittest
@@ -9,7 +12,7 @@ from pathlib import Path
 from unittest.mock import patch
 from backend import clips_api
 from backend.admin_api import Fault
-from backend.server import Gateway
+from backend.server import Gateway, make_server
 
 
 def image(width=8,height=6):
@@ -58,6 +61,51 @@ class ClipsTests(unittest.TestCase):
         self.assertEqual(original,self.call('GET','/v1/study/clip-image?id=high-resolution')['image'])
         with patch.object(clips_api,'MAX_IMAGE',45):
             self.fault('invalid_clip_image',lambda:self.call('POST',body=self.payload('too-large',image=original)))
+
+    def test_binary_image_is_smaller_and_cache_validation_is_owner_scoped(self):
+        original = image(320,180)
+        self.call('POST',body=self.payload(image=original))
+        route='/v1/study/clip-image?id=one&format=png'
+        status,headers,raw=self.gateway.study_private('GET',route,self.headers,{},self.users[0],'zhiyun-subtitles')
+        self.assertEqual(200,status)
+        self.assertEqual(base64.b64decode(original[22:]),raw)
+        self.assertLess(len(raw),len(json.dumps({'image':original}).encode()))
+        self.assertEqual('image/png',headers['Content-Type'])
+        self.assertEqual('private, no-cache',headers['Cache-Control'])
+        self.assertIn('Authorization',headers['Vary'])
+        etag=headers['ETag'];conditional={**self.headers,'If-None-Match':etag}
+        self.assertEqual(304,self.gateway.study_private('GET',route,conditional,{},self.users[0],'zhiyun-subtitles')[0])
+        self.assertEqual(304,self.gateway.study_private('GET',route,{**conditional,'If-None-Match':'"other", W/'+etag},{},self.users[0],'zhiyun-subtitles')[0])
+        self.fault('clip_not_found',lambda:self.gateway.study_private('GET',route,conditional,{},self.users[1],'zhiyun-subtitles'))
+        self.call('POST',body=self.payload(image=image(321,180)))
+        changed=self.gateway.study_private('GET',route,conditional,{},self.users[0],'zhiyun-subtitles')
+        self.assertEqual(200,changed[0]);self.assertNotEqual(etag,changed[1]['ETag'])
+        self.call('DELETE','/v1/study/clips?id=one')
+        self.fault('clip_not_found',lambda:self.gateway.study_private('GET',route,conditional,{},self.users[0],'zhiyun-subtitles'))
+
+    def test_binary_http_transport_revalidates_only_after_authentication(self):
+        self.call('POST',body=self.payload())
+        login=self.gateway.handle('POST','/v1/auth/login',self.headers,{'email':'one@example.test','password':'test-only-password-2026'},'test')[2]
+        signed={**self.headers,'Authorization':'Bearer '+login['token']}
+        server=make_server(self.gateway,port=0)
+        thread=threading.Thread(target=server.serve_forever,daemon=True);thread.start()
+        self.addCleanup(server.server_close);self.addCleanup(server.shutdown)
+        connection=http.client.HTTPConnection('127.0.0.1',server.server_address[1],timeout=5)
+        self.addCleanup(connection.close)
+        route='/v1/study/clip-image?id=one&format=png'
+        connection.request('GET',route,headers=signed)
+        response=connection.getresponse();etag=response.getheader('ETag')
+        self.assertEqual(200,response.status);self.assertEqual('image/png',response.getheader('Content-Type'))
+        self.assertEqual(base64.b64decode(image()[22:]),response.read())
+        connection.request('GET',route,headers={**signed,'If-None-Match':etag})
+        response=connection.getresponse();self.assertEqual(304,response.status)
+        self.assertIsNone(response.getheader('Content-Length'));self.assertEqual(b'',response.read())
+        connection.request('GET',route,headers={**self.headers,'If-None-Match':etag})
+        response=connection.getresponse();self.assertEqual(401,response.status)
+        self.assertEqual('no-store',response.getheader('Cache-Control'));response.read()
+        connection.request('GET','/study')
+        response=connection.getresponse();self.assertEqual(200,response.status)
+        self.assertIn("img-src 'self' data: blob:",response.getheader('Content-Security-Policy'));response.read()
 
     def test_retry_upsert_is_idempotent_and_preserves_creation(self):
         self.call('POST',body=self.payload());created=self.call('GET')['items'][0]['created']

@@ -34,7 +34,7 @@ class StudyTests(unittest.TestCase):
         self.temp = tempfile.TemporaryDirectory()
         self.gateway = TestGateway(Path(self.temp.name) / 'test.sqlite3')
         self.headers = {'X-App-Id': STUDY_APP}
-        self.password = secrets.token_urlsafe(24)
+        self.password = secrets.token_hex(12)
 
     def tearDown(self):
         self.temp.cleanup()
@@ -175,7 +175,7 @@ class StudyTests(unittest.TestCase):
             before = dict(db.execute('SELECT * FROM users').fetchone())
             db.execute('DELETE FROM attempts')
         self.send()
-        self.password = secrets.token_urlsafe(24)
+        self.password = secrets.token_hex(12)
         self.assertEqual(first, self.register())
         with self.gateway.db() as db:
             after = dict(db.execute('SELECT * FROM users').fetchone())

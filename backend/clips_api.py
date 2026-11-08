@@ -1,6 +1,7 @@
 """Explicit private screenshot bookmarks, independent of model requests."""
 import base64
 import binascii
+import hashlib
 import re
 import struct
 import time
@@ -104,7 +105,7 @@ class ClipsMixin:
         return {'max_edge': MAX_IMAGE_EDGE, 'max_image': MAX_IMAGE,
                 'max_thumbnail_edge': 320, 'max_thumbnail': MAX_THUMB}
 
-    def clips_private(self, method, path, body, user, app):
+    def clips_private(self, method, path, body, user, app, headers=None):
         route = urlsplit(path)
         if route.path not in ('/v1/study/clips', '/v1/study/clip-image'):
             return None
@@ -122,6 +123,22 @@ class ClipsMixin:
                 row = db.execute('SELECT image FROM study_clips WHERE user=? AND app=? AND id=?', (*owner, identifier)).fetchone()
             if not row:
                 raise Fault(404, '收藏不存在或已删除', 'clip_not_found')
+            # Keep the JSON data URL for older extension clients. The web reader
+            # requests PNG bytes, avoiding base64's 33% expansion and JSON copies.
+            if query.get('format', [''])[0] == 'png':
+                image = bytes(row['image'])
+                digest = hashlib.sha256(str(owner).encode() + b'\0' + image).hexdigest()
+                etag = '"' + digest + '"'
+                response_headers = {'Content-Type': 'image/png', 'ETag': etag,
+                                    'Cache-Control': 'private, no-cache',
+                                    'Vary': 'Authorization, X-App-Id, Origin'}
+                # Authentication and owner lookup above must precede validation;
+                # a cached image is never served for a logged-out/deleted record.
+                validators = (headers or {}).get('If-None-Match', '')
+                if any(value.strip().removeprefix('W/') in (etag, '*')
+                       for value in validators.split(',')):
+                    return 304, response_headers, None
+                return 200, response_headers, image
             return 200, {}, {'image': data_url(row['image'])}
         if method == 'POST':
             if set(body) - {'id', 'title', 'course', 'courseKey', 'origin', 'note', 'position', 'image', 'thumbnail'}:

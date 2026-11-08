@@ -9,6 +9,8 @@ PUBLIC_PAGE_FILES={
     '/download.html':'download.html',
     '/download.css':'download.css',
     '/site.js':'site.js',
+    '/privacy':'privacy.html',
+    '/privacy.html':'privacy.html',
     **{route:page+'.html' for page in ('study','account') for route in ('/'+page,'/'+page+'/','/'+page+'.html')},
     **{'/'+name:name for name in ('clips.css','clips.js','portal.css','portal.js','study.css','study.js','account.css','account.js')},
     '/landing/brand-logo.png':'landing/brand-logo.png',

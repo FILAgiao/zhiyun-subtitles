@@ -1,4 +1,10 @@
 const test=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs');const {allowedRequest}=require('./extension/background.js');
+test('analytics is a bounded POST to the fixed backend without broadening admin access',()=>{
+ const url='https://47.77.182.216.sslip.io/gateway/v1/analytics/events';
+ const init=allowedRequest({url,method:'POST',data:JSON.stringify({events:[]}),headers:{Authorization:'Bearer test-only',Cookie:'not-forwarded'}});
+ assert.equal(init.method,'POST');assert.equal(init.credentials,'omit');assert.equal(init.headers.Cookie,undefined);
+ for(const request of [{url,method:'GET'},{url,method:'POST',data:'x'.repeat(65537)},{url:url+'?user=other',method:'POST',data:'{}'},{url:url.replace('/analytics/events','/admin/analytics'),method:'POST',data:'{}'},{url:url.replace('47.77.182.216.sslip.io','elsewhere.test'),method:'POST',data:'{}'}])assert.throws(()=>allowedRequest(request));
+});
 test('network bridge pins backend, strips extra headers and blocks secrets to providers',()=>{
 const init=allowedRequest({url:'https://47.77.182.216.sslip.io/gateway/v1/auth/login',method:'POST',data:'{}',headers:{Authorization:'Bearer user-session',Cookie:'secret-cookie','X-Client-Type':'forged'}});assert.equal(init.credentials,'omit');assert.equal(init.headers.Cookie,undefined);assert.equal(init.headers['X-Client-Type'],'chrome-extension');
 for(const url of ['https://ark.cn-beijing.volces.com/api/v3/responses','https://47.77.182.216.sslip.io/gateway/v1/admin/users','https://evil.test','http://video.cmc.zju.edu.cn/a','https://user:password@video.cmc.zju.edu.cn/a'])assert.throws(()=>allowedRequest({url}));
