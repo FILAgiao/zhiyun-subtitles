@@ -29,8 +29,7 @@ try:
   dest=remote+'/'+name
   try:
    info=sftp.stat(dest);assert stat.S_ISREG(info.st_mode)
-   with sftp.open(dest,'rb') as f:previous=f.read(info.st_size)
-   if previous!=data:changed.append(name)
+   changed.append(name)
    command('cp '+q(dest)+' '+q(backup+'/'+name));sftp.chmod(backup+'/'+name,0o600)
   except FileNotFoundError:changed.append(name)
   candidate=dest+'.candidate-'+stamp
