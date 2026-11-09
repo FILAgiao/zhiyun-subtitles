@@ -146,6 +146,24 @@ test('Summary parser tolerates fenced metadata and preserves ordinary answers',(
  for(const prefix of ['```J','```JS','```JSO','```JSON'])assert.equal(ai.splitLearningReply(prefix).text,'');
 });
 
+test('unpacks screenshot replies without changing Markdown or unrelated JSON',()=>{
+ const explanation='第一段说“截图”。\n\n**第二段**，保留代码 `\\n` 和公式 $\\frac{1}{2}$。';
+ const bare=JSON.stringify({explanation});
+ const fenced='```json\n'+JSON.stringify({title:'截图解读',explanation},null,2)+'\n```';
+ for(const [raw,title] of [[bare,''],[fenced,'截图解读'],['```json\n'+bare+'\n```','']]){
+  for(let i=1;i<raw.length;i++)assert.equal(ai.splitLearningReply(raw.slice(0,i)).text,'',raw.slice(0,i));
+  assert.deepEqual(ai.splitLearningReply(raw,{summarize:false}),{title,text:explanation});
+  assert.deepEqual(ai.splitLearningReply(raw,{final:true}),{title,text:explanation});
+ }
+ const long=JSON.stringify({explanation:'正文。'.repeat(300)});
+ assert.equal(ai.splitLearningReply(long.slice(0,-2)).text,'');
+ for(const text of ['```json\n'+bare+'\n```\n以上是示例。','{"explanation":"示例","id":42}','普通 Markdown 中的 `\\n`','{"explanation":"格式有误']){
+  assert.equal(ai.splitLearningReply(text,{final:true}).text,text);
+ }
+ const header='{"title":"只是示例"}\n下面是正文。';
+ assert.equal(ai.splitLearningReply(header,{final:true,summarize:false}).text,header);
+});
+
 test('Question titles remain short, single-line and Unicode-safe',()=>{
  assert.equal(ai.questionTitle('  梯度\n  下降\t原理  '),'梯度 下降 原理');
  assert.equal(ai.questionTitle('😀'.repeat(30)),'😀'.repeat(24)+'…');

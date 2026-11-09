@@ -43,7 +43,11 @@ function createPCMSource(video,options={}){
   if(stopped)return;
   source=context.createMediaStreamSource(stream);processor=context.createScriptProcessor(1024,Math.max(1,source.channelCount||2),1);gain=context.createGain();gain.gain.value=0;
   resampler=createResampler(context.sampleRate,SAMPLE_RATE,options.chunkSamples||CHUNK_SAMPLES,pcm=>callbacks.onChunk?.({pcm,videoStart:firstVideoTime,playbackRate:rate}));
-  const eventFailure=event=>fail('media_'+event.type,'课程播放状态已改变，请继续播放后重新同步');
+  const eventFailure=event=>{
+   // The initial switch to the capture rate can dispatch after listeners attach.
+   if(event.type==='ratechange'&&Math.abs(video.playbackRate-rate)<.0001)return;
+   fail('media_'+event.type,'课程播放状态已改变，请继续播放后重新同步');
+  };
   for(const name of ['pause','seeking','ratechange','waiting','emptied','ended']){video.addEventListener?.(name,eventFailure);listeners.push([name,eventFailure]);}
   processor.onaudioprocess=event=>{
    if(stopped)return;

@@ -153,9 +153,10 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
     // Legacy records do not have a saved title and must keep working with old replies.
     const legacyQuestion = '旧记录中的非常长的问题：我想知道模板与继承各自有什么适用场景，并保留搜索末尾独特关键词';
     await page.evaluate(legacyQuestion => {
+      const text = JSON.stringify({ explanation: '旧版回答，仍可继续追问。\n\n第二段。' });
       values['ai-question-v1:legacy'] = {
-        history: [{ role: 'user', text: legacyQuestion }, { role: 'assistant', text: '旧版回答，仍可继续追问。' }],
-        source: '文字提问', course: '程序设计 · 多态与继承', origin: 'summary-course', lastAnswer: null
+        history: [{ role: 'user', text: legacyQuestion }, { role: 'assistant', text }],
+        source: '截图提问', course: '程序设计 · 多态与继承', origin: 'summary-course', lastAnswer: { text }
       };
       values['ai-question-index-v1'].unshift({ id: 'legacy', title: legacyQuestion, questions: legacyQuestion, source: '文字提问', course: '程序设计 · 多态与继承', updated: Date.now() });
     }, legacyQuestion);
@@ -165,8 +166,10 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
     assert.equal(await records.locator('strong').textContent(), short(legacyQuestion));
     await records.click();
     assert.match(await log.textContent(), /旧版回答/);
+    assert.doesNotMatch(await log.textContent(), /explanation|\\n/);
     await send('现在换一个例子', 6);
     assert.match(await page.evaluate(() => exchanges[5].body.input[0].content), /首行只写/);
+    assert.equal(await page.evaluate(() => exchanges[5].body.input.find(turn => turn.role === 'assistant').content), '旧版回答，仍可继续追问。\n\n第二段。');
     await page.evaluate(() => { emit('旧式纯 Markdown 回答也可以继续显示。'); finish(); });
     await idle();
     assert.match(await log.textContent(), /旧式纯 Markdown/);
@@ -174,6 +177,34 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
     assert.equal(state.index[0].id, 'legacy');
     assert.equal(state.index[0].title, short(legacyQuestion));
     assert.equal(await page.evaluate(() => exchanges.length), 6);
+
+    const screenshotAnswer = '这是截图的第一段。\n\n**第二段**保留原有的 Markdown。';
+    const wrappedAnswer = JSON.stringify({ explanation: screenshotAnswer });
+    await page.evaluate(() => {
+      const image = document.createElement('canvas').toDataURL();
+      void assistant.send('解释这张截图', { image });
+    });
+    await page.waitForFunction(() => exchanges.length === 7);
+    assert.equal(await page.evaluate(() => exchanges[6].body.input.at(-1).content.at(-1).type), 'input_image');
+    await page.evaluate(text => emit(text), wrappedAnswer.slice(0, -2));
+    await page.waitForTimeout(110);
+    assert.equal(await log.locator('[data-role="assistant"]').count(), 0);
+    await page.evaluate(text => { emit(text); finish(); }, wrappedAnswer.slice(-2));
+    await idle();
+    const screenshotReply = log.locator('[data-role="assistant"]');
+    assert.deepEqual(await screenshotReply.locator('p').allTextContents(), ['这是截图的第一段。', '第二段保留原有的 Markdown。']);
+    assert.equal(await screenshotReply.locator('strong').textContent(), '第二段');
+    state = await snapshot();
+    assert.equal(state.saved.history.at(-1).text, screenshotAnswer);
+    assert.equal(state.saved.lastAnswer.text, screenshotAnswer);
+
+    await send('再解释第二段', 8);
+    await page.evaluate(() => {
+      emit('```json\n' + JSON.stringify({ explanation: '这是追问。\n\n这是补充。' }) + '\n```');
+      finish();
+    });
+    await idle();
+    assert.deepEqual(await screenshotReply.last().locator('p').allTextContents(), ['这是追问。', '这是补充。']);
 
     await host.locator('#ai-questions-back').click();
     await host.locator('#ai-questions-search').fill('');

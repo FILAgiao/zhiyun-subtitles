@@ -38,10 +38,12 @@ function installFixture({plans,phrase,native,streaming=false,holdAccess=false}){
    if(streamAction==='push'){
     if(body.sequence!==job.next)throw Error('Stream sequence is not continuous');
     if(!body.audio||body.audio.length>42668)throw Error('Invalid synthetic PCM chunk');
+    if(plan.streamError)return{status:503,headers:{'Content-Type':'application/json'},body:{error:'语音服务暂时不可用',error_code:plan.streamError}};
     job.next++;job.revision++;
     const event=(plan.streamEvents||[])[job.next-1]||{text:plan.text??state.phrase,definite:!plan.neverStable&&job.next>=2};
     job.result={text:event.text,utterances:[{text:event.text,definite:event.definite===true,start_time:0,end_time:2000,...(event.words?{words:event.words}:{})}]};
     if(plan.holdPush===job.next){const key=job.round+':push:'+body.sequence;return await new Promise(resolve=>state.pending[key]=()=>{delete state.pending[key];resolve(reply());});}
+    if(plan.completeEarly){job.state='complete';}
    }
    return reply();
   }
@@ -56,6 +58,7 @@ function installFixture({plans,phrase,native,streaming=false,holdAccess=false}){
   if(!job)throw Error('Query without original UUID');
   const plan=state.plans[job.round-1]||{},query=action==='query'?++job.queries:0;state.calls.push({action,requestId,round:job.round,query});
   const reply=()=>{
+   if(action==='query'&&plan.speechError)return{status:422,headers:{'Content-Type':'application/json'},body:{error_code:plan.speechError}};
    if(action==='submit'&&plan.submitTimeout||action==='query'&&(plan.queryTimeouts||0)>=query)return{timeout:true};
    if(action==='submit'&&!plan.submitTranscript)return{status:200,headers:{'Content-Type':'application/json','X-Api-Status-Code':'20000001'},body:{}};
    return{status:200,headers:{'Content-Type':'application/json','X-Api-Status-Code':'20000000'},body:{result:{utterances:[{text:plan.text??state.phrase,start_time:plan.startTime??0,...(plan.words?{words:plan.words}:{})}]}}};
@@ -72,20 +75,22 @@ function installFixture({plans,phrase,native,streaming=false,holdAccess=false}){
   window.GM_xmlhttpRequest=o=>{fixtureRequest(o.url,o).then(r=>r.timeout?o.ontimeout?.():o.onload?.({status:r.status,responseText:JSON.stringify(r.body),responseHeaders:Object.entries(r.headers).map(([k,v])=>k+': '+v).join('\r\n')}));return{abort(){o.onabort?.();}};};
  }
 }
-function mockAudio({currentTime=22,streaming=false}={}){
- const v=document.querySelector('video');let generated=0;
- Object.defineProperties(v,{duration:{get:()=>7200},currentTime:{get:()=>currentTime+(streaming?generated/16000:0),set(){}},paused:{get:()=>false},readyState:{get:()=>3},playbackRate:{get:()=>1,set(){}}});v.play=async()=>{};
- const timeout=window.setTimeout;window.setTimeout=(fn,ms,...args)=>timeout(fn,(ms===12000||ms===20000)&&!streaming?20:ms===2000?10:ms,...args);
- window.audioCounters={recordings:0,stopped:0,callbacks:0};
+function mockAudio({currentTime=22,streaming=false,startPaused=false,initialRate=1}={}){
+ const v=document.querySelector('video');let generated=0,rate=initialRate,paused=startPaused;
+ const timeout=window.setTimeout;
+ Object.defineProperties(v,{duration:{get:()=>7200},currentTime:{get:()=>currentTime+(streaming?generated/16000:0),set(){}},paused:{get:()=>paused},readyState:{get:()=>3},playbackRate:{get:()=>rate,set(value){if(value===rate)return;rate=value;timeout(()=>v.dispatchEvent(new Event('ratechange')),25);}}});
+ v.play=async()=>{paused=false;v.playbackRate=initialRate;};
+ window.setTimeout=(fn,ms,...args)=>timeout(fn,(ms===12000||ms===20000)&&!streaming?20:ms===2000?10:ms,...args);
+ window.audioCounters={recordings:0,stopped:0,callbacks:0,captureRates:[]};
  const track={stop(){audioCounters.stopped++;},clone(){return{stop(){audioCounters.stopped++;}};}};
- v.captureStream=()=>({getAudioTracks:()=>[track],getTracks:()=>[track]});window.MediaStream=class{constructor(tracks=[]){this.tracks=tracks;}getTracks(){return this.tracks;}};
+ v.captureStream=()=>{audioCounters.captureRates.push(rate);return{getAudioTracks:()=>[track],getTracks:()=>[track]};};window.MediaStream=class{constructor(tracks=[]){this.tracks=tracks;}getTracks(){return this.tracks;}};
  window.MediaRecorder=class{constructor(){this.mimeType='audio/webm';this.state='inactive';}start(){this.state='recording';audioCounters.recordings++;}stop(){this.state='inactive';this.ondataavailable({data:new Blob(['fixture'])});this.onstop();}};
  window.AudioContext=class{
   constructor(){this.sampleRate=16000;this.destination={};this.state='running';}
   async resume(){}async decodeAudioData(){return{duration:20};}async close(){}
   createMediaStreamSource(){return{channelCount:1,connect(){},disconnect(){}};}
   createGain(){return{gain:{value:0},connect(){},disconnect(){}};}
-  createScriptProcessor(){let timer;const processor={onaudioprocess:null,connect(){timer=setInterval(()=>{if(!processor.onaudioprocess)return;generated+=3200;audioCounters.callbacks++;processor.onaudioprocess({inputBuffer:{length:3200,numberOfChannels:1,getChannelData:()=>new Float32Array(3200).fill(.1)}});},40);},disconnect(){clearInterval(timer);}};return processor;}
+  createScriptProcessor(){let timer;const processor={onaudioprocess:null,connect(){if(initialRate!==1)timeout(()=>v.dispatchEvent(new Event('ratechange')),0);timer=setInterval(()=>{if(!processor.onaudioprocess)return;generated+=3200;audioCounters.callbacks++;processor.onaudioprocess({inputBuffer:{length:3200,numberOfChannels:1,getChannelData:()=>new Float32Array(3200).fill(.1)}});},40);},disconnect(){clearInterval(timer);}};return processor;}
  };
  window.OfflineAudioContext=class{createBufferSource(){return{connect(){},start(){}};}async startRendering(){return{getChannelData:()=>new Float32Array([.1,.2,.3])};}};
 }
@@ -95,13 +100,15 @@ function mockAudio({currentTime=22,streaming=false}={}){
  try{
   if(native){worker=context.serviceWorkers()[0]||await context.waitForEvent('serviceworker');await worker.evaluate(()=>chrome.storage.local.set({'cache-auto':false,'gateway-guide-no-remind-v2':true,'gateway-account-v1':{url:'https://47.77.182.216.sslip.io/gateway',token:'fixture-token'}}));}
   await context.route('**/*',r=>r.request().isNavigationRequest()?r.fulfill({contentType:'text/html; charset=utf-8',body:fixture}):r.abort());
-  async function open(plans,{currentTime=22,streaming=false,holdAccess=false}={}){
+  async function open(plans,{currentTime=22,streaming=false,holdAccess=false,startPaused=false,initialRate=1}={}){
    const page=await context.newPage(),errors=[],worlds=new Map();page.on('pageerror',e=>errors.push(e.message));let session;const setup={plans,phrase,native,streaming,holdAccess};
    if(native){await worker.evaluate(({code,setup})=>(0,eval)('('+code+')')(setup),{code:installFixture.toString(),setup});session=await context.newCDPSession(page);session.on('Runtime.executionContextCreated',e=>worlds.set(e.context.id,e.context));session.on('Runtime.executionContextDestroyed',e=>worlds.delete(e.executionContextId));session.on('Runtime.executionContextsCleared',()=>worlds.clear());await session.send('Runtime.enable');}
    await page.goto('https://classroom.zju.edu.cn/livingpage?tenant_code=112&course_id=speech-'+(++scenario)+'&sub_id=1');
-   if(!native){await page.evaluate(installFixture,setup);await page.evaluate(mockAudio,{currentTime,streaming});await page.addScriptTag({path:process.env.ZY_TEST_USERSCRIPT_PATH||'zhiyun-subtitles.user.js'});}
+   const audioSetup={currentTime,streaming,startPaused,initialRate};
+   if(!native){await page.evaluate(installFixture,setup);await page.evaluate(mockAudio,audioSetup);await page.addScriptTag({path:process.env.ZY_TEST_USERSCRIPT_PATH||'zhiyun-subtitles.user.js'});}
    const ui=page.locator('#zy-subtitle-host');await ui.locator('#sync-toggle').waitFor();
-   if(native){let world;for(const[id,info]of worlds){if(info.auxData?.isDefault)continue;try{const r=await session.send('Runtime.evaluate',{contextId:id,expression:'typeof ZYClassroomMedia',returnByValue:true});if(r.result.value==='object'){world=id;break;}}catch{}}assert.ok(world);await session.send('Runtime.evaluate',{contextId:world,expression:'('+mockAudio.toString()+')('+JSON.stringify({currentTime,streaming})+')',returnByValue:true});}
+   let world;
+   if(native){for(const[id,info]of worlds){if(info.auxData?.isDefault)continue;try{const r=await session.send('Runtime.evaluate',{contextId:id,expression:'typeof ZYClassroomMedia',returnByValue:true});if(r.result.value==='object'){world=id;break;}}catch{}}assert.ok(world);await session.send('Runtime.evaluate',{contextId:world,expression:'('+mockAudio.toString()+')('+JSON.stringify(audioSetup)+')',returnByValue:true});}
    await page.waitForTimeout(650);
    const evaluate=fn=>native?worker.evaluate(fn):page.evaluate(fn),calls=()=>evaluate(()=>speechFixture.calls);
    const pending=async key=>{const start=Date.now();while(Date.now()-start<8000){if((await evaluate(()=>Object.keys(speechFixture.pending))).includes(key))return;await page.waitForTimeout(20);}throw Error('Missing held '+key+'; calls='+JSON.stringify(await calls())+'; status='+await ui.locator('#align-status').textContent());};
@@ -109,7 +116,8 @@ function mockAudio({currentTime=22,streaming=false}={}){
    const syncKey='subtitle-sync:'+JSON.stringify(['speech-'+scenario,'1','112']);
    const saved=()=>native?worker.evaluate(key=>chrome.storage.local.get(key).then(values=>values[key]),syncKey):page.evaluate(key=>values[key],syncKey);
    const done=()=>page.waitForFunction(()=>document.getElementById('zy-subtitle-host').shadowRoot.getElementById('auto-align').textContent==='开始匹配');
-   return{page,ui,calls,pending,release,done,saved,accessCalls:()=>evaluate(()=>speechFixture.accessCalls),changeAccount:()=>native?worker.evaluate(()=>chrome.storage.local.set({'gateway-account-v1':{url:'https://47.77.182.216.sslip.io/gateway',token:'different-token'}})):page.evaluate(()=>values['gateway-account-v1']={url:'https://47.77.182.216.sslip.io/gateway',token:'different-token'}),start:()=>ui.locator('#sync-toggle').click(),offset:()=>ui.locator('#offset').inputValue(),status:()=>ui.locator('#align-status').textContent(),attempts:()=>ui.locator('#align-attempts li').allTextContents(),live:()=>ui.locator('#sync-live-status').textContent(),close:async()=>{assert.deepEqual(errors,[]);await page.close();}};
+   const audioState=()=>{const read=()=>({captureRates:audioCounters.captureRates,playbackRate:document.querySelector('video').playbackRate});return native?session.send('Runtime.evaluate',{contextId:world,expression:'('+read.toString()+')()',returnByValue:true}).then(r=>r.result.value):page.evaluate(read);};
+   return{page,ui,calls,pending,release,done,saved,audioState,accessCalls:()=>evaluate(()=>speechFixture.accessCalls),changeAccount:()=>native?worker.evaluate(()=>chrome.storage.local.set({'gateway-account-v1':{url:'https://47.77.182.216.sslip.io/gateway',token:'different-token'}})):page.evaluate(()=>values['gateway-account-v1']={url:'https://47.77.182.216.sslip.io/gateway',token:'different-token'}),start:()=>ui.locator('#sync-toggle').click(),offset:()=>ui.locator('#offset').inputValue(),status:()=>ui.locator('#align-status').textContent(),attempts:()=>ui.locator('#align-attempts li').allTextContents(),live:()=>ui.locator('#sync-live-status').textContent(),close:async()=>{assert.deepEqual(errors,[]);await page.close();}};
   }
   async function oneSubmission(s){const calls=await s.calls();assert.equal(calls.filter(x=>x.action==='submit').length,1);assert.equal(new Set(calls.filter(x=>['submit','query'].includes(x.action)).map(x=>x.requestId)).size,1);}
 
@@ -123,10 +131,27 @@ function mockAudio({currentTime=22,streaming=false}={}){
    const s=await open([{}],{streaming:true,holdAccess:true});await s.pending('access');await s.start();await s.changeAccount();await s.release('access');await s.done();await s.page.waitForTimeout(100);assert.deepEqual(await s.calls(),[]);assert.equal(await s.offset(),'0');await s.close();
   }
   {
-   const s=await open([{}]);await s.start();await s.done();assert.equal(await s.offset(),'2');assert.match(await s.status(),/匹配成功.*时间差 \+2 秒/);await oneSubmission(s);assert.equal((await s.attempts()).length,1);await s.close();
+   const s=await open([{}]);await s.start();await s.done();assert.equal(await s.offset(),'2');assert.match(await s.status(),/匹配成功.*时间差 \+2 秒/);await s.ui.locator('#sync-auto-indicator').waitFor({state:'hidden'});assert.equal(await s.ui.locator('#sync-complete').isHidden(),false);await oneSubmission(s);assert.equal((await s.attempts()).length,1);await s.close();
   }
   {
-   const s=await open([{text:unrelated}]);await s.ui.locator('#offset').evaluate(e=>{e.value='7';e.dispatchEvent(new Event('input',{bubbles:true}));});await s.start();await s.done();assert.equal(await s.offset(),'7');await oneSubmission(s);assert.match(await s.status(),/未.*可靠匹配|未找到可靠时间差/);assert.equal(await s.ui.locator('#sync-complete').isHidden(),true);await s.close();
+   const s=await open(Array.from({length:4},()=>({text:unrelated})),{initialRate:1.5});
+   await s.ui.locator('#offset').evaluate(e=>{e.value='7';e.dispatchEvent(new Event('input',{bubbles:true}));});
+   await s.start();await s.done();
+   assert.equal(await s.offset(),'7');assert.match(await s.status(),/已尝试 4 次.*未找到可靠时间差/);
+   assert.equal(new Set((await s.calls()).filter(x=>x.action==='submit').map(x=>x.requestId)).size,4);
+   assert.deepEqual(await s.audioState(),{captureRates:[1,1,1,1],playbackRate:1.5});await s.close();
+  }
+  {
+   const s=await open([{speechError:'speech_audio_empty'},{text:unrelated},{}],{startPaused:true,initialRate:2});
+   await s.start();await s.done();assert.equal(await s.offset(),'2');
+   assert.equal((await s.calls()).filter(x=>x.action==='submit').length,3);
+   assert.deepEqual(await s.audioState(),{captureRates:[1,1,1],playbackRate:2});await s.close();
+  }
+  {
+   const s=await open([{text:unrelated}]);await s.start();
+   await s.ui.locator('#align-status').filter({hasText:'即将继续听下一段'}).waitFor({state:'attached'});
+   await s.start();await s.done();await s.page.waitForTimeout(800);
+   await oneSubmission(s);assert.match(await s.status(),/已取消/);assert.equal(await s.offset(),'0');await s.close();
   }
   {
    const s=await open([{submitTranscript:true}]);await s.start();await s.done();assert.equal(await s.offset(),'2');await oneSubmission(s);assert.equal((await s.calls()).filter(x=>x.action==='query').length,0);await s.close();
@@ -138,7 +163,7 @@ function mockAudio({currentTime=22,streaming=false}={}){
    const s=await open([{holdQuery:true}]);await s.start();await s.pending('1:query');await s.ui.locator('#sync-toggle').click();await s.done();const cancelled=await s.status();await s.release('1:query');await s.page.waitForTimeout(100);assert.equal(await s.offset(),'0');assert.equal(await s.status(),cancelled);await oneSubmission(s);await s.close();
   }
   {
-   const s=await open([{holdQuery:true}]);await s.start();await s.pending('1:query');await s.page.evaluate(()=>location.hash='#/replay?course_id=speech-late-other-course');await s.page.waitForTimeout(650);await s.release('1:query');await s.page.waitForTimeout(150);assert.equal(await s.offset(),'0');assert.equal(await s.ui.locator('#sync-complete').isHidden(),true);assert.doesNotMatch(await s.status(),/匹配成功/);assert.deepEqual(await s.attempts(),[]);assert.equal(await s.live(),'');await s.close();
+   const s=await open([{holdQuery:true}]);await s.start();await s.pending('1:query');await s.ui.locator('#sync-auto-indicator').filter({hasText:'🔄'}).waitFor({state:'attached'});await s.page.evaluate(()=>location.hash='#/replay?course_id=speech-late-other-course');await s.page.waitForTimeout(650);await s.release('1:query');await s.page.waitForTimeout(150);assert.equal(await s.offset(),'0');assert.equal(await s.ui.locator('#sync-complete').isHidden(),true);assert.doesNotMatch(await s.status(),/匹配成功/);assert.deepEqual(await s.attempts(),[]);assert.equal(await s.live(),'');await s.close();
   }
   {
    const s=await open([{holdQuery:true}]);await s.start();await s.pending('1:query');await s.ui.locator('#offset').evaluate(e=>{e.value='7';e.dispatchEvent(new Event('input',{bubbles:true}));});await s.done();await s.release('1:query');await s.page.waitForTimeout(100);assert.equal(await s.offset(),'7');assert.match(await s.status(),/手动微调.*时间差 \+7 秒/);assert.equal((await s.saved()).manual,true);await oneSubmission(s);await s.close();
@@ -165,8 +190,19 @@ function mockAudio({currentTime=22,streaming=false}={}){
    const s=await open([{holdPush:2}],{streaming:true});await s.start();await s.pending('1:push:1');await s.ui.locator('#offset').evaluate(e=>{e.value='7';e.dispatchEvent(new Event('input',{bubbles:true}));});await s.done();await s.release('1:push:1');await s.page.waitForTimeout(100);assert.equal(await s.offset(),'7');assert.equal((await s.saved()).manual,true);assert.equal((await s.calls()).filter(x=>x.action==='create').length,1);await s.close();
   }
   {
-   const s=await open([{text:unrelated,neverStable:true}],{streaming:true});await s.start();await s.done();assert.equal(await s.offset(),'0');const calls=await s.calls();assert.equal(calls.filter(x=>x.action==='create').length,1);assert.equal(calls.filter(x=>x.action==='submit').length,0);assert.equal(calls.filter(x=>x.action==='finish').length,1);assert.equal(calls.filter(x=>x.action==='cancel').length,1);assert.match(await s.status(),/未找到可靠时间差/);await s.close();
+   const miss={text:unrelated,neverStable:true},s=await open([miss,...Array.from({length:3},()=>({...miss,completeEarly:true}))],{streaming:true});
+   await s.start();await s.done();assert.equal(await s.offset(),'0');const calls=await s.calls();
+   assert.equal(calls.filter(x=>x.action==='create').length,4);assert.equal(calls.filter(x=>x.action==='submit').length,0);
+   assert.equal(calls.filter(x=>x.action==='finish').length,1);assert.equal(calls.filter(x=>x.action==='cancel').length,4);
+   assert.match(await s.status(),/已尝试 4 次.*未找到可靠时间差/);await s.close();
   }
-  console.log('PASS '+(native?'real Edge MV3':'Chrome userscript')+': 18 scenarios; delayed initial profile is awaited by the first click; cancel/account switch before profile arrival send no audio; one file job or one continuous stream per click; first definite result immediately applies; partial results never move offsets; no automatic second/third recordings; same UUID query retries; cancel/course change/manual edit isolate late callbacks; screenshot fragment and homophones; one live log line; +/- collapse survives partial and final results; stream success stops audio and closes session.');
+  {
+   const s=await open([{streamError:'speech_stream_network_error'},{}],{streaming:true,startPaused:true,initialRate:2});
+   await s.start();await s.done();const calls=await s.calls();
+   assert.equal(calls.filter(x=>x.action==='create').length,2);assert.equal(calls.filter(x=>x.action==='cancel').length,2);
+   assert.equal(calls.filter(x=>x.action==='submit').length,0);assert.match(await s.status(),/匹配成功/);
+   assert.deepEqual(await s.audioState(),{captureRates:[1,1],playbackRate:2});await s.close();
+  }
+  console.log('PASS '+(native?'Edge MV3':'Chrome userscript')+': ASR retries, 1× capture and speed restoration, early success, four-attempt cap, cancellation, same-UUID polling, and timing alignment.');
  }finally{await context.close();await browser?.close();}
 })().catch(e=>{console.error(e);process.exitCode=1;});

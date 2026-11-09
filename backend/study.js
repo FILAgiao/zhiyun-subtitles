@@ -83,6 +83,7 @@
     finally{if(own===loadGeneration){$('study-refresh').disabled=false;$('conversation-list').removeAttribute('aria-busy');if(!records.length)$('conversation-list').replaceChildren();}}
   }
   async function open(id){
+    if(matchMedia('(min-width:701px)').matches){const top=reader.getBoundingClientRect().top;if(top<16)window.scrollBy({top:top-16,behavior:'instant'});}
     const own=++detailGeneration,auth=P.session().token,listGeneration=loadGeneration;selected=id;
     for(const button of list.querySelectorAll('button[data-id]'))button.setAttribute('aria-current',String(button.dataset.id===id));
     $('reader-content').hidden=true;$('reader-placeholder').hidden=true;$('reader-messages').replaceChildren();$('study-columns').classList.add('reading');reader.setAttribute('aria-busy','true');pendingDetail();notice('');

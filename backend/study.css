@@ -88,3 +88,5 @@
 @media(prefers-reduced-motion:reduce){
   .study-skeleton span:after{animation:none;display:none}
 .conversation-item button{transition:none}}
+
+@media(min-width:701px){#conversation-list{position:sticky;top:16px;max-height:calc(100dvh - 32px);overscroll-behavior:contain}}

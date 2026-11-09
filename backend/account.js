@@ -1,4 +1,4 @@
-/* Public manual channels stay closed unless a valid QR image actually loads. */
+/* Account application, including email registration when the gateway has mail configured. */
 'use strict';
 (() => {
   const P=window.ZYPortal,$=id=>document.getElementById(id),tab=new URLSearchParams(location.search).get('tab')==='recharge'?'recharge':'register',recharge=tab==='recharge';
@@ -29,5 +29,107 @@
     const use=me.usage||{},rows=[['本月调用剩余',use.request_limit,use.requests,'次'],['本月语音剩余',use.audio_limit,use.audio_seconds,'秒']];for(const [label,limit,used,unit] of rows){const wrap=document.createElement('div'),dt=document.createElement('dt'),dd=document.createElement('dd');dt.textContent=label;dd.textContent=Number.isFinite(limit)&&limit>=0&&Number.isFinite(used)?Math.max(0,Math.floor(limit-used)).toLocaleString('zh-CN')+' '+unit:'待核对';wrap.append(dt,dd);$('member-quota').append(wrap);}
     const expires=Number(me.membership?.expires||me.permissions?.expires||0);$('member-expiry').textContent=expires>0?'有效期至 '+P.date(expires*1000)+'（北京时间）':'未设置到期时间';
   }
-  $('channel-retry').addEventListener('click',channels);window.addEventListener('portal-session-change',member);P.ready.then(member);channels();
+  $('channel-retry').addEventListener('click', channels);
+  window.addEventListener('portal-session-change', member);
+  P.ready.then(member);
+  channels();
+
+  const registration = $('email-registration');
+  if (!registration || recharge) return;
+  const emailInput = $('register-email');
+  const codeInput = $('register-code');
+  const passwordInput = $('register-password');
+  const sendButton = $('register-send');
+  const submitButton = $('register-submit');
+  const status = $('register-status');
+  const resendAfter = new Map();
+  let mailReady = false, sending = false, registering = false, resendTimer;
+
+  function showRegistration() {
+    const visible = mailReady && !P.session().profile;
+    registration.hidden = !visible;
+    registration.closest('.channel-section').classList.toggle('email-registration-open', visible);
+  }
+
+  async function checkRegistration() {
+    try {
+      const capabilities = await P.api('/v1/study/capabilities', {auth: ''});
+      mailReady = capabilities.registration === true && capabilities.mail_configured === true;
+    } catch {
+      mailReady = false;
+    }
+    showRegistration();
+  }
+
+  function registrationNotice(message = '', error = false) {
+    status.textContent = message;
+    status.classList.toggle('error', error);
+  }
+
+  const emailAddress = () => emailInput.value.trim().toLowerCase();
+
+  function updateRegistrationButtons() {
+    clearTimeout(resendTimer);
+    const remaining = Math.max(0, Math.ceil(((resendAfter.get(emailAddress()) || 0) - Date.now()) / 1000));
+    sendButton.disabled = sending || registering || remaining > 0;
+    sendButton.textContent = sending ? '发送中…' : remaining ? `${remaining} 秒后重发` : '发送验证码';
+    submitButton.disabled = sending || registering;
+    submitButton.textContent = registering ? '注册中…' : '创建账号';
+    if (remaining) resendTimer = setTimeout(updateRegistrationButtons, 1000);
+  }
+
+  emailInput.addEventListener('input', () => {
+    codeInput.value = '';
+    registrationNotice();
+    updateRegistrationButtons();
+  });
+
+  sendButton.addEventListener('click', async () => {
+    if (sendButton.disabled || !mailReady || !emailInput.reportValidity()) return;
+    const email = emailAddress();
+    sending = true;
+    registrationNotice();
+    updateRegistrationButtons();
+    try {
+      const result = await P.api('/v1/auth/register-code', {method: 'POST', auth: '', body: {email}});
+      resendAfter.set(email, Date.now() + (result.retry_after || 60) * 1000);
+      if (email === emailAddress()) {
+        registrationNotice('请查收验证码，10 分钟内有效。也可以检查垃圾邮件。');
+        codeInput.focus();
+      }
+    } catch (error) {
+      if (email === emailAddress()) registrationNotice(error.message, true);
+    } finally {
+      sending = false;
+      updateRegistrationButtons();
+    }
+  });
+
+  registration.addEventListener('submit', async event => {
+    event.preventDefault();
+    if (submitButton.disabled || !mailReady) return;
+    const email = emailAddress();
+    const code = codeInput.value.trim();
+    const password = passwordInput.value;
+    registering = true;
+    registrationNotice();
+    updateRegistrationButtons();
+    try {
+      await P.api('/v1/auth/register', {method: 'POST', auth: '', body: {email, code, password}});
+      registration.reset();
+      registrationNotice('邮箱验证完成，请使用邮箱和密码登录。');
+      $('login-name').value = email;
+      P.openLogin();
+      $('login-status').textContent = '邮箱验证完成，请输入密码登录。';
+    } catch (error) {
+      registrationNotice(error.message, true);
+    } finally {
+      registering = false;
+      updateRegistrationButtons();
+    }
+  });
+
+  $('channel-retry').addEventListener('click', checkRegistration);
+  window.addEventListener('portal-session-change', showRegistration);
+  checkRegistration();
 })();

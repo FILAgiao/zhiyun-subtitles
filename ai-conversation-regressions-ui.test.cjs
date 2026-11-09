@@ -9,7 +9,7 @@ const {chromium}=require('playwright');
   await page.goto('https://conversation-regressions.test/');await page.addScriptTag({path:'ai-learning.js'});
   await page.evaluate(()=>{
    window.saved={'ai-learning-settings-v1':{mode:'feynman'}};window.account='alice-token';window.owner='https://gateway.test|id:alice';window.calls=[];window.cloud=[];window.failCloud=false;window.cloudGate=null;window.promptGate=null;
-   const shadow=document.querySelector('#host').attachShadow({mode:'open'});shadow.innerHTML='<style>[hidden]{display:none!important}</style><div id="settings-ai" hidden></div><nav id="compact-launcher"><button id="compact">上课爽</button></nav><button id="transcript-open" hidden>问题列表</button>';
+   const shadow=document.querySelector('#host').attachShadow({mode:'open'});shadow.innerHTML='<style>[hidden]{display:none!important}</style><div id="settings-ai" hidden></div><nav id="compact-launcher"><button id="compact">上课爽</button><button id="compact-history">AI对话</button></nav><button id="transcript-open" hidden>问题列表</button>';
    const canvas=document.createElement('canvas');canvas.width=300;canvas.height=180;const image=canvas.toDataURL();
    const prompts=[{id:'feynman',label:'简单',prompt:'FEYNMAN_LATEST',scope:'official'},{id:'technical',label:'专业',prompt:'TECHNICAL_LATEST',scope:'official'},{id:'exam',label:'考试',prompt:'EXAM_LATEST',scope:'official'}];
    window.ai=ZhiyunLearning.mountLearningAssistant({shadow,collapsedEntry:false,
@@ -50,6 +50,7 @@ const {chromium}=require('playwright');
   await page.evaluate(()=>answer('新的截图解释'));await page.waitForFunction(()=>!document.querySelector('#host').shadowRoot.getElementById('ai-send').disabled);
   await ui.locator('#ai-close').click();assert.equal(await ui.locator('#ai-resume').isVisible(),false,'classroom omits the separate resume bubble');
   await ui.locator('#compact-launcher').waitFor({state:'visible'});assert.ok((await ui.locator('#compact-launcher').boundingBox()).x>=0);
+  await ui.locator('#compact-history').click();assert.equal(await ui.locator('#ai-learning').isVisible(),true);assert.match(await log.innerText(),/新的截图解释/,'shortcut restores the ongoing conversation');assert.equal(await ui.locator('#ai-questions').isVisible(),false);await ui.locator('#ai-close').click();
   // Failed automatic sync keeps a visible retry, then saves the latest content.
   await page.waitForTimeout(550);await page.evaluate(()=>{failCloud=true;ai.open();ai.send('自动同步失败测试');});await page.waitForFunction(()=>calls.length===4);await page.evaluate(()=>answer('失败后仍保留的完整答案'));
   await page.waitForFunction(()=>document.querySelector('#host').shadowRoot.getElementById('ai-cloud-save').textContent==='重试同步');
