@@ -247,7 +247,11 @@ class StudyMixin(ClipsMixin):
                     salt = secrets.token_hex(16)
                     user = db.execute('INSERT INTO users(email,salt,password,username,is_admin,enabled) VALUES(?,?,?,?,0,1)',
                                       (email, salt, self.hash_password(password, salt), name)).lastrowid
-                    db.execute("INSERT INTO grants(user,app,requests,audio,enabled,learning,translation,speech,expires,plan) VALUES(?,?,0,0,1,0,0,0,NULL,'free')", (user, STUDY_APP))
+                    settings = self.registration_plan(db)
+                    options = self.grant_options(settings)
+                    db.execute('INSERT INTO grants(user,app,requests,audio,enabled,learning,translation,speech,expires,plan) VALUES(?,?,?,?,?,?,?,?,?,?)',
+                               (user, STUDY_APP, settings['request_limit'], settings['audio_limit'],
+                                *(options[key] for key in ('enabled', 'learning', 'translation', 'speech', 'expires', 'plan'))))
         if failure:
             raise Fault(400, '验证码无效或已过期，请重新获取', 'invalid_code')
         # Existing addresses get exactly the same response and are never reset or granted quota.

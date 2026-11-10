@@ -2,9 +2,13 @@
 import re, sqlite3, time, json, secrets
 
 PASSWORD_REQUIREMENTS = '密码为 7–256 位，仅使用英文字母或数字'
+DEFAULT_REGISTRATION_PLAN = {'plan': 'free', 'request_limit': 0, 'audio_limit': 0}
 
 def valid_new_password(password):
     return isinstance(password, str) and re.fullmatch(r'[A-Za-z0-9]{7,256}', password) is not None
+
+def valid_grant_limits(requests, audio):
+    return type(requests) is int and 0 <= requests <= 1000000 and type(audio) is int and 0 <= audio <= 36000000
 
 class Fault(Exception):
     def __init__(self,status,message,code='request_failed',retry_after=None):
@@ -30,6 +34,7 @@ def migrate(db):
 CREATE TABLE IF NOT EXISTS activity_sessions(hash TEXT PRIMARY KEY,user INTEGER,app TEXT,client TEXT,started INTEGER,last_seen INTEGER,ended INTEGER,expires INTEGER);
 CREATE INDEX IF NOT EXISTS activity_user_time ON activity_sessions(user,started);
 CREATE TABLE IF NOT EXISTS admin_actions(id INTEGER PRIMARY KEY,actor INTEGER,target INTEGER,app TEXT,action TEXT,created INTEGER);
+CREATE TABLE IF NOT EXISTS registration_plan(id INTEGER PRIMARY KEY CHECK(id=1),plan TEXT NOT NULL,request_limit INTEGER NOT NULL,audio_limit INTEGER NOT NULL);
 ''')
 
 class AdminMixin:
@@ -60,6 +65,7 @@ class AdminMixin:
         return {'calls':calls,'sessions':sessions}
     def admin_overview(self,period):
         with self.db() as db:
+            registration_plan = self.registration_plan(db)
             people=[dict(r) for r in db.execute('SELECT id,username,email,is_admin,enabled FROM users ORDER BY id DESC LIMIT 200')]
             for person in people:
                 grants=[dict(r) for r in db.execute('SELECT app,requests AS request_limit,audio AS audio_limit,enabled,learning,translation,speech,expires,plan FROM grants WHERE user=?',(person['id'],))]
@@ -67,10 +73,33 @@ class AdminMixin:
             total=dict(db.execute('SELECT COUNT(*) AS requests,COALESCE(SUM(total_tokens),0) AS total_tokens,COALESCE(SUM(input_tokens),0) AS input_tokens,COALESCE(SUM(output_tokens),0) AS output_tokens,COALESCE(SUM(seconds),0) AS audio_seconds,COALESCE(SUM(image_count),0) AS images,COALESCE(SUM(web_search),0) AS web_search FROM calls WHERE month=?',(period,)).fetchone())
         with self.db() as db:
             actions=[dict(r) for r in db.execute('SELECT a.actor,a.target,a.app,a.action,a.details,a.created,u.username AS actor_name,t.username AS target_name FROM admin_actions a LEFT JOIN users u ON u.id=a.actor LEFT JOIN users t ON t.id=a.target ORDER BY a.id DESC LIMIT 100')]
-        return {'month':period,'users':people,'totals':total,'actions':actions,**self.history()}
+        return {'month':period,'users':people,'totals':total,'actions':actions,'registration_plan':registration_plan,**self.history()}
+
+    def registration_plan(self, db):
+        row = db.execute('SELECT plan,request_limit,audio_limit FROM registration_plan WHERE id=1').fetchone()
+        return dict(row) if row else DEFAULT_REGISTRATION_PLAN.copy()
+
+    def save_registration_plan(self, actor, body):
+        plan = body.get('plan')
+        requests, audio = body.get('request_limit'), body.get('audio_limit')
+        if plan not in ('free', 'trial', 'pro', 'ultra'):
+            raise Fault(400, '请选择自助注册的默认套餐')
+        if not valid_grant_limits(requests, audio):
+            raise Fault(400, '额度参数无效')
+        if plan == 'free' and (requests or audio):
+            raise Fault(400, '基础免费套餐的调用和语音额度须为 0')
+        settings = {'plan': plan, 'request_limit': requests, 'audio_limit': audio}
+        with self.db() as db:
+            db.execute('BEGIN IMMEDIATE')
+            if settings != self.registration_plan(db):
+                db.execute('INSERT INTO registration_plan VALUES(1,?,?,?) ON CONFLICT(id) DO UPDATE SET plan=excluded.plan,request_limit=excluded.request_limit,audio_limit=excluded.audio_limit', (plan, requests, audio))
+                db.execute('INSERT INTO admin_actions(actor,target,app,action,created,details) VALUES(?,NULL,?,?,?,?)', (actor['id'], 'zhiyun-subtitles', 'registration_plan', int(time.time()), json.dumps(settings)))
+        return 200, {}, {'ok': True, 'registration_plan': settings}
+
     def admin_request(self,method,path,user,body,period):
         if not user['is_admin']: raise Fault(403,'仅管理员可访问')
         if method=='GET' and path=='/v1/admin/overview': return 200,{},self.admin_overview(period)
+        if method=='POST' and path=='/v1/admin/registration-plan': return self.save_registration_plan(user, body)
         if method=='POST' and path=='/v1/admin/accounts': return self.manage_account(user,body)
         if method=='POST' and path in ('/v1/admin/users','/v1/admin/grants'):
             # Older admin pages explicitly grant a positive quota but do not send plan.
@@ -85,7 +114,7 @@ class AdminMixin:
             options=self.grant_options(grant_body)
             if path.endswith('/grants') and body.get('user_id')==user['id'] and (not options['enabled'] or options['expires'] is not None): raise Fault(400,'不能停用或限制自己的管理账号有效期')
             app=body.get('app','zhiyun-subtitles');requests=body.get('request_limit',0 if options['plan']=='free' else 1000);audio=body.get('audio_limit',0 if options['plan']=='free' else 3600)
-            if not isinstance(app,str) or not re.fullmatch(r'[A-Za-z0-9_-]{1,64}',app) or type(requests) is not int or not 0<=requests<=1000000 or type(audio) is not int or not 0<=audio<=36000000: raise Fault(400,'APP 或额度参数无效')
+            if not isinstance(app,str) or not re.fullmatch(r'[A-Za-z0-9_-]{1,64}',app) or not valid_grant_limits(requests, audio): raise Fault(400,'APP 或额度参数无效')
             if path.endswith('/users'):
                 email=body.get('email','');password=body.get('password','');name=body.get('username','')
                 if not isinstance(email,str) or not 3<=len(email)<=254 or '@' not in email or any(ch.isspace() for ch in email) or not isinstance(name,str) or not 1<=len(name.strip())<=40 or any(ord(ch)<32 for ch in name): raise Fault(400,'请填写有效的用户名和邮箱')

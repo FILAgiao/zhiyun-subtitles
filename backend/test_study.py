@@ -181,6 +181,64 @@ class StudyTests(unittest.TestCase):
             after = dict(db.execute('SELECT * FROM users').fetchone())
         self.assertEqual(before, after)
 
+    def test_registration_default_is_admin_only_and_applies_at_account_creation(self):
+        admin_email = 'admin@example.test'
+        self.gateway.add_user(admin_email, self.password, STUDY_APP, admin=True)
+        route = '/v1/admin/registration-plan'
+
+        def handle(method, path, body=None, headers=None):
+            return self.gateway.handle(method, path, headers or self.headers, body or {}, 'plan-test')[2]
+
+        def login(email):
+            token = handle('POST', '/v1/auth/login', {'email': email, 'password': self.password})['token']
+            return {**self.headers, 'Authorization': 'Bearer ' + token}
+
+        old, pending, later = ('learner@example.test', 'pending@example.test', 'later@example.test')
+        self.send(old)
+        self.register(old)
+        old_headers, admin_headers = login(old), login(admin_email)
+        trial = {'plan': 'trial', 'request_limit': 2, 'audio_limit': 5}
+        forbidden = self.assertFault('request_failed', lambda: handle('POST', route, trial, old_headers))
+        self.assertEqual(403, forbidden.status)
+        for invalid in ({'plan': 'legacy'}, {'plan': 'free'}, {'request_limit': True}, {'audio_limit': -1}):
+            error = self.assertFault('request_failed', lambda: handle('POST', route, {**trial, **invalid}, admin_headers))
+            self.assertEqual(400, error.status)
+
+        self.send(pending)
+        self.assertEqual(trial, handle('POST', route, trial, admin_headers)['registration_plan'])
+        self.assertEqual(trial, handle('POST', route, trial, admin_headers)['registration_plan'])
+        overview = handle('GET', '/v1/admin/overview', headers=admin_headers)
+        self.assertEqual(trial, overview['registration_plan'])
+        self.assertEqual(1, sum(action['action'] == 'registration_plan' for action in overview['actions']))
+        self.register(pending)
+        pending_headers = login(pending)
+        pending_me = handle('GET', '/v1/me', headers=pending_headers)
+        self.assertEqual('trial', pending_me['membership']['plan'])
+        self.assertEqual((2, 5), (pending_me['usage']['request_limit'], pending_me['usage']['audio_limit']))
+        user_id = self.user(pending)['id']
+        self.assertFault('quota_exhausted', lambda: self.gateway.reserve(user_id, STUDY_APP, 'speech', 6, 'speech'))
+        self.gateway.reserve(user_id, STUDY_APP, 'speech', 5, 'speech')
+        self.gateway.reserve(user_id, STUDY_APP, 'learning', feature='learning')
+        self.assertFault('quota_exhausted', lambda: self.gateway.reserve(user_id, STUDY_APP, 'learning', feature='learning'))
+
+        pro = {'plan': 'pro', 'request_limit': 50, 'audio_limit': 600}
+        handle('POST', route, pro, admin_headers)
+        self.gateway = TestGateway(self.gateway.path)
+        self.send(later)
+        self.register(later)
+        later_me = handle('GET', '/v1/me', headers=login(later))
+        self.assertEqual('pro', later_me['membership']['plan'])
+        self.assertEqual((50, 600), (later_me['usage']['request_limit'], later_me['usage']['audio_limit']))
+
+        with self.gateway.db() as db:
+            db.execute('DELETE FROM attempts')
+        self.send(old)
+        self.register(old)
+        self.assertEqual('free', handle('GET', '/v1/me', headers=old_headers)['membership']['plan'])
+        pending_after = handle('GET', '/v1/me', headers=pending_headers)
+        self.assertEqual('trial', pending_after['membership']['plan'])
+        self.assertEqual((2, 5, 2), tuple(pending_after['usage'][key] for key in ('request_limit', 'audio_limit', 'requests')))
+
     def test_five_wrong_guesses_destroy_code(self):
         self.send()
         correct = self.gateway.outbox['learner@example.test']
