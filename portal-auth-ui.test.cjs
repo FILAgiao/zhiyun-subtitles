@@ -9,13 +9,14 @@ const BASE='https://47.77.182.216.sslip.io',WEB='fixture-scoped-website-session'
    const {target,manual}=scenario,failed=!!(scenario.failed||scenario.runtimeError||scenario.throws||scenario.empty);
    const context=await browser.newContext();const errors=[],calls=[];
    const result=scenario.failed?{ok:false,error:'handoff failed'}:{ok:true,token:manual?'':WEB};
-   const init=`${failed||manual?`sessionStorage.setItem('gateway-web-session',${JSON.stringify(manual?WEB:'previous-owner-token')});`:''}window.chrome={runtime:{sendMessage(message,callback){if(message.type!=='zy-portal-session')throw Error('unexpected bridge message');${scenario.throws?`throw Error('extension unavailable');`:''}${scenario.runtimeError?`window.chrome.runtime.lastError={message:'extension unavailable'};`:''}setTimeout(()=>callback(${scenario.runtimeError||scenario.empty?'undefined':JSON.stringify(result)}),180);}}};`;
+   const init=`${failed||manual?`sessionStorage.setItem('gateway-web-session',${JSON.stringify(manual?WEB:'previous-owner-token')});`:''}${manual?"localStorage.setItem('gateway-web-manual-login','1');":""}window.chrome={runtime:{sendMessage(message,callback){if(message.type!=='zy-portal-session')throw Error('unexpected bridge message');${scenario.throws?`throw Error('extension unavailable');`:''}${scenario.runtimeError?`window.chrome.runtime.lastError={message:'extension unavailable'};`:''}setTimeout(()=>callback(${scenario.runtimeError||scenario.empty?'undefined':JSON.stringify(result)}),180);}}};`;
    await context.addInitScript({content:init+'\n'+fs.readFileSync('extension/portal-bridge.js','utf8')});
    await context.route('**/*',async route=>{
     const request=route.request(),url=new URL(request.url());if(url.origin!==BASE)return route.abort();
     if(url.pathname.startsWith('/gateway/v1/')){
      calls.push({url:url.pathname,auth:request.headers().authorization});
      const reply=data=>route.fulfill({status:200,contentType:'application/json',body:JSON.stringify(data)});
+     if(url.pathname.endsWith('/study/capabilities'))return reply({registration:true,mail_configured:false});
      if(url.pathname.endsWith('/account/access'))return reply({registration:{enabled:false},recharge:{enabled:false}});
      assert.equal(request.headers().authorization,'Bearer '+WEB,'personal reads must wait for the bridge');
      if(url.pathname.endsWith('/me'))return reply({id:42,username:'插件登录的同学',email:'handoff@example.test',membership:{plan:'free'},usage:{requests:0,request_limit:0}});

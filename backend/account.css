@@ -10,4 +10,6 @@
 .registration-code button{min-height:44px;white-space:nowrap}
 .email-registration .muted{margin:6px 0 12px;font-size:12px}
 .email-registration .notice{margin:8px 0;font-size:13px}
-.email-registration-open #channel-closed,.email-registration-open #channel-notice{display:none}
+
+
+#channel-notice:empty,#portal-session-notice:empty{display:none}

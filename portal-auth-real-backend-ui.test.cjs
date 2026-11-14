@@ -21,6 +21,18 @@ with tempfile.TemporaryDirectory() as folder:
   await worker.evaluate(async({base,gateway,token})=>{const original=fetch;globalThis.bridgeCalls=[];globalThis.fetch=async(url,options)=>{if(!String(url).startsWith(gateway+'/v1/'))throw Error('Unexpected request');bridgeCalls.push(String(url));return original(base+'/gateway'+String(url).slice(gateway.length),options);};await chrome.storage.local.set({'gateway-account-v1':{url:gateway,token},'gateway-guide-no-remind-v2':true});},{base,gateway,token:setup.token});
   const routeErrors=[];let closing=false;await context.route(gateway+'/**',async route=>{try{const request=route.request(),u=new URL(request.url()),headers={...request.headers(),origin:base};delete headers.host;const response=await route.fetch({url:base+u.pathname+u.search,headers});await route.fulfill({response});}catch(error){if(!closing)routeErrors.push(error.message);await route.abort().catch(()=>{});}});
   const page=await context.newPage(),errors=[];page.on('pageerror',e=>errors.push(e.message));
+  await page.goto(gateway+'/');
+  await page.getByRole('link',{name:'我的账号与额度'}).filter({hasText:'本地示例同学'}).waitFor();
+  const originalChild=await page.evaluate(()=>localStorage.getItem('gateway-web-session'));
+  assert.ok(originalChild&&originalChild!==setup.token);
+  await page.reload();
+  await page.getByRole('link',{name:'我的账号与额度'}).waitFor();
+  assert.equal(await page.evaluate(()=>localStorage.getItem('gateway-web-session')),originalChild);
+  const revoked=await fetch(base+'/gateway/v1/auth/logout',{method:'POST',headers:{'Content-Type':'application/json','X-App-Id':'zhiyun-subtitles',Authorization:'Bearer '+originalChild},body:'{}'});
+  assert.equal(revoked.status,200);
+  await page.reload();
+  await page.getByRole('link',{name:'我的账号与额度'}).waitFor();
+  assert.notEqual(await page.evaluate(()=>localStorage.getItem('gateway-web-session')),originalChild);
   await page.goto(gateway+'/study?clip=native-handoff-one&login=1#clips');
   try{await page.waitForFunction(()=>window.ZYPortal?.session().profile?.username==='本地示例同学');}catch(error){console.log('Auth diagnostics',await page.evaluate(()=>({marker:sessionStorage.getItem('gateway-extension-auth'),hasToken:!!sessionStorage.getItem('gateway-web-session'),notice:ZYPortal.session().notice})),await worker.evaluate(()=>bridgeCalls));throw error;}
   assert.equal(await page.locator('#login-dialog').evaluate(d=>d.open),false);
@@ -30,7 +42,7 @@ with tempfile.TemporaryDirectory() as folder:
   await page.locator('#clip-close').click();await page.locator('[data-logout]').first().click();await page.waitForFunction(()=>!window.ZYPortal.session().profile);
   const me=await fetch(base+'/gateway/v1/me',{headers:{'X-App-Id':'zhiyun-subtitles',Authorization:'Bearer '+setup.token}});assert.equal(me.status,200,'website logout retains extension session');
   await page.goto(gateway+'/account?tab=recharge&login=1');await page.waitForFunction(()=>window.ZYPortal);await page.evaluate(()=>ZYPortal.ready);assert.equal(await page.evaluate(()=>!!ZYPortal.session().profile),false,'explicit website logout must survive navigation');assert.equal(await page.locator('#login-dialog').evaluate(d=>d.open),true);
-  assert.equal((await worker.evaluate(()=>bridgeCalls.filter(url=>url.endsWith('/v1/auth/web-session')).length)),1);
+  assert.equal((await worker.evaluate(()=>bridgeCalls.filter(url=>url.endsWith('/v1/auth/web-session')).length)),2);
   const out=await fetch(base+'/gateway/v1/auth/logout',{method:'POST',headers:{'Content-Type':'application/json','X-App-Id':'zhiyun-subtitles',Authorization:'Bearer '+setup.token},body:'{}'});assert.equal(out.status,200);
   await page.goto(gateway+'/study#clips');await page.waitForFunction(()=>window.ZYPortal);await page.evaluate(()=>ZYPortal.ready);assert.equal(await page.evaluate(()=>!!ZYPortal.session().profile),false,'revoked parent cannot silently log in');
   assert.deepEqual(routeErrors,[]);assert.deepEqual(errors,[]);closing=true;console.log('PASS: real Edge MV3 + actual Python scoped sessions + query/hash saved-image deep link; automatic login, account page, independent logout and expired-parent fallback. No production account/model calls.');

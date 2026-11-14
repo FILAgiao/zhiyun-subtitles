@@ -9,9 +9,9 @@ function fixture(){
  const request=async(url,options)=>{calls.push({url,options});return {ok:true,status:200,json:async()=>({token:'separate-private-web-session'})};};
  return {api,sender,request,account,calls};
 }
-test('website handoff is pinned to official top-level study and account pages',async()=>{
- for(const page of ['study','study/','study.html','account','account/','account.html'])assert.ok(portalLocation(BASE+'/'+page+'?login=1#clips'));
- for(const url of [BASE+'/',BASE+'/study/elsewhere','https://elsewhere.test/gateway/study','http://47.77.182.216.sslip.io/gateway/study','https://user:pass@47.77.182.216.sslip.io/gateway/study'])assert.equal(portalLocation(url),'');
+test('website handoff is pinned to official top-level home, study and account pages',async()=>{
+ for(const page of ['','index.html','download','download/','download.html','study','study/','study.html','account','account/','account.html'])assert.ok(portalLocation(BASE+'/'+page+'?login=1#clips'));
+ for(const url of [BASE+'/admin',BASE+'/study/elsewhere','https://elsewhere.test/gateway/study','http://47.77.182.216.sslip.io/gateway/study','https://user:pass@47.77.182.216.sslip.io/gateway/study'])assert.equal(portalLocation(url),'');
  const f=fixture();for(const sender of [{...f.sender,id:'other'},{...f.sender,frameId:1},{...f.sender,url:'https://elsewhere.test/'},{...f.sender,tab:{}}])await assert.rejects(createPortalSession(f.api,sender,f.request));assert.equal(f.calls.length,0);
  assert.throws(()=>allowedRequest({url:BASE+'/v1/auth/web-session',method:'POST',data:'{}'}),'the general all-sites proxy cannot mint website sessions');
 });

@@ -22,12 +22,32 @@ const fs=require('node:fs'),assert=require('node:assert/strict'),{chromium}=requ
  await page.evaluate(()=>videoTime=26);await page.waitForTimeout(350);assert.equal(await ui.locator('#slide-page').textContent(),'2 / 100');assert.match(await ui.locator('#original').textContent(),/second slide sentence/);
  await page.waitForTimeout(250);await ui.locator('#slides').hover();await ui.locator('#slide-thumbs-toggle').click();assert.equal(await ui.locator('.slide-thumb').count(),100);await page.waitForTimeout(150);assert.ok(await ui.locator('.slide-thumb img[src]').count()<20,'only visible/nearby thumbnails own image sources');for(let i=0;i<3;i++){const image=ui.locator('.slide-thumb img').nth(i);await image.evaluate(e=>e.decode());const size=await image.boundingBox(),ratio=await image.evaluate(e=>e.naturalWidth/e.naturalHeight);assert.ok(Math.abs(size.width/size.height-ratio)<0.03,'thumbnail frame follows original aspect ratio');}assert.equal(await ui.locator('#slide-toolbar #slide-ppt-sync').count(),1);assert.equal(await ui.locator('#study-sync #slide-ppt-sync').count(),0);await ui.locator('#ppt-sync-toggle').click();assert.ok(await ui.locator('#ppt-offset').isVisible());await ui.locator('#ppt-sync-toggle').click();assert.equal(await ui.locator('.slide-thumb[aria-current=page]').getAttribute('data-index'),'1');assert.match(await ui.locator('.slide-thumb').nth(1).textContent(),/00:00:20/);
  const outer=await ui.locator('#slides').boundingBox(),drawer=await ui.locator('#slide-thumbs').boundingBox();assert.ok(drawer.x>=outer.x&&drawer.x+drawer.width<=outer.x+outer.width);assert.ok(Math.abs(drawer.y+drawer.height-outer.y-outer.height+60)<3);assert.ok(drawer.y>outer.y);
+ const list=ui.locator('#slide-thumbs-list'),left=ui.locator('#slide-thumbs-left'),right=ui.locator('#slide-thumbs-right');
+ const scrollPosition=()=>list.evaluate(e=>e.scrollLeft);
+ const waitForScroll=(previous,direction)=>page.waitForFunction(({previous,direction})=>{
+  const list=document.getElementById('zy-subtitle-host').shadowRoot.getElementById('slide-thumbs-list');
+  return (list.scrollLeft-previous)*direction>0;
+ },{previous,direction});
+ assert.equal(await left.isDisabled(),true);await right.click();assert.ok(await scrollPosition()>0);
+ assert.equal(await left.isEnabled(),true);await left.click();assert.equal(await scrollPosition(),0);
+ await list.hover();const pageScroll=await page.evaluate(()=>window.scrollY);
+ await page.mouse.wheel(0,540);await waitForScroll(0,1);
+ const afterVertical=await scrollPosition();await page.mouse.wheel(220,0);await waitForScroll(afterVertical,1);
+ const afterHorizontal=await scrollPosition();await page.mouse.wheel(0,-220);await waitForScroll(afterHorizontal,-1);
+ assert.equal(await page.evaluate(()=>window.scrollY),pageScroll);
+ assert.equal(await ui.locator('#slide-page').textContent(),'2 / 100');
+ assert.equal(await ui.locator('#slide-follow').getAttribute('aria-pressed'),'true');
+ await page.mouse.wheel(0,50000);
+ await page.waitForFunction(()=>document.getElementById('zy-subtitle-host').shadowRoot.getElementById('slide-thumbs-right').disabled);
+ assert.equal(await left.isEnabled(),true);
+ await page.mouse.wheel(0,-50000);await page.waitForFunction(()=>document.getElementById('zy-subtitle-host').shadowRoot.getElementById('slide-thumbs-left').disabled);
  await ui.locator('.slide-thumb').nth(79).click();assert.equal(await ui.locator('#slide-page').textContent(),'80 / 100');assert.ok(await ui.locator('#slide-thumbs-list').evaluate(e=>e.scrollLeft>0));assert.equal(await page.evaluate(()=>videoTime),26);assert.equal(await page.evaluate(()=>seeks),0);assert.equal(await ui.locator('#slide-follow').getAttribute('aria-pressed'),'false');
  await page.evaluate(()=>videoTime=42);await page.waitForTimeout(350);assert.equal(await ui.locator('#slide-page').textContent(),'80 / 100');
  await ui.locator('#slides').hover();await ui.locator('#slide-follow').click();assert.equal(await ui.locator('#slide-page').textContent(),'2 / 100');assert.equal(await ui.locator('.slide-thumb[aria-current=page]').getAttribute('data-index'),'1');
  await ui.locator('.slide-thumb').nth(1).focus();await page.keyboard.press('Escape');assert.equal(await ui.locator('#slide-thumbs').isHidden(),true);assert.equal(await ui.locator('#slide-thumbs-toggle').getAttribute('aria-expanded'),'false');
  await page.waitForTimeout(250);await ui.locator('#slides').hover();await ui.locator('#slide-thumbs-toggle').click();await page.screenshot({path:'ppt-thumbnails-preview.png'});
- await ui.locator('#collapse').click();await page.setViewportSize({width:390,height:844});await page.waitForTimeout(200);const small=await ui.locator('#slides').boundingBox(),inside=await ui.locator('#slide-thumbs').boundingBox();assert.ok(inside.width<=small.width+1);assert.ok(Math.abs(inside.y+inside.height-small.y-small.height+60)<3);await ui.locator('#slide-thumbs-close').click();
+ await ui.locator('#collapse').click();await page.setViewportSize({width:390,height:844});await page.waitForTimeout(200);const small=await ui.locator('#slides').boundingBox(),inside=await ui.locator('#slide-thumbs').boundingBox();assert.ok(inside.width<=small.width+1);assert.ok(Math.abs(inside.y+inside.height-small.y-small.height+60)<3);
+ const narrowPosition=await scrollPosition();await right.click();assert.ok(await scrollPosition()>narrowPosition);await ui.locator('#slide-thumbs-close').click();
  await page.setViewportSize({width:1440,height:900});await ui.locator('#compact').click();await ui.locator('#slides').hover();await closePpt(ui);assert.equal(await ui.locator('#slide-thumbs').isHidden(),true);
  // Closing from manual browsing resets both live and persisted follow state.
  await ui.locator('#show-slides').click();await page.waitForTimeout(250);await ui.locator('#slides').hover();await ui.locator('#slide-thumbs-toggle').click();await ui.locator('.slide-thumb').nth(79).click();await ui.locator('#slide-thumbs-close').click();
@@ -41,5 +61,6 @@ const fs=require('node:fs'),assert=require('node:assert/strict'),{chromium}=requ
  await ui.locator('#slides').hover();await closePpt(ui);
  await page.evaluate(()=>{location.hash='#/replay?course_id=new';document.querySelector('#pane-ppt').innerHTML='<div class="tab-ppt"><img src="https://slides.test/new.svg"><span class="time">00:00:00</span></div>';});await page.waitForTimeout(650);
  if(await ui.locator('#panel').isHidden())await ui.locator('#compact').click();await ui.locator('#show-slides').click();await page.waitForTimeout(250);await ui.locator('#slides').hover();await ui.locator('#slide-thumbs-toggle').click();assert.equal(await ui.locator('.slide-thumb').count(),1);await page.waitForFunction(()=>document.getElementById('zy-subtitle-host').shadowRoot.querySelector('.slide-thumb img')?.getAttribute('src'));assert.match(await ui.locator('.slide-thumb img').getAttribute('src'),/new.svg/);
- assert.deepEqual(errors,[]);console.log('PASS: independent subtitle/PPT offsets, 100-page drawer, manual choice without seek, follow restoration, current-page highlight, Escape, narrow viewport, course isolation.');
+ assert.equal(await left.isHidden(),true);assert.equal(await right.isHidden(),true);
+ assert.deepEqual(errors,[]);console.log('PASS: independent subtitle/PPT offsets, 100-page drawer, wheel and arrows, manual choice without seek, follow restoration, current-page highlight, Escape, narrow viewport, course isolation.');
 }finally{await browser.close();}})().catch(e=>{console.error(e);process.exitCode=1;});

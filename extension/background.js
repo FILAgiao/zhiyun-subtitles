@@ -16,10 +16,10 @@ function allowedRequest(o,runtime=globalThis.chrome?.runtime){
  if(gateway){headers['X-App-Id']='zhiyun-subtitles';headers['X-Client-Type']='chrome-extension';headers['X-Client-Channel']=RELEASE_CHANNEL;const version=runtime?.getManifest?.()?.version||'';if(version)headers['X-Client-Version']=version;}
  return {url:u.href,method,headers,body:method==='POST'?o.data:undefined,credentials:school?'include':'omit',redirect:'error',cache:'no-store'};
 }
-// Only isolated content scripts on our two account pages can request a
+// Only isolated content scripts on allowlisted gateway pages can request a
 // separately scoped website session. No extension token crosses into the page.
 function portalLocation(raw){
- try{const u=new URL(raw);if(u.origin!==new URL(GATEWAY).origin||u.username||u.password||!/^\/gateway\/(?:study|account)(?:\/|\.html)?$/.test(u.pathname))return '';return u.origin+u.pathname+u.search;}catch{return '';}
+ try{const u=new URL(raw);if(u.origin!==new URL(GATEWAY).origin||u.username||u.password||!/^\/gateway\/(?:index\.html|(?:download|study|account)(?:\/|\.html)?)?$/.test(u.pathname))return '';return u.origin+u.pathname+u.search;}catch{return '';}
 }
 async function createPortalSession(api,sender,request=globalThis.fetch){
  if(sender?.id!==api.runtime.id||sender.frameId!==0||!Number.isInteger(sender.tab?.id)||!portalLocation(sender.url))throw Error('网页登录请求无效');

@@ -18,7 +18,7 @@ const owners={a:[record('a1','自己的问题 A','程序设计',hostile),record(
 (async()=>{
   let browser;await new Promise(resolve=>serve.listen(0,'127.0.0.1',resolve));const origin='http://127.0.0.1:'+serve.address().port;
   let onTimeoutRouteStart=null;
-  let apiCalls=[],loginMode='ok',meMode='ok',slowDetail=false,privateExpired=false,access={registration:{enabled:false},recharge:{enabled:false}};
+  let apiCalls=[],loginMode='ok',meMode='ok',slowDetail=false,privateExpired=false,mailMode='closed',access={registration:{enabled:false},recharge:{enabled:false}};
   const errors=[];
   try{
     browser=await chromium.launch({headless:true,executablePath:process.env.ZY_TEST_CHROME||'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe'});
@@ -30,6 +30,11 @@ const owners={a:[record('a1','自己的问题 A','程序设计',hostile),record(
       const endpoint=url.pathname.slice('/gateway/v1/'.length),auth=req.headers().authorization||'',owner=auth==='Bearer fixture-a'?'a':auth==='Bearer fixture-b'?'b':null;
       const body=req.postData()?req.postDataJSON():null;apiCalls.push({endpoint,auth,method:req.method(),body,url:url.search});
       const reply=(status,data)=>route.fulfill({status,contentType:'application/json',body:JSON.stringify(data)});
+      if(endpoint==='study/capabilities'){
+        if(mailMode==='failed')return reply(503,{error:'服务更新中'});
+        if(mailMode==='open')await new Promise(resolve=>setTimeout(resolve,600));
+        return reply(200,{registration:true,mail_configured:mailMode==='open'});
+      }
       if(endpoint==='account/access')return reply(200,access);
       if(endpoint==='auth/login'){
         if(loginMode==='timeout'){onTimeoutRouteStart?.();return new Promise(()=>{});}
@@ -95,10 +100,26 @@ const owners={a:[record('a1','自己的问题 A','程序设计',hostile),record(
     await page.locator('#conversation-delete').click();await page.locator('#delete-confirm').click();await page.locator('#empty-title').filter({hasText:'还没有保存'}).waitFor();assert.equal(owners.b.length,0);
     // Expired private sessions immediately remove the last user's content and local token.
     privateExpired=true;await page.locator('#study-refresh').click();await page.locator('#study-guest').waitFor({state:'visible'});assert.equal(await page.evaluate(()=>sessionStorage.getItem('gateway-web-session')),null);assert.match(await page.locator('#study-notice').textContent(),/登录已失效/);privateExpired=false;
-    // Initial restore keeps a useful error; HTML 401 still clears the invalid session.
-    meMode='html401';await page.evaluate(()=>{localStorage.removeItem('gateway-web-logged-out');sessionStorage.setItem('gateway-web-session','fixture-a');});await page.goto(origin+'/gateway/study');await page.locator('#study-notice').filter({hasText:'登录已失效'}).waitFor();assert.equal(await page.evaluate(()=>sessionStorage.getItem('gateway-web-session')),null);
+    // Proxy errors preserve the stored session for retry when the network recovers.
+    meMode='html401';await page.evaluate(()=>{localStorage.removeItem('gateway-web-logged-out');sessionStorage.setItem('gateway-web-session','fixture-a');});
+    await page.goto(origin+'/gateway/study');await page.locator('#study-notice').filter({hasText:'服务暂时不可用'}).waitFor();
+    assert.equal(await page.evaluate(()=>localStorage.getItem('gateway-web-session')),'fixture-a');
+    meMode='ok';await page.evaluate(()=>window.dispatchEvent(new Event('online')));await page.locator('#study-workspace').waitFor();
     meMode='network';await page.evaluate(()=>{localStorage.removeItem('gateway-web-logged-out');sessionStorage.setItem('gateway-web-session','fixture-a');});await page.goto(origin+'/gateway/study');await page.locator('#study-notice').filter({hasText:'无法连接'}).waitFor();assert.equal(await page.locator('#study-guest').isVisible(),true);
     meMode='ok';await page.evaluate(()=>{localStorage.removeItem('gateway-web-session');sessionStorage.removeItem('gateway-web-session');});
+    mailMode='open';
+    for(let i=0;i<2;i++){
+      await page.goto(origin+'/gateway/account?tab=register');
+      await page.locator('#channel-notice').filter({hasText:'正在核对'}).waitFor();
+      assert.equal(await page.locator('#channel-closed').isVisible(),false);
+      await page.locator('#email-registration').waitFor();
+      assert.equal(await page.locator('#channel-closed').isVisible(),false);
+    }
+    mailMode='failed';await page.goto(origin+'/gateway/account?tab=register');
+    await page.locator('#channel-notice').filter({hasText:'无法核对'}).waitFor();
+    assert.equal(await page.locator('#channel-closed').isVisible(),false);
+    mailMode='open';await page.locator('#channel-retry').click();await page.locator('#email-registration').waitFor();
+    mailMode='closed';
     // Manual registration and recharge are closed by default, on unsafe URLs, broken images or API failure.
     for(const tab of ['register','recharge']){
       await page.goto(origin+'/gateway/account?tab='+tab);await page.locator('#channel-notice').filter({hasText:'正在核对'}).waitFor({state:'hidden'}).catch(()=>{});await page.locator('#channel-closed h3').filter({hasText:'暂未开放'}).waitFor();assert.equal(await page.locator('#channel-open').isVisible(),false);

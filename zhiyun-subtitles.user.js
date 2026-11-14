@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         浙大上课爽
 // @namespace    zhiyunzimu.local
-// @version      0.20.97
+// @version      0.20.99
 // @description  网课不硬扛，浙大上课爽！智云课堂同步字幕、PPT 讲解与本机缓存。
 // @match        https://*/*
 // @match        http://*/*
@@ -2665,7 +2665,7 @@ return {create,opaque,courseKey,MAX_EVENTS,MAX_BATCH};
 (function(root,factory){const api=factory();if(typeof module==='object'&&module.exports)module.exports=api;else root.ZYGateway=api;})(globalThis,function(){
 'use strict';
 const DEFAULT_ORIGIN="https://47.77.182.216.sslip.io/gateway";
-const CLIENT_VERSION='0.20.97';
+const CLIENT_VERSION='0.20.99';
 function clientHeaders(){return {'X-Client-Version':CLIENT_VERSION,'X-Client-Channel':'userscript'};}
 const KEY='gateway-account-v1',APP='zhiyun-subtitles',CLIENT=globalThis.ZY_CLIENT_TYPE||'userscript';
 function baseURL(value){const u=new URL(String(value).trim());if(u.username||u.password||u.search||u.hash||!['/','/gateway','/gateway/'].includes(u.pathname)||(u.protocol!=='https:'&&!(u.protocol==='http:'&&['localhost','127.0.0.1'].includes(u.hostname))))throw Error('请填写 HTTPS 服务地址；本机调试可使用 http://127.0.0.1:8080');return u.origin+(u.pathname==='/'?'':'/gateway');}
@@ -3525,7 +3525,14 @@ const ZY_ONBOARDING_ARTWORK="data:image/webp;base64,UklGRvzlBwBXRUJQVlA4WAoAAAAw
     #slide-toolbar #slide-ppt-sync label{display:inline-flex;align-items:center;gap:3px;margin:0;color:#eee;font-size:12px}
     #slide-toolbar #ppt-offset{width:64px;max-width:none;padding:4px;background:#222b26;color:#fff;border:1px solid #ffffff40;border-radius:5px;font-size:12px}
     #ppt-sync-hint{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap}
-    #slide-thumbs-list{display:flex;gap:8px;flex:none;min-height:0;align-items:flex-start;overflow-x:auto;overflow-y:hidden;overscroll-behavior:contain;padding:8px;touch-action:pan-x}
+    #slide-thumbs-strip{display:grid;grid-template-columns:36px minmax(0,1fr) 36px;align-items:center;flex:none}
+    #slide-thumbs-strip .slide-thumbs-arrow{width:32px;height:40px;margin:0;justify-self:center;padding:0;border:1px solid #ffffff40;border-radius:9px;background:#28352f;color:#fff;font-size:22px}
+    #slide-thumbs-strip .slide-thumbs-arrow:hover:not(:disabled){background:#3d5247}
+    #slide-thumbs-strip .slide-thumbs-arrow:disabled{opacity:.35}
+    #slide-thumbs-strip .slide-thumbs-arrow:focus-visible{outline:2px solid #fff;outline-offset:0}
+    #slide-thumbs-strip:not([data-overflow]){grid-template-columns:0 minmax(0,1fr) 0}
+    #slide-thumbs-strip:not([data-overflow]) .slide-thumbs-arrow{visibility:hidden}
+    #slide-thumbs-list{display:flex;gap:8px;min-width:0;align-items:flex-start;overflow-x:auto;overflow-y:hidden;overscroll-behavior:contain;padding:8px;touch-action:pan-x}
     .slide-thumb{display:block;flex:0 0 auto;width:auto;margin:0;padding:6px;border:2px solid transparent;border-radius:8px;background:#ffffff0d;color:#eee;text-align:left;cursor:pointer}
     .slide-thumb:hover{background:#ffffff20}
     .slide-thumb[aria-current=page]{border-color:#a8dbb9;background:#a8dbb920}
@@ -3549,7 +3556,14 @@ const ZY_ONBOARDING_ARTWORK="data:image/webp;base64,UklGRvzlBwBXRUJQVlA4WAoAAAAw
   <button id="compact" hidden aria-label="展开字幕设置">🌱 字幕</button>
   <section id="slides" hidden aria-label="课程幻灯片">
     <div id="slide-viewport" tabindex="0" aria-label="PPT 悬浮窗，拖动图片移动窗口"><img id="slide-image" draggable="false" alt="课程 PPT"></div>
-    <aside id="slide-thumbs" hidden aria-label="PPT 缩略图"><header><strong>快速选页</strong><button id="slide-thumbs-close" aria-label="收起 PPT 缩略图">↓ 收起</button></header><div id="slide-thumbs-list" role="navigation" aria-label="选择 PPT 页面"></div></aside>
+    <aside id="slide-thumbs" hidden aria-label="PPT 缩略图">
+      <header><strong>快速选页</strong><button id="slide-thumbs-close" aria-label="收起 PPT 缩略图">↓ 收起</button></header>
+      <div id="slide-thumbs-strip">
+        <button id="slide-thumbs-left" class="slide-thumbs-arrow" type="button" aria-label="向左滚动缩略图" aria-controls="slide-thumbs-list" disabled>‹</button>
+        <div id="slide-thumbs-list" role="navigation" aria-label="选择 PPT 页面"></div>
+        <button id="slide-thumbs-right" class="slide-thumbs-arrow" type="button" aria-label="向右滚动缩略图" aria-controls="slide-thumbs-list" disabled>›</button>
+      </div>
+    </aside>
     <nav id="slide-toolbar" aria-label="PPT 翻页"><button id="slide-prev">← 上页</button><span id="slide-page"></span><button id="slide-next">下页 →</button><button id="slide-thumbs-toggle" aria-label="展开 PPT 缩略图" aria-expanded="false" aria-controls="slide-thumbs">▣ 选页 ↑</button><button id="slide-follow" aria-pressed="true">✓ 跟随老师</button><span id="slide-ppt-sync" hidden role="group" aria-label="PPT 时间校准"><button id="ppt-align-page" title="老师刚换到此页时暂停视频，选中对应页后点击校准">此页刚开始</button><label><input id="ppt-offset" aria-label="PPT 偏移秒数" title="正数延后，负数提前；上下键每次调整 1 秒" type="number" min="-3600" max="3600" step="1" value="0">秒</label><span id="ppt-sync-hint" role="status"></span></span><button id="ppt-sync-toggle" type="button" aria-label="展开 PPT 时间校准" aria-expanded="false" aria-controls="slide-ppt-sync">＋</button><button id="slide-close" hidden aria-hidden="true" tabindex="-1">关闭 PPT</button></nav><button id="slide-resize" aria-label="调整 PPT 窗口大小" title="拖拽缩放；方向键微调">◢</button>
     <button class="slide-edge" data-edge="left" aria-label="调整 PPT 左边缘"></button><button class="slide-edge" data-edge="right" aria-label="调整 PPT 右边缘"></button><button class="slide-edge" data-edge="top" aria-label="调整 PPT 上边缘"></button><button class="slide-edge" data-edge="bottom" aria-label="调整 PPT 下边缘"></button>
   </section>
@@ -3992,9 +4006,34 @@ const ZY_ONBOARDING_ARTWORK="data:image/webp;base64,UklGRvzlBwBXRUJQVlA4WAoAAAAw
     splitStyles=null; splitVideo=null;layoutMode='video';$('caption-custom').checked=false;$('show-slides').textContent='看 PPT';
   }
   let slideThumbsEntries=null,slideThumbsCourse=null,slideThumbsObserver=null,slideThumbsActive=-1;
+  const slideThumbStrip=$('slide-thumbs-strip'),slideThumbList=$('slide-thumbs-list');
+  const slideThumbLeft=$('slide-thumbs-left'),slideThumbRight=$('slide-thumbs-right');
+  function updateSlideThumbScroll() {
+    if($('slide-thumbs').hidden || !slideThumbStrip.clientWidth)return;
+    slideThumbStrip.toggleAttribute('data-overflow',slideThumbList.scrollWidth>slideThumbStrip.clientWidth);
+    const remaining=slideThumbList.scrollWidth-slideThumbList.clientWidth-slideThumbList.scrollLeft;
+    slideThumbLeft.disabled=slideThumbList.scrollLeft<=1;
+    slideThumbRight.disabled=remaining<=1;
+  }
+  function scrollSlideThumbs(direction) {
+    slideThumbList.scrollLeft+=direction*Math.max(1,Math.round(slideThumbList.clientWidth*.8));
+    updateSlideThumbScroll();
+  }
+  slideThumbLeft.onclick=()=>scrollSlideThumbs(-1);
+  slideThumbRight.onclick=()=>scrollSlideThumbs(1);
+  slideThumbList.addEventListener('scroll',updateSlideThumbScroll,{passive:true});
+  new ResizeObserver(()=>requestAnimationFrame(updateSlideThumbScroll)).observe(slideThumbStrip);
+  slideThumbStrip.addEventListener('wheel',event=>{
+    if(event.ctrlKey || event.metaKey || !slideThumbStrip.hasAttribute('data-overflow'))return;
+    const delta=Math.abs(event.deltaX)>Math.abs(event.deltaY)?event.deltaX:event.deltaY;
+    if(!delta)return;
+    const unit=event.deltaMode===1?16:event.deltaMode===2?slideThumbList.clientWidth:1;
+    event.preventDefault();
+    slideThumbList.scrollLeft+=delta*unit;
+  },{passive:false});
   function updateSlideThumbs() {
     if($('slide-thumbs').hidden)return;
-    const list=$('slide-thumbs-list');
+    const list=slideThumbList;
     if(slideEntries!==slideThumbsEntries||slideCourse!==slideThumbsCourse) {
       slideThumbsObserver?.disconnect();slideThumbsObserver=new IntersectionObserver(entries=>{for(const entry of entries){const img=entry.target;if(entry.isIntersecting){if(img.getAttribute('src')!==img.dataset.src)img.src=img.dataset.src;}else img.removeAttribute('src');}},{root:list,rootMargin:'0px 220px',threshold:0});
       const originals=slideEntries.map(slide=>slide.image),fragment=document.createDocumentFragment();
@@ -4003,27 +4042,30 @@ const ZY_ONBOARDING_ARTWORK="data:image/webp;base64,UklGRvzlBwBXRUJQVlA4WAoAAAAw
         button.className='slide-thumb';button.type='button';button.dataset.index=index;
         const time=Number.isFinite(slide.time)?' · '+stamp(slide.time).split(',')[0]:'';
         label.textContent='第 '+(index+1)+' 页'+time;
-        button.setAttribute('aria-label',label.textContent);image.alt='第 '+(index+1)+' 页 PPT';image.loading='lazy';image.decoding='async';image.draggable=false;image.dataset.src=slide.url;const original=originals[index];const fit=ratio=>{const width=Math.min(220,96*ratio);image.style.width=width+'px';image.style.height=width/ratio+'px';button.style.width=(width+16)+'px';};fit(original?.naturalWidth/original?.naturalHeight||4/3);image.onload=()=>{if(image.naturalHeight)fit(image.naturalWidth/image.naturalHeight);};
+        button.setAttribute('aria-label',label.textContent);image.alt='第 '+(index+1)+' 页 PPT';image.loading='lazy';image.decoding='async';image.draggable=false;image.dataset.src=slide.url;const original=originals[index];const fit=ratio=>{const width=Math.min(220,96*ratio);image.style.width=width+'px';image.style.height=width/ratio+'px';button.style.width=(width+16)+'px';};fit(original?.naturalWidth/original?.naturalHeight||4/3);
+        image.onload=()=>{if(image.naturalHeight){fit(image.naturalWidth/image.naturalHeight);updateSlideThumbScroll();}};
         button.append(image,label);fragment.append(button);
       });
       list.replaceChildren(fragment);slideThumbsEntries=slideEntries;slideThumbsCourse=slideCourse;for(const img of list.querySelectorAll('img'))slideThumbsObserver.observe(img);slideThumbsActive=-1;
     }
     if(slideThumbsActive===slideIndex)return;
+    updateSlideThumbScroll();
     list.children[slideThumbsActive]?.removeAttribute('aria-current');
     const selected=list.children[slideIndex];selected?.setAttribute('aria-current','page');slideThumbsActive=slideIndex;
     if(selected) {
-      const left=selected.offsetLeft-list.offsetLeft,right=left+selected.offsetWidth;
-      if(left<list.scrollLeft)list.scrollLeft=left;
-      else if(right>list.scrollLeft+list.clientWidth)list.scrollLeft=right-list.clientWidth;
+      const bounds=selected.getBoundingClientRect(),left=list.getBoundingClientRect().left+list.clientLeft;
+      const right=left+list.clientWidth;
+      if(bounds.left<left)list.scrollLeft+=bounds.left-left;
+      else if(bounds.right>right)list.scrollLeft+=bounds.right-right;
     }
   }
   function setSlideThumbsOpen(open) {
     $('slide-thumbs').hidden=!open;$('slide-thumbs-toggle').setAttribute('aria-expanded',String(open));
-    if(open){slideThumbsActive=-1;updateSlideThumbs();slideThumbsObserver?.disconnect();for(const img of $('slide-thumbs-list').querySelectorAll('img'))slideThumbsObserver?.observe(img);}else for(const img of $('slide-thumbs-list').querySelectorAll('img'))img.removeAttribute('src');
+    if(open){slideThumbsActive=-1;updateSlideThumbs();slideThumbsObserver?.disconnect();for(const img of slideThumbList.querySelectorAll('img'))slideThumbsObserver?.observe(img);}else for(const img of slideThumbList.querySelectorAll('img'))img.removeAttribute('src');
   }
   $('slide-thumbs-toggle').onclick=()=>setSlideThumbsOpen($('slide-thumbs').hidden);
   $('slide-thumbs-close').onclick=()=>{setSlideThumbsOpen(false);$('slide-thumbs-toggle').focus();};
-  $('slide-thumbs-list').onclick=event=>{
+  slideThumbList.onclick=event=>{
     const button=event.target.closest('.slide-thumb');if(!button)return;
     slideFollowing=false;slideIndex=Number(button.dataset.index);renderSlide();
   };

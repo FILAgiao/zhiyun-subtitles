@@ -2,12 +2,20 @@
 'use strict';
 (() => {
   const P=window.ZYPortal,$=id=>document.getElementById(id),tab=new URLSearchParams(location.search).get('tab')==='recharge'?'recharge':'register',recharge=tab==='recharge';
-  let channelGeneration=0;
+  let channelGeneration=0, mailReady=false;
+  const registration=$('email-registration');
   document.querySelectorAll('[data-nav="account"]').forEach(a=>a.setAttribute('aria-current','page'));
   $('tab-register').removeAttribute('aria-current');$('tab-'+tab).setAttribute('aria-current','page');
   $('channel-title').textContent=recharge?'充值 / 增加额度':'申请账号';$('channel-number').textContent=recharge?'02':'01';$('channel-eyebrow').textContent=recharge?'为接下来的学习准备':'申请自己的学习账号';
   $('channel-closed-copy').textContent=recharge?'充值渠道准备中，开放后会在这里提供办理方式。':'申请渠道准备中，开放后会在这里提供办理方式。';
-  function closed(message=''){$('channel-open').hidden=true;$('channel-closed').hidden=false;$('channel-qr').removeAttribute('src');$('channel-instructions').textContent='';$('channel-contact').textContent='';$('channel-notice').textContent=message;}
+  function channelNotice(message=''){$('channel-notice').textContent=message;}
+  function closed(){$('channel-closed').hidden=false;$('channel-retry').hidden=false;channelNotice();}
+  function channelError(message){channelNotice(message);$('channel-retry').hidden=false;}
+  function showRegistration() {
+    const signedIn=!!P.session().profile;
+    registration.hidden=!mailReady||signedIn;
+    $('register-signed-in').hidden=!mailReady||!signedIn;
+  }
   function safeImage(raw){
     try{if(typeof raw!=='string'||raw.length>2048||/[\s\u0000-\u0020\u007f]/.test(raw))return '';const url=new URL(raw),host=url.hostname.toLowerCase();if(url.protocol!=='https:'||url.username||url.password||url.hash||(url.port&&url.port!=='443'))return '';
       if(!host.includes('.')||host.endsWith('.')||host==='localhost'||/\.(?:localhost|local|internal|test|invalid)$/.test(host)||host.includes(':')||/^\d+(\.\d+){3}$/.test(host))return '';
@@ -15,14 +23,47 @@
     }catch{return '';}
   }
   async function channels(){
-    const own=++channelGeneration;closed('正在核对渠道开放状态…');$('channel-retry').disabled=true;
+    const own=++channelGeneration;
+    mailReady=false;
+    showRegistration();
+    $('channel-retry').hidden=true;
+    $('channel-closed').hidden=true;
+    $('channel-open').hidden=true;
+    channelNotice('正在核对渠道开放状态…');
+    const image=$('channel-qr');
+    image.onload=image.onerror=null;
+    image.removeAttribute('src');
     try{
-      const data=await P.api('/v1/account/access',{auth:''});if(own!==channelGeneration)return;const info=data[recharge?'recharge':'registration'],url=safeImage(info?.qr_url);
+      if(!recharge){
+        const capabilities=await P.api('/v1/study/capabilities',{auth:''}).catch(error=>{
+          if(error.status===404)return null;
+          throw error;
+        });
+        if(own!==channelGeneration)return;
+        if(capabilities?.registration===true&&capabilities.mail_configured===true){
+          await P.ready;
+          if(own!==channelGeneration)return;
+          mailReady=true;
+          showRegistration();
+          channelNotice();
+          return;
+        }
+      }
+      const data=await P.api('/v1/account/access',{auth:''});
+      if(own!==channelGeneration)return;
+      const info=data[recharge?'recharge':'registration'],url=safeImage(info?.qr_url);
       if(info?.enabled!==true||!url){closed();return;}
-      const image=$('channel-qr');image.onload=()=>{if(own!==channelGeneration)return;image.onload=image.onerror=null;$('channel-instructions').textContent=typeof info.instructions==='string'?info.instructions:'';$('channel-contact').textContent=typeof info.contact==='string'?info.contact:'';$('channel-open').hidden=false;$('channel-closed').hidden=true;$('channel-notice').textContent='';};
-      image.onerror=()=>{if(own===channelGeneration)closed('暂时无法加载办理信息，请稍后刷新。');};image.src=url;
-    }catch{if(own===channelGeneration)closed('暂时无法核对渠道开放状态，请稍后刷新。');}
-    finally{if(own===channelGeneration)$('channel-retry').disabled=false;}
+      image.onload=()=>{
+        if(own!==channelGeneration)return;
+        image.onload=image.onerror=null;
+        $('channel-instructions').textContent=typeof info.instructions==='string'?info.instructions:'';
+        $('channel-contact').textContent=typeof info.contact==='string'?info.contact:'';
+        $('channel-open').hidden=false;
+        channelNotice();
+      };
+      image.onerror=()=>{if(own===channelGeneration)channelError('暂时无法加载办理信息，请稍后重试。');};
+      image.src=url;
+    }catch{if(own===channelGeneration)channelError('暂时无法核对渠道开放状态，请稍后重试。');}
   }
   function member(){const me=P.session().profile;$('account-guest').hidden=!!me;$('account-member').hidden=!me;if(!me){$('member-name').textContent='';$('member-plan').textContent='';$('member-quota').replaceChildren();$('member-expiry').textContent='';return;}
     const names={free:'基础免费',trial:'免费体验',pro:'PRO',ultra:'Ultra',legacy:'原有授权'},plan=me.membership?.plan||me.permissions?.plan||'free';$('member-name').textContent=me.username||me.email||'我的账号';$('member-plan').textContent=names[plan]||'我的账号';$('member-quota').replaceChildren();
@@ -31,10 +72,10 @@
   }
   $('channel-retry').addEventListener('click', channels);
   window.addEventListener('portal-session-change', member);
+  window.addEventListener('portal-session-change', showRegistration);
   P.ready.then(member);
   channels();
 
-  const registration = $('email-registration');
   if (!registration || recharge) return;
   const emailInput = $('register-email');
   const codeInput = $('register-code');
@@ -43,23 +84,7 @@
   const submitButton = $('register-submit');
   const status = $('register-status');
   const resendAfter = new Map();
-  let mailReady = false, sending = false, registering = false, resendTimer;
-
-  function showRegistration() {
-    const visible = mailReady && !P.session().profile;
-    registration.hidden = !visible;
-    registration.closest('.channel-section').classList.toggle('email-registration-open', visible);
-  }
-
-  async function checkRegistration() {
-    try {
-      const capabilities = await P.api('/v1/study/capabilities', {auth: ''});
-      mailReady = capabilities.registration === true && capabilities.mail_configured === true;
-    } catch {
-      mailReady = false;
-    }
-    showRegistration();
-  }
+  let sending = false, registering = false, resendTimer;
 
   function registrationNotice(message = '', error = false) {
     status.textContent = message;
@@ -129,7 +154,4 @@
     }
   });
 
-  $('channel-retry').addEventListener('click', checkRegistration);
-  window.addEventListener('portal-session-change', showRegistration);
-  checkRegistration();
 })();

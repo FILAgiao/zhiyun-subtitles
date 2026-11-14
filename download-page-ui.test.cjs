@@ -1,10 +1,12 @@
-const fs=require('node:fs'),assert=require('node:assert/strict'),cp=require('node:child_process'),{chromium}=require('playwright');
+const path=require('node:path'),fs=require('node:fs'),assert=require('node:assert/strict'),cp=require('node:child_process'),{chromium}=require('playwright');
 (async()=>{
  const fixture=cp.spawn('python',['-u','-c',`import json,tempfile,threading,sys
-from backend.public_preview import make_preview_server
+from backend.public_preview import make_preview_server,seed_preview
 from backend.server import Gateway
 with tempfile.TemporaryDirectory() as folder:
- server=make_preview_server(Gateway(folder+'/test.sqlite3'))
+ gateway=Gateway(folder+'/test.sqlite3')
+ seed_preview(gateway)
+ server=make_preview_server(gateway)
  thread=threading.Thread(target=server.serve_forever,daemon=True);thread.start()
  print(json.dumps({'port':server.server_port}),flush=True)
  sys.stdin.readline();server.shutdown();server.server_close();thread.join()
@@ -25,7 +27,10 @@ with tempfile.TemporaryDirectory() as folder:
   for(const image of await art.all()){await image.scrollIntoViewIfNeeded();await image.evaluate(n=>n.decode());assert.deepEqual(await image.evaluate(n=>[n.naturalWidth,n.naturalHeight]),[1280,800]);}
   const settings=JSON.parse(fs.readFileSync('backend/public-page.json','utf8').replace(/^\uFEFF/,''));const chromeLinks=page.getByRole('link',{name:'Chrome 插件商店',exact:true});assert.equal(await chromeLinks.count(),2,'direct store badges in hero and footer');
   for(const chrome of await chromeLinks.all()){assert.equal(await chrome.getAttribute('href'),settings.chromeStoreUrl);assert.equal(await chrome.getAttribute('target'),'_blank');assert.match(await chrome.getAttribute('rel'),/noopener/);}
-  const edges=page.getByRole('button',{name:/Edge 插件商店/});assert.equal(await edges.count(),2);for(const edge of await edges.all()){assert.equal(await edge.isDisabled(),true);assert.match(await edge.textContent(),/即将上线.*审核中/);assert.equal(await edge.getAttribute('href'),null);}
+  const edges=page.getByRole('link',{name:'Edge 插件商店',exact:true});assert.equal(await edges.count(),2);
+  for(const edge of await edges.all()){assert.equal(await edge.getAttribute('href'),settings.edgeStoreUrl);assert.equal(await edge.getAttribute('target'),'_blank');assert.match(await edge.getAttribute('rel'),/noopener/);}
+  assert.equal(await page.getByRole('link',{name:'管理员登录',exact:true}).getAttribute('href'),'/gateway/admin');
+  const admin=await context.request.get(base+'/gateway/admin');assert.equal(admin.status(),200);assert.match(await admin.text(),/登录账号管理后台/);
   const edge=edges.last();
   assert.match(await page.locator('.usage-scope').textContent(),/缓存加速、字幕同步和 PPT 联动.*浙大智云网课的视频页面/);
   assert.equal(await page.locator('.quick-links').getByRole('link',{name:/历史问答/}).getAttribute('href'),'/gateway/study');
@@ -37,11 +42,25 @@ with tempfile.TemporaryDirectory() as folder:
   assert.equal(await page.getByText('找到你的浏览器插件').count(),0);
   const sync=page.locator('.sync-row .feature-art'),view=page.locator('.view-row .feature-art');const syncBox=await sync.boundingBox(),viewBox=await view.boundingBox();assert.ok(syncBox.width>=800,'second-screen image gets a broad dedicated canvas');assert.ok(viewBox.y>=syncBox.y+syncBox.height+70,'sync and PPT posters no longer squeezed side by side');
   await page.getByRole('link',{name:'获取插件'}).click();await page.waitForURL(/#install$/);assert.ok(await edge.isVisible());
-  await page.evaluate(()=>{document.documentElement.style.scrollBehavior='auto';window.scrollTo(0,0);});await page.screenshot({path:'download-page-desktop-preview.png',fullPage:true});await page.screenshot({path:'download-page-hero-preview.png'});await page.locator('#features').screenshot({path:'download-page-classroom-preview.png'});
-  for(const width of [390,320,768,1024]){await page.setViewportSize({width,height:844});assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),'no horizontal overflow at '+width);for(const badge of await page.locator('.hero-stores .store-button').all()){const r=await badge.boundingBox();assert.ok(r.x>=0&&r.x+r.width<=width,'hero store badges fit viewport');}await edge.scrollIntoViewIfNeeded();const box=await edge.boundingBox();assert.ok(box.x>=0&&box.x+box.width<=width);if(width===390){await page.evaluate(()=>window.scrollTo(0,0));await page.screenshot({path:'download-page-mobile-preview.png',fullPage:true});}else if(width===320)await page.screenshot({path:'.testdeps/public-page-320.png',fullPage:true});}
+  const previews=path.resolve(process.env.ZY_STUDY_PREVIEW_DIR||'.');fs.mkdirSync(previews,{recursive:true});
+  await page.evaluate(()=>{document.documentElement.style.scrollBehavior='auto';window.scrollTo(0,0);});await page.screenshot({path:path.join(previews,'download-page-desktop-preview.png'),fullPage:true});await page.screenshot({path:path.join(previews,'download-page-hero-preview.png')});await page.locator('#features').screenshot({path:path.join(previews,'download-page-classroom-preview.png')});
+  for(const width of [390,320,768,1024]){await page.setViewportSize({width,height:844});assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),'no horizontal overflow at '+width);for(const badge of await page.locator('.hero-stores .store-button').all()){const r=await badge.boundingBox();assert.ok(r.x>=0&&r.x+r.width<=width,'hero store badges fit viewport');}await edge.scrollIntoViewIfNeeded();const box=await edge.boundingBox();assert.ok(box.x>=0&&box.x+box.width<=width);if(width===390){await page.evaluate(()=>window.scrollTo(0,0));await page.screenshot({path:path.join(previews,'download-page-mobile-preview.png'),fullPage:true});}else if(width===320)await page.screenshot({path:'.testdeps/public-page-320.png',fullPage:true});}
   await page.locator('.quick-links').getByRole('link',{name:/历史问答/}).click();await page.waitForURL(/\/gateway\/study$/);await page.locator('#study-guest').waitFor({state:'visible'});
   await page.goto(base+'/gateway/');await page.locator('.quick-links').getByRole('link',{name:/随意摘/}).click();await page.waitForURL(/#clips$/);await page.waitForFunction(()=>document.getElementById('study-clips-tab')?.getAttribute('aria-current')==='true');assert.match(await page.locator('h1').textContent(),/随意摘/);
   await page.goto(base+'/gateway/');
+
+  const home=await context.newPage();
+  await home.goto(base+'/gateway/');
+  await page.getByRole('link',{name:'登录账号',exact:true}).click();
+  await page.locator('#login-name').fill('preview@example.test');
+  await page.locator('#login-password').fill('local-preview-only-2026');
+  await page.locator('#login-submit').click();
+  await home.getByRole('link',{name:'我的账号与额度'}).filter({hasText:'本地示例同学'}).waitFor();
+  await home.reload();
+  await home.getByRole('link',{name:'我的账号与额度'}).waitFor();
+  assert.equal(await home.getByRole('link',{name:'登录账号',exact:true}).isVisible(),false);
+  await page.locator('[data-logout]').click();
+  await home.getByRole('link',{name:'登录账号',exact:true}).waitFor();
 
   assert.deepEqual(errors,[]);assert.deepEqual(failures,[]);assert.deepEqual(await context.cookies(),[],'viewing the introduction needs no account cookies');
   console.log('PASS: anonymous home/QR/query URLs, all six images and CSP, two direct Chrome/Edge badge pairs, spacious stacked feature canvases, installation anchors and 320/390px layouts.');
