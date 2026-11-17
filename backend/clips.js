@@ -54,6 +54,7 @@
     for(const {target,isIntersecting} of entries){
       if(!isIntersecting)continue;
       thumbnailObserver.unobserve(target);
+      target.parentElement.dataset.state='loading';
       thumbnailQueue.push(target);
     }
     runThumbnails();
@@ -70,12 +71,24 @@
       if(!img.isConnected||!auth||!P.session().profile)continue;
       thumbnailActive++;
       const path='/v1/study/clip-image?id='+encodeURIComponent(item.id)+'&format=png&variant=thumbnail';
-      P.api(path,{auth,responseType:'blob'}).then(blob=>{
-        if(!img.isConnected||auth!==owner()||blob.type!=='image/png'||!blob.size)return;
+      P.api(path,{auth,responseType:'blob'}).then(async blob=>{
+        if(!img.isConnected||auth!==owner())return;
+        if(blob.type!=='image/png'||!blob.size)throw Error('缩略图返回异常');
+        const key=imageKey(item);
         const url=URL.createObjectURL(blob);
-        thumbnailURLs.set(imageKey(item),url);
-        img.src=url;
-      }).catch(()=>{}).finally(()=>{thumbnailActive--;runThumbnails();});
+        try{
+          img.src=url;
+          await img.decode();
+          if(!img.isConnected||auth!==owner())return;
+          thumbnailURLs.set(key,url);
+          img.parentElement.dataset.state='ready';
+        }finally{if(thumbnailURLs.get(key)!==url)URL.revokeObjectURL(url);}
+      }).catch(()=>{
+        if(img.isConnected&&auth===owner()){
+          img.removeAttribute('src');
+          img.parentElement.dataset.state='error';
+        }
+      }).finally(()=>{thumbnailActive--;runThumbnails();});
     }
   }
   function forgetImage(key){const value=originals.get(key);if(!value)return;URL.revokeObjectURL(value.url);cacheBytes-=value.bytes;originals.delete(key);}
@@ -108,19 +121,51 @@
   function close(){imageGeneration++;reader.close();zoom.close();deletion.close();$('clip-full-image').removeAttribute('src');$('clip-zoom-image').removeAttribute('src');$('clip-stage').removeAttribute('data-state');$('clip-stage').setAttribute('aria-busy','false');lastFocused?.focus();if(refreshPending)scheduleReturnRefresh();}
   function showTab(value){tab=value;if(heading){if(tab==='clips')heading.replaceChildren(document.createTextNode('随意'),el('em','摘。'));else heading.innerHTML=originalHeading;}const signed=!!P.session().profile;$('study-text-tab').setAttribute('aria-current',String(tab==='text'));$('study-clips-tab').setAttribute('aria-current',String(tab==='clips'));$('study-workspace').hidden=!signed||tab!=='text';section.hidden=!signed||tab!=='clips';if(tab==='clips'&&signed&&!loading)load({keepVisible:items.length>0});}
   function filters(){const q=$('clips-search').value.trim().toLocaleLowerCase(),course=$('clips-course').value,date=$('clips-date').value;return items.filter(item=>(!q||(item.title+' '+item.course+' '+item.groupTitle+' '+item.note).toLocaleLowerCase().includes(q))&&(!course||item.groupKey===course)&&(!date||new Date(item.created).toLocaleDateString('sv-SE',{timeZone:'Asia/Shanghai'})===date));}
-  function render(){
-    const filtered=filters();clearThumbnails();$('clips-grid').replaceChildren();
+  function render({keepVisible=false}={}){
+    const filtered=filters(),grid=$('clips-grid'),cards=[];
+    const previous=new Map();
+    if(keepVisible){
+      for(const card of grid.querySelectorAll('.clip-card'))previous.set(card.dataset.clipId,card);
+    }else{
+      clearThumbnails();
+      grid.replaceChildren();
+    }
     const showName=$('clips-show-name').checked;
     for(const item of filtered){
-      const card=el('button',undefined,'clip-card');card.type='button';card.dataset.clipId=item.id;card.setAttribute('aria-label','查看收藏：'+item.title+' · '+(item.course||'网页摘录'));
-      const frame=el('span',undefined,'clip-card-frame');const img=el('img');img.alt=item.title;img.loading=$('clips-grid').children.length<2?'eager':'lazy';img.decoding='async';if(item.width&&item.height){img.width=item.width;img.height=item.height;}frame.append(img);const hint=el('span','打开图片 ↗','clip-card-open');hint.setAttribute('aria-hidden','true');frame.append(hint);
+      const key=imageKey(item),existing=previous.get(item.id);
+      if(existing&&existing.dataset.imageKey===key&&existing.querySelector('.clip-card-frame').dataset.state!=='error'){
+        previous.delete(item.id);
+        cards.push(existing);
+        continue;
+      }
+      const card=el('button',undefined,'clip-card');card.type='button';card.dataset.clipId=item.id;card.dataset.imageKey=key;card.setAttribute('aria-label','查看收藏：'+item.title+' · '+(item.course||'网页摘录'));
+      const frame=el('span',undefined,'clip-card-frame');frame.dataset.state='pending';const img=el('img');img.alt=item.title;img.decoding='async';if(item.width&&item.height){img.width=item.width;img.height=item.height;}frame.append(img);const hint=el('span','打开图片 ↗','clip-card-open');hint.setAttribute('aria-hidden','true');frame.append(hint);
       const caption=el('span',undefined,'clip-card-caption'),details=[item.course||'网页摘录',P.date(item.created),item.position,item.note?.replace(/\s+/g,' ')].filter(Boolean).join(' · ');
       if(showName){const name=el('strong',item.title,'clip-card-title');name.title=item.title;caption.append(name);}
-      const meta=el('small',details,'clip-card-meta');meta.title=details;caption.append(meta);card.append(frame,caption);card.onclick=()=>open(item.id,card);$('clips-grid').append(card);
-      if(item.thumbnail)img.src=item.thumbnail;
+      const meta=el('small',details,'clip-card-meta');meta.title=details;caption.append(meta);card.append(frame,caption);card.onclick=()=>open(item.id,card);cards.push(card);
+      if(item.thumbnail){
+        frame.dataset.state='loading';
+        img.loading=cards.length<=2?'eager':'lazy';
+        img.addEventListener('load',()=>{frame.dataset.state='ready';},{once:true});
+        img.addEventListener('error',()=>{frame.dataset.state='error';},{once:true});
+        img.src=item.thumbnail;
+      }
       else{thumbnailItems.set(img,item);thumbnailObserver.observe(img);}
     }
-    if(!filtered.length){const empty=el('div',undefined,'clip-empty');empty.append(el('h3',items.length?'没有找到相关收藏':'还没有收藏的截图'),el('p',items.length?'试试其他关键词或清除日期筛选。':'回到插件，截图后点击「收藏」。不用先问 AI，手机登录同一账号即可回看。'));$('clips-grid').append(empty);}
+    for(const card of previous.values()){
+      thumbnailObserver.unobserve(card.querySelector('img'));
+      const key=card.dataset.imageKey,url=thumbnailURLs.get(key);
+      if(url){URL.revokeObjectURL(url);thumbnailURLs.delete(key);}
+      card.remove();
+    }
+    grid.querySelector('.clip-empty')?.remove();
+    // Keep connected cards (and their decoded images) attached during a refresh.
+    let next=grid.firstElementChild;
+    for(const card of cards){
+      if(card===next)next=next.nextElementSibling;
+      else grid.insertBefore(card,next);
+    }
+    if(!filtered.length){const empty=el('div',undefined,'clip-empty');empty.append(el('h3',items.length?'没有找到相关收藏':'还没有收藏的截图'),el('p',items.length?'试试其他关键词或清除日期筛选。':'回到插件，截图后点击「收藏」。不用先问 AI，手机登录同一账号即可回看。'));grid.append(empty);}
     $('clips-status').textContent=(filtered.length?'已显示 '+filtered.length+' 张 · ':'')+'图片仅本人可见';
     groups=[];for(const item of filtered.slice().sort((a,b)=>a.created-b.created||a.id.localeCompare(b.id))){let group=groups.find(g=>g.key===item.groupKey);if(!group){group={key:item.groupKey,title:item.groupTitle,items:[]};groups.push(group);}group.items.push(item);}
     $('clips-resume').disabled=!resumeItem();
@@ -141,7 +186,7 @@
   async function load({keepVisible=false}={}){
     if(!P.session().profile||loading)return;const own=++generation,auth=owner();loading=true;refreshPending=false;$('clips-refresh').disabled=true;$('clips-status').textContent='正在读取收藏…';$('clips-grid').setAttribute('aria-busy','true');if(!keepVisible){items=[];loadingCards();}
     try{let offset=0,all=[];while(true){const data=await P.api('/v1/study/clips?thumbnails=0&limit=50&offset='+offset,{auth});if(!valid(own,auth))return;if(!Array.isArray(data.items))throw Error('收藏列表返回异常，请重试。');all.push(...data.items.map(classify));if(data.next_offset===null||data.next_offset===undefined)break;if(!keepVisible&&!reader.open&&offset===0){items=all.slice(0,500);render();$('clips-status').textContent='已读取 '+items.length+' 张 · 正在整理收藏…';}if(!Number.isSafeInteger(data.next_offset)||data.next_offset<=offset||all.length>=500)throw Error('收藏分页异常，请重试。');offset=data.next_offset;}
-      if(!valid(own,auth))return;if(reader.open){refreshPending=true;return;}items=all.slice(0,500);const liveKeys=new Set(items.map(imageKey));for(const key of originals.keys())if(!liveKeys.has(key))forgetImage(key);const old=$('clips-course').value,oldName=$('clips-course').selectedOptions[0]?.textContent;$('clips-course').replaceChildren(new Option('全部课程',''));const courses=new Map(items.map(i=>[i.groupKey,i.groupTitle]));for(const [key,name] of courses)$('clips-course').append(new Option(name,key));if(old){if(!courses.has(old))$('clips-course').append(new Option(oldName||old,old));$('clips-course').value=old;}render();revealRequestedClip();
+      if(!valid(own,auth))return;if(reader.open){refreshPending=true;return;}items=all.slice(0,500);const liveKeys=new Set(items.map(imageKey));for(const key of originals.keys())if(!liveKeys.has(key))forgetImage(key);const old=$('clips-course').value,oldName=$('clips-course').selectedOptions[0]?.textContent;$('clips-course').replaceChildren(new Option('全部课程',''));const courses=new Map(items.map(i=>[i.groupKey,i.groupTitle]));for(const [key,name] of courses)$('clips-course').append(new Option(name,key));if(old){if(!courses.has(old))$('clips-course').append(new Option(oldName||old,old));$('clips-course').value=old;}render({keepVisible});revealRequestedClip();
     }catch(error){if(error.name!=='AbortError'&&valid(own,auth)){if(!items.length)$('clips-grid').replaceChildren();$('clips-status').textContent=error.message+' 可点击刷新重试。';}}
     finally{if(own===generation){loading=false;$('clips-grid').setAttribute('aria-busy','false');$('clips-refresh').disabled=false;if(refreshPending&&!reader.open)scheduleReturnRefresh();}}
   }
@@ -153,14 +198,24 @@
     $('clip-origin').hidden=true;try{const u=new URL(item.origin);if(['https:','http:'].includes(u.protocol)&&!u.username&&!u.password){$('clip-origin').href=u.href;$('clip-origin').hidden=false;}}catch{}
     const stage=$('clip-stage'),img=$('clip-full-image');
     const preview=item.thumbnail||thumbnailURLs.get(imageKey(item));
-    stage.dataset.state='loading';stage.setAttribute('aria-busy','true');if(preview)img.src=preview;else img.removeAttribute('src');img.alt=item.title;$('clip-zoom').disabled=true;$('clip-image-status').replaceChildren(el('span','正在加载清晰图片…'));
+    const selected=()=>own===imageGeneration&&valid(listGeneration,auth);
+    let hasPreview=false;
+    stage.dataset.state='loading';stage.setAttribute('aria-busy','true');img.hidden=true;img.alt=item.title;$('clip-zoom').disabled=true;$('clip-image-status').replaceChildren(el('span','正在加载清晰图片…'));
+    if(preview){
+      img.src=preview;
+      img.decode().then(()=>{
+        if(!selected()||img.getAttribute('src')!==preview)return;
+        hasPreview=true;
+        img.hidden=false;
+      }).catch(()=>{});
+    }else img.removeAttribute('src');
     try{
-      const url=await originalImage(item,auth);if(own!==imageGeneration||!valid(listGeneration,auth))return;
+      const url=await originalImage(item,auth);if(!selected())return;
       // Decode separately: a late decode can never overwrite a newer selection.
-      const decoded=new Image();decoded.src=url;try{await decoded.decode();}catch(error){if(originals.get(imageKey(item))?.url===url)forgetImage(imageKey(item));throw error;}if(own!==imageGeneration||!valid(listGeneration,auth))return;
-      img.src=url;stage.dataset.state='ready';stage.setAttribute('aria-busy','false');$('clip-image-status').textContent='';$('clip-zoom').disabled=false;
-    }catch(error){if(error.name!=='AbortError'&&own===imageGeneration&&valid(listGeneration,auth)){
-      stage.dataset.state='error';stage.setAttribute('aria-busy','false');$('clip-image-status').replaceChildren(el('span',preview?'清晰图片加载失败，已保留预览。':'清晰图片加载失败。'));const retry=el('button','重新加载','button subtle');retry.type='button';retry.onclick=draw;$('clip-image-status').append(retry);
+      const decoded=new Image();decoded.src=url;try{await decoded.decode();}catch(error){if(originals.get(imageKey(item))?.url===url)forgetImage(imageKey(item));throw error;}if(!selected())return;
+      img.src=url;img.hidden=false;stage.dataset.state='ready';stage.setAttribute('aria-busy','false');$('clip-image-status').textContent='';$('clip-zoom').disabled=false;
+    }catch(error){if(error.name!=='AbortError'&&selected()){
+      stage.dataset.state='error';stage.setAttribute('aria-busy','false');$('clip-image-status').replaceChildren(el('span',hasPreview?'清晰图片加载失败，已保留预览。':'清晰图片加载失败。'));const retry=el('button','重新加载','button subtle');retry.type='button';retry.onclick=draw;$('clip-image-status').append(retry);
     }}
   }
 

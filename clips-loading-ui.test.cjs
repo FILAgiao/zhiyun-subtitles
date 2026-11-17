@@ -3,11 +3,13 @@ const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('n
 (async()=>{
  const browser=await chromium.launch({headless:true,executablePath:process.env.PORTAL_BROWSER||'C:/Program Files/Google/Chrome/Application/chrome.exe'});
  const context=await browser.newContext({viewport:{width:1440,height:1000}}),page=await context.newPage();
- const base='http://clips.test',token='fixture-clips-owner',requests=[],errors=[],pending=new Map();let releaseList;
+ const base='http://clips.test',token='fixture-clips-owner',requests=[],errors=[],pending=new Map();let releaseList,releaseThumbnail;
  try{
   page.on('pageerror',error=>errors.push(error.message));
   const pixels=await page.evaluate(()=>{const canvas=document.createElement('canvas');canvas.width=1200;canvas.height=760;const c=canvas.getContext('2d');c.fillStyle='#fffdf7';c.fillRect(0,0,1200,760);c.fillStyle='#38665e';c.fillRect(0,0,1200,15);c.font='25px sans-serif';c.fillText('PHYSICS / 01',70,90);c.font='bold 48px sans-serif';c.fillText('动量守恒与系统边界',70,190);c.font='32px serif';c.fillText('p = m₁v₁ + m₂v₂ = constant',70,310);c.lineWidth=4;c.strokeStyle='#38665e';c.beginPath();c.moveTo(70,600);c.lineTo(1050,600);c.moveTo(70,600);c.lineTo(70,380);c.stroke();c.beginPath();c.moveTo(70,595);c.bezierCurveTo(250,550,600,430,1000,400);c.stroke();const thumb=document.createElement('canvas');thumb.width=320;thumb.height=203;thumb.getContext('2d').drawImage(canvas,0,0,320,203);return {image:canvas.toDataURL(),thumbnail:thumb.toDataURL()};});
   const png=Buffer.from(pixels.image.split(',')[1],'base64'),items=Array.from({length:14},(_,index)=>({id:'image-'+index,title:'课堂笔记 '+index,course:'大学物理',courseKey:'physics',created:1700000000000+index,updated:1700000000000+index,width:1200,height:760,thumbnail:pixels.thumbnail,note:'先确定研究系统，再判断外力是否可忽略。',origin:'https://interactivemeta.cmc.zju.edu.cn/lesson',position:'12:30'}));
+  items.push({...items.at(-1),id:'delayed-thumbnail',title:'缩略图延迟',created:1700000000014,thumbnail:undefined});
+  const thumbnailGate=new Promise(resolve=>releaseThumbnail=resolve);
   let held=new Set(['image-0']),broken=new Set(['image-1']);
   const listGate=new Promise(resolve=>releaseList=resolve);
   await context.addInitScript(token=>{sessionStorage.setItem('gateway-web-session',token);window.liveImageURLs=new Set();const make=URL.createObjectURL.bind(URL),drop=URL.revokeObjectURL.bind(URL);URL.createObjectURL=blob=>{const url=make(blob);liveImageURLs.add(url);return url;};URL.revokeObjectURL=url=>{liveImageURLs.delete(url);drop(url);};},token);
@@ -20,6 +22,10 @@ const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('n
    if(endpoint==='/v1/study/clips'){await listGate;return reply(200,{items,next_offset:null});}
    if(endpoint==='/v1/study/clip-image'){
     assert.equal(route.request().headers().authorization,'Bearer '+token);assert.equal(u.searchParams.get('format'),'png');
+    if(u.searchParams.get('variant')==='thumbnail'){
+     await thumbnailGate;
+     return route.fulfill({status:200,contentType:'image/png',body:Buffer.from(pixels.thumbnail.split(',')[1],'base64')});
+    }
     const id=u.searchParams.get('id');requests.push(id);if(held.has(id))await new Promise(resolve=>pending.set(id,resolve));
     const bad=broken.delete(id);return route.fulfill({status:200,contentType:'image/png',body:bad?Buffer.from('corrupt png'):png});
    }
@@ -42,8 +48,30 @@ const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('n
   assert.equal(pending.has('image-4'),false,'only two original requests can be active');pending.get('image-2')();await page.waitForTimeout(100);assert.ok(pending.has('image-4'));pending.get('image-3')();await page.waitForTimeout(100);assert.equal(await page.locator('#clip-reader-title').innerText(),'课堂笔记 4');assert.equal(await page.locator('#clip-stage').getAttribute('data-state'),'loading','late previous results cannot replace the current preview');pending.get('image-4')();await ready();
   held=new Set();for(let index=5;index<14;index++){await page.locator('#clip-next').click();await ready();}
   assert.ok(await page.evaluate(()=>liveImageURLs.size<=12),'decoded originals have a bounded memory cache');await page.locator('#clip-close').click();await open('image-0');await ready();assert.equal(requests.filter(id=>id==='image-0').length,2,'least recently used original was evicted');
+  await page.locator('#clip-close').click();
+  const delayedCard=page.locator('[data-clip-id=delayed-thumbnail]');
+  const delayedFrame=delayedCard.locator('.clip-card-frame');
+  await delayedCard.scrollIntoViewIfNeeded();
+  await delayedCard.locator('.clip-card-frame[data-state=loading]').waitFor();
+  assert.equal(await delayedFrame.evaluate(n=>getComputedStyle(n,'::after').animationName),'clip-shimmer');
+  assert.equal(await delayedFrame.locator('img').isVisible(),false,'hide the browser image placeholder while the thumbnail is pending');
+  held=new Set(['delayed-thumbnail']);
+  const originalStarted=page.waitForRequest(req=>req.url().endsWith('id=delayed-thumbnail&format=png'));
+  await delayedCard.click();
+  await originalStarted;
+  await page.waitForFunction(()=>document.querySelector('#clip-stage').dataset.state==='loading');
+  assert.equal(await page.locator('#clip-full-image').isVisible(),false);
+  assert.equal(await page.locator('#clip-stage').evaluate(n=>getComputedStyle(n,'::after').animationName),'clip-shimmer');
+  pending.get('delayed-thumbnail')();
+  await ready();
+  assert.equal(await page.locator('#clip-full-image').isVisible(),true);
+  await page.locator('#clip-close').click();
+  releaseThumbnail();
+  await delayedCard.locator('.clip-card-frame[data-state=ready] img').waitFor();
+  assert.equal(await delayedFrame.evaluate(n=>getComputedStyle(n,'::after').animationName),'none');
+  await open('image-0');await ready();
   held=new Set(['image-1']);await page.locator('#clip-next').click();await page.waitForTimeout(80);assert.equal(await page.locator('#clip-stage').getAttribute('data-state'),'loading');await page.locator('#clip-close').click();await page.locator('[data-logout]').click();pending.get('image-1')();await page.waitForTimeout(100);
   assert.equal(await page.locator('.clip-card').count(),0);assert.equal(await page.locator('#clip-full-image').getAttribute('src'),null);assert.equal(await page.evaluate(()=>liveImageURLs.size),0,'logout revokes every private object URL');assert.deepEqual(errors,[]);
   console.log('PASS: slow-list skeleton, zero gallery original requests, immediate preview, shimmer/reduced motion, pending deduplication, bounded LRU, bad-image retry, two-request ceiling, rapid-selection race and logout privacy.');
- }finally{releaseList?.();for(const resolve of pending.values())resolve();await browser.close();}
+ }finally{releaseList?.();releaseThumbnail?.();for(const resolve of pending.values())resolve();await browser.close();}
 })().catch(error=>{console.error(error);process.exitCode=1;});

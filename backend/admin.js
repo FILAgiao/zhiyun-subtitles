@@ -18,76 +18,227 @@ async function api(path,body,auth=token){
  }
  return data;
 }
-function reset(loggedOut=false){generation++;renderRegistrationPlan(null);clearAnalytics();activeTab='analytics';admin=false;operationsData=null;operationsLoad++;creditPending=null;sessionStorage.removeItem('gateway-admin-credit-pending');token='';saveLogin('',loggedOut);$('dashboard').hidden=true;$('account').hidden=true;$('login-panel').hidden=false;$('login-password').value='';$('official-prompt-list').replaceChildren();$('official-prompt-form').reset();$('operations-content').hidden=true;$('operations-tab').hidden=true;$('manual-credit-form').reset();$('cost-rate-form').reset();$('access-settings-form').reset();$('credit-user').replaceChildren(el('option','选择账号'));$('credit-user').firstChild.value='';for(const id of ['credit-submit','rate-submit','access-submit','operations-refresh'])$(id).disabled=false;for(const id of ['credit-status','rate-status','access-status'])$(id).textContent='';for(const id of ['users-body','calls-body','sessions-body','actions-body','operations-users','operations-models','operations-credits','operations-rates','operations-alerts','operations-stats','operations-configured-cost'])$(id).replaceChildren();}
+function reset(loggedOut=false){generation++;renderPlanSettings(null);clearAnalytics();activeTab='analytics';admin=false;operationsData=null;operationsLoad++;creditPending=null;sessionStorage.removeItem('gateway-admin-credit-pending');token='';saveLogin('',loggedOut);$('dashboard').hidden=true;$('account').hidden=true;$('login-panel').hidden=false;$('login-password').value='';$('official-prompt-list').replaceChildren();$('official-prompt-form').reset();$('operations-content').hidden=true;$('operations-tab').hidden=true;$('manual-credit-form').reset();$('cost-rate-form').reset();$('access-settings-form').reset();$('credit-user').replaceChildren(el('option','选择账号'));$('credit-user').firstChild.value='';for(const id of ['credit-submit','rate-submit','access-submit','operations-refresh'])$(id).disabled=false;for(const id of ['credit-status','rate-status','access-status'])$(id).textContent='';for(const id of ['users-body','calls-body','sessions-body','actions-body','operations-users','operations-models','operations-credits','operations-rates','operations-alerts','operations-stats','operations-configured-cost'])$(id).replaceChildren();}
 function el(tag,text,className){const node=document.createElement(tag);if(text!==undefined)node.textContent=text;if(className)node.className=className;return node;}
 function td(row,primary,secondary,className){const cell=el('td',primary,className);if(secondary)cell.append(el('small',secondary));row.append(cell);return cell;}
 function empty(body,columns){if(!body.children.length){const row=el('tr'),cell=el('td','暂无记录');cell.colSpan=columns;row.append(cell);body.append(row);}}
 function tab(name){if(['analytics','operations','users','actions','prompts'].includes(name)&&!admin)name='calls';activeTab=name;if(name==='analytics')void loadAnalytics();if(name==='prompts')void loadOfficialPrompts();if(name==='operations')void loadOperations();$('account-controls').hidden=!admin||name!=='users';$('stats').hidden=['analytics','operations'].includes(name);document.querySelector('.heading h1').textContent=name==='analytics'?'学习运营概览':'用量一眼看清';$('period').textContent=name==='analytics'?'让每一次学习都有数 · 管理员工作台':name==='operations'?$('operations-month').value+' · 运营月份按 UTC，记录按北京时间':$('period').dataset.general||'';for(const key of ['analytics','operations','users','calls','sessions','actions','prompts']){$(key+'-panel').hidden=key!==name;document.querySelector('[data-tab="'+key+'"]').setAttribute('aria-selected',String(key===name));}}
 function render(data,me){
- renderRegistrationPlan(me.is_admin ? data.registration_plan : null);
+ renderPlanSettings(me.is_admin ? data.plan_templates : null, data.registration_plan);
  admin=!!me.is_admin;$('who').textContent=me.username||me.email;$('role-label').textContent=admin?'管理员总览':'我的接口用量';$('users-tab').hidden=!admin;$('operations-tab').hidden=!admin;$('analytics-tab').hidden=!admin;if(!admin)clearAnalytics();$('actions-tab').hidden=!admin;$('prompts-tab').hidden=!admin;$('account-controls').hidden=!admin;$('period').textContent=(data.month||me.usage.month)+' · 月份按 UTC，记录按北京时间';$('period').dataset.general=$('period').textContent;
  const totals=admin?data.totals:me.usage;$('stats').replaceChildren();for(const [label,value,hint] of [['调用次数',totals.requests,admin?'所有 APP 本月累计':'月额度 '+num(me.usage.request_limit)],['Token',totals.total_tokens,'输入 '+num(totals.input_tokens)+' / 输出 '+num(totals.output_tokens)],['语音秒数',Math.round(totals.audio_seconds*100)/100,admin?'本月提交的有效音频':'月额度 '+num(me.usage.audio_limit)],['截图数量',admin?totals.images:data.calls.reduce((n,c)=>n+(c.image_count||0),0),admin?'本月模型输入图片':'最近 100 次调用的输入图片']]){const card=el('article',undefined,'stat');card.append(el('small',label),el('strong',num(value)),el('span',hint));$('stats').append(card);}
- const users=$('users-body');users.replaceChildren();if(admin)for(const u of data.users)for(const g of u.grants){const row=el('tr');td(row,u.username,u.email);td(row,(u.is_admin?'管理员':'用户')+' · '+(planNames[g.plan]||'原有授权')+(u.enabled===0?' · 已停用':''),['learning','translation','speech'].filter(k=>g[k]).map(k=>({learning:'AI',translation:'翻译',speech:'校准'}[k])).join(' / ')+(g.enabled===0?' · 应用已暂停':'')+(g.expires?' · 到期 '+date(g.expires):''));td(row,g.app);td(row,num(g.usage.requests)+' / '+num(g.usage.request_limit??g.request_limit));td(row,num(g.usage.total_tokens));td(row,num(g.usage.audio_seconds)+' / '+num(g.usage.audio_limit??g.audio_limit));const cell=td(row,'');const edit=el('button','调整');edit.type='button';edit.addEventListener('click',()=>{$('quota-user').value=u.id;$('quota-name').value=u.username;$('quota-app').value=g.app;$('quota-requests').value=g.request_limit;$('quota-audio').value=g.audio_limit;$('quota-plan').value=g.plan||'legacy';for(const key of ['learning','translation','speech','enabled'])$('quota-'+key).checked=g[key]!==0;$('quota-expires').value=localDate(g.expires);syncPlanFields('quota');$('manage-user').value=u.id;$('manage-name').value=u.username;$('set-quota').scrollIntoView({block:'center',behavior:'smooth'});});cell.append(edit);users.append(row);}empty(users,7);filterUsers();const actions=$('actions-body');actions.replaceChildren();if(admin)for(const a of data.actions||[]){const row=el('tr');td(row,date(a.created),a.actor_name);td(row,a.target_name,a.app);td(row,({create_user:'创建账号',set_quota:'调整权限与额度',disable:'停用账号',enable:'恢复账号',reset_password:'重置密码',prompt_save:'保存官方提示词',prompt_delete:'删除官方提示词',credit:'追加本月额度',manual_credit:'人工记账与赠送',cost_rate:'配置模型费率',access_settings:'调整申请与充值渠道',registration_plan:'保存注册默认套餐'})[a.action]||a.action);let detail={};try{detail=JSON.parse(a.details||'{}');}catch{}td(row,Object.entries(detail).map(([k,v])=>({plan:'账号套餐',request_limit:'月调用次数',audio_limit:'月语音秒数',learning:'AI 问答',translation:'字幕翻译',speech:'语音校准',enabled:'应用启用',expires:'有效期'}[k]||k)+'：'+(k==='plan'?(planNames[v]||v):k==='expires'?(v?date(v):'长期'):typeof v==='boolean'?(v?'开':'关'):v)).join('；'));actions.append(row);}empty(actions,4);
+ const users=$('users-body');users.replaceChildren();if(admin)for(const u of data.users)for(const g of u.grants){const row=el('tr');td(row,u.username,u.email);td(row,(u.is_admin?'管理员':'用户')+' · '+(planNames[g.plan]||'原有授权')+(u.enabled===0?' · 已停用':''),['learning','translation','speech'].filter(k=>g[k]).map(k=>({learning:'AI',translation:'翻译',speech:'校准'}[k])).join(' / ')+(g.enabled===0?' · 应用已暂停':'')+(g.expires?' · 到期 '+date(g.expires):''));td(row,g.app);td(row,num(g.usage.requests)+' / '+num(g.usage.request_limit??g.request_limit));td(row,num(g.usage.total_tokens));td(row,num(g.usage.audio_seconds)+' / '+num(g.usage.audio_limit??g.audio_limit));const cell=td(row,'');const edit=el('button','调整');edit.type='button';edit.addEventListener('click',()=>{editGrant(u,g);$('set-quota').scrollIntoView({block:'center',behavior:'smooth'});});cell.append(edit);users.append(row);}empty(users,7);filterUsers();const actions=$('actions-body');actions.replaceChildren();if(admin)for(const a of data.actions||[]){const row=el('tr');td(row,date(a.created),a.actor_name);td(row,a.target_name,a.app);td(row,({create_user:'创建账号',set_quota:'调整权限与额度',disable:'停用账号',enable:'恢复账号',reset_password:'重置密码',prompt_save:'保存官方提示词',prompt_delete:'删除官方提示词',credit:'追加本月额度',manual_credit:'人工记账与赠送',cost_rate:'配置模型费率',access_settings:'调整申请与充值渠道',registration_plan:'保存注册默认套餐',plan_template:'保存套餐配置'})[a.action]||a.action);let detail={};try{detail=JSON.parse(a.details||'{}');}catch{}td(row,Object.entries(detail).map(([k,v])=>({plan:'账号套餐',request_limit:'月调用次数',audio_limit:'月语音秒数',learning:'AI 问答',translation:'字幕翻译',speech:'语音校准',enabled:'应用启用',expires:'有效期'}[k]||k)+'：'+(k==='plan'?(planNames[v]||v):k==='expires'?(v?date(v):'长期'):typeof v==='boolean'?(v?'开':'关'):v)).join('；'));actions.append(row);}empty(actions,4);
  const calls=$('calls-body');calls.replaceChildren();for(const c of data.calls){const row=el('tr');td(row,date(c.created),c.username);td(row,c.app,feature[c.feature]||c.kind);td(row,c.model||c.kind,undefined,'model');td(row,num(c.input_tokens)+' / '+num(c.output_tokens),'总量 '+num(c.total_tokens));td(row,num(c.image_count)+' 张 / '+num(c.audio_seconds)+' 秒');td(row,states[c.state]||c.state,c.finished?'耗时约 '+Math.max(0,c.finished-c.created)+' 秒':'尚未结算','state');calls.append(row);}empty(calls,6);
  const sessions=$('sessions-body');sessions.replaceChildren();for(const s of data.sessions){const row=el('tr');td(row,s.username,s.email);td(row,s.app,[s.client,s.client_version||'版本未知',({"chrome-store":'Chrome 商店',"edge-store":'Edge 商店',unpacked:'本地测试',userscript:'油猴'})[s.client_channel]||'渠道未知'].join(' · '));td(row,date(s.started));td(row,date(s.last_seen));td(row,date(s.ended));const recent=!s.ended&&(s.expires==null||s.expires>Date.now()/1000)&&Date.now()/1000-s.last_seen<=90;td(row,s.ended?'已退出':s.expires!=null&&s.expires<Date.now()/1000?'会话已过期':recent?'最近 90 秒活跃':'暂未活动');sessions.append(row);}empty(sessions,6);
  $('login-panel').hidden=true;$('dashboard').hidden=false;$('account').hidden=false;tab(admin?activeTab:['analytics','operations','users','actions','prompts'].includes(activeTab)?'calls':activeTab);
 }
-async function refresh(){const own=generation,me=await api('/v1/me'),data=me.is_admin?await api('/v1/admin/overview'):{...await api('/v1/history'),month:me.usage.month};if(own!==generation)return;render(data,me);}
+async function refresh(){const own=generation,me=await api('/v1/me'),data=me.is_admin?await api('/v1/admin/overview'):{...await api('/v1/history'),month:me.usage.month};if(own!==generation)return;render(data,me);return data;}
 $('login-form').addEventListener('submit',async e=>{e.preventDefault();if(busy)return;busy=true;$('login-button').disabled=true;try{const data=await api('/v1/auth/login',{email:$('login-name').value.trim(),password:$('login-password').value},'');token=data.token;generation++;saveLogin(token);$('login-password').value='';await refresh();notice('已登录。');}catch(error){notice(error.message,true);}finally{busy=false;$('login-button').disabled=false;}});
 $('logout').addEventListener('click',async()=>{const old=token;reset(true);try{await api('/v1/auth/logout',{},old);notice('已退出。');}catch(e){notice('本机已退出；服务器会话撤销失败，请稍后检查。',true);}});
 
-function syncRegistrationPlanFields(){
- const free=$('registration-plan').value==='free';
- for(const id of ['registration-plan-requests','registration-plan-audio']){
-  $(id).disabled=free;
-  if(free)$(id).value='0';
- }
- $('registration-plan-note').textContent=free?'基础免费不含高级功能，两项额度均为 0。':'开通高级功能，额度按 UTC 月计算。有效期可在账号注册后单独设置。';
+let planTemplates = {}, quotaSnapshot = null, quotaUseTemplate = false;
+const planFeatures = {learning: 'AI 问答', translation: '字幕翻译', speech: '语音智能校准'};
+
+function describePlan(template) {
+ if (!template) return '';
+ const features = Object.keys(planFeatures).filter(key => template[key]).map(key => planFeatures[key]);
+ return '每月 ' + num(template.request_limit) + ' 次调用 · ' + num(template.audio_limit) + ' 秒语音。'
+  + (features.length ? ' 包含' + features.join('、') + '。' : ' 仅基础功能。');
 }
-function renderRegistrationPlan(settings){
- const card=$('registration-plan-card');
- if(!card)return;
- card.hidden=!settings;
- if(settings){
-  $('registration-plan').value=settings.plan;
-  $('registration-plan-requests').value=settings.request_limit;
-  $('registration-plan-audio').value=settings.audio_limit;
- }else $('registration-plan-form').reset();
- $('registration-plan-submit').disabled=false;
- operationMessage('registration-plan-status','');
- syncRegistrationPlanFields();
+
+function fillSelectedTemplate() {
+ const template = planTemplates[$('template-plan').value];
+ $('template-requests').value = template?.request_limit ?? '';
+ $('template-audio').value = template?.audio_limit ?? '';
+ for (const key of Object.keys(planFeatures)) $('template-' + key).checked = !!template?.[key];
 }
-$('registration-plan')?.addEventListener('change',syncRegistrationPlanFields);
-$('registration-plan-form')?.addEventListener('submit',async event=>{
- event.preventDefault();
- if(!admin||busy||$('registration-plan-card').hidden)return;
- const own=generation,button=$('registration-plan-submit'),plan=$('registration-plan').value,free=plan==='free';
- busy=true;
- button.disabled=true;
- operationMessage('registration-plan-status','正在保存…');
- try{
-  const result=await api('/v1/admin/registration-plan',{
-   plan,request_limit:free?0:$('registration-plan-requests').valueAsNumber,
-   audio_limit:free?0:$('registration-plan-audio').valueAsNumber
-  });
-  if(own!==generation)return;
-  renderRegistrationPlan(result.registration_plan);
-  operationMessage('registration-plan-status','已保存，仅对之后完成自助注册的账号生效。');
- }catch(error){
-  if(own===generation)operationMessage('registration-plan-status',error.message,true);
- }finally{
-  busy=false;
-  if(own===generation)button.disabled=false;
+
+function previewRegistrationPlan() {
+ $('registration-plan-note').textContent = describePlan(planTemplates[$('registration-plan').value]);
+}
+
+function previewNewPlan() {
+ $('new-plan-note').textContent = describePlan(planTemplates[$('new-plan').value]);
+}
+
+function renderPlanSettings(templates, registration) {
+ planTemplates = templates || {};
+ $('plan-settings').hidden = !templates;
+ if (!templates) {
+  $('plan-template-form').reset();
+  $('registration-plan-form').reset();
+  $('set-quota').reset();
+  $('quota-user').value = '';
+  $('quota-name').value = '';
+  quotaSnapshot = null;
+  syncQuotaPlan(false);
  }
+ $('registration-plan').value = registration?.plan || 'free';
+ fillSelectedTemplate();
+ previewRegistrationPlan();
+ previewNewPlan();
+ if (quotaUseTemplate) syncQuotaPlan(true);
+ operationMessage('template-status', '');
+ operationMessage('registration-plan-status', '');
+}
+
+$('template-plan').addEventListener('change', () => {
+ fillSelectedTemplate();
+ operationMessage('template-status', '');
 });
+$('registration-plan').addEventListener('change', previewRegistrationPlan);
+$('new-plan').addEventListener('change', previewNewPlan);
+
+async function savePlanSettings(event, endpoint, buttonId, statusId, body, confirmation) {
+ event.preventDefault();
+ if (!admin || busy || $('plan-settings').hidden) return;
+ const own = generation, button = $(buttonId);
+ busy = true;
+ button.disabled = true;
+ operationMessage(statusId, '正在保存…');
+ try {
+  const result = await api(endpoint, body);
+  if (own !== generation) return;
+  renderPlanSettings(result.plan_templates, result.registration_plan);
+  operationMessage(statusId, confirmation);
+ } catch (error) {
+  if (own === generation) operationMessage(statusId, error.message, true);
+ } finally {
+  busy = false;
+  button.disabled = false;
+ }
+}
+
+$('plan-template-form').addEventListener('submit', event => savePlanSettings(
+ event, '/v1/admin/plan-templates', 'template-submit', 'template-status', {
+  plan: $('template-plan').value,
+  request_limit: $('template-requests').valueAsNumber,
+  audio_limit: $('template-audio').valueAsNumber,
+  ...Object.fromEntries(Object.keys(planFeatures).map(key => [key, $('template-' + key).checked]))
+ }, '套餐配置已保存。'));
+$('registration-plan-form').addEventListener('submit', event => savePlanSettings(
+ event, '/v1/admin/registration-plan', 'registration-plan-submit', 'registration-plan-status',
+ {plan: $('registration-plan').value}, '已保存，之后完成注册的账号将使用此套餐。'));
+
+for (const id of ['new-expires', 'quota-expires']) {
+ const select = $(id);
+ for (let months = 1; months <= 36; months++) {
+  const option = el('option', months + ' 个月');
+  option.value = String(months);
+  select.append(option);
+ }
+}
+
+function grantFields(prefix, useTemplate) {
+ const duration = $(prefix + '-expires').value;
+ return {
+  plan: $(prefix + '-plan').value,
+  enabled: $(prefix + '-enabled').checked,
+  use_template: useTemplate,
+  ...(duration === 'keep' ? {} : {duration_months: duration === 'long' ? null : Number(duration)})
+ };
+}
+
+function syncQuotaPlan(applyTemplate) {
+ const plan = $('quota-plan').value, template = planTemplates[plan];
+ quotaUseTemplate = !!(applyTemplate && template && quotaSnapshot);
+ const source = quotaUseTemplate ? template : quotaSnapshot;
+ for (const [suffix, key] of [['requests', 'request_limit'], ['audio', 'audio_limit']]) {
+  const input = $('quota-' + suffix);
+  input.value = source?.[key] ?? '';
+  input.readOnly = quotaUseTemplate;
+ }
+ for (const key of Object.keys(planFeatures)) {
+  const input = $('quota-' + key);
+  input.checked = !!source?.[key];
+  input.disabled = plan !== 'legacy';
+ }
+ $('quota-apply-template').disabled = !template || !quotaSnapshot || quotaUseTemplate;
+ $('quota-plan-note').textContent = quotaUseTemplate ? describePlan(template)
+  : quotaSnapshot ? '当前显示该账号的配置。' : '';
+}
+
+function editGrant(user, grant) {
+ quotaSnapshot = grant;
+ $('quota-user').value = user.id;
+ $('quota-name').value = user.username;
+ $('quota-app').value = grant.app;
+ $('quota-plan').value = grant.plan || 'legacy';
+ $('quota-enabled').checked = !!grant.enabled;
+ $('quota-expires').value = 'keep';
+ $('quota-expiry-note').textContent = (grant.expires ? '当前到期 ' + date(grant.expires) + '。' : '当前长期有效。')
+  + ' 按月选择时，从保存时起算。';
+ $('manage-user').value = user.id;
+ $('manage-name').value = user.username;
+ syncQuotaPlan(false);
+}
+
+$('quota-plan').addEventListener('change', () => syncQuotaPlan(true));
+$('quota-apply-template').addEventListener('click', () => syncQuotaPlan(true));
 $('refresh').addEventListener('click',async()=>{try{await refresh();notice('记录已刷新。');}catch(e){notice(e.message,true);}});
 for(const button of document.querySelectorAll('[data-tab]'))button.addEventListener('click',()=>tab(button.dataset.tab));
-$('create-user').addEventListener('submit',async e=>{e.preventDefault();if(busy)return;busy=true;notice('正在创建账号…');const button=e.currentTarget.querySelector('button.primary');button.disabled=true;try{await api('/v1/admin/users',{username:$('new-name').value.trim(),email:$('new-email').value.trim(),password:$('new-password').value,app:$('new-app').value.trim(),request_limit:Number($('new-requests').value),audio_limit:Number($('new-audio').value),...grantFields('new')});$('new-password').value='';$('new-password').type='password';await refresh();notice('用户已创建，可以在浏览器扩展中登录。');}catch(e){notice(e.message,true);}finally{busy=false;button.disabled=false;}});
-$('set-quota').addEventListener('submit',async e=>{e.preventDefault();if(busy)return;if(!$('quota-user').value){notice('请先点击用户的“调整”。',true);return;}busy=true;notice('正在保存权限与额度…');const button=e.currentTarget.querySelector('button.primary');button.disabled=true;try{await api('/v1/admin/grants',{user_id:Number($('quota-user').value),app:$('quota-app').value.trim(),request_limit:Number($('quota-requests').value),audio_limit:Number($('quota-audio').value),...grantFields('quota')});await refresh();notice('额度已更新，权限已保存。');}catch(e){notice(e.message,true);}finally{busy=false;button.disabled=false;}});
-function localDate(value){if(!value)return '';return new Date(value*1000+8*3600000).toISOString().slice(0,16);}
-function grantFields(prefix){const value=$(prefix+'-expires').value;return Object.fromEntries([['plan',$(prefix+'-plan').value],...['learning','translation','speech','enabled'].map(k=>[k,$(prefix+'-'+k).checked]),['expires',value?Math.floor(new Date(value+'+08:00').getTime()/1000):null]]);}
-function syncPlanFields(prefix){const plan=$(prefix+'-plan').value;for(const key of ['learning','translation','speech']){const input=$(prefix+'-'+key);input.closest('label').hidden=plan!=='legacy';if(plan!=='legacy')input.checked=['trial','pro','ultra'].includes(plan);}$(prefix+'-plan-note').textContent=plan==='free'?'免费账号可用原文字幕、PPT 缩放、课堂全屏、手动同步与本机缓存。':plan==='trial'?'每人独立的免费体验账号，可使用高级功能。请填写赠送的月调用额度、语音秒数和有效期；留空有效期时不显示倒计时。':plan==='legacy'?'保留原有功能开关；确认套餐后可改为 PRO 或 Ultra。':'PRO 与 Ultra 均开通 AI 问答、翻译、语音自动校准、本机学习记录和知识卡导出；仅额度不同，请填写约定的额度与有效期。';}
-for(const prefix of ['new','quota']){$(prefix+'-plan').addEventListener('change',()=>syncPlanFields(prefix));syncPlanFields(prefix);}
+
+$('create-user').addEventListener('submit', async event => {
+ event.preventDefault();
+ if (!admin || busy) return;
+ busy = true;
+ const button = event.currentTarget.querySelector('button.primary');
+ button.disabled = true;
+ notice('正在创建账号…');
+ try {
+  await api('/v1/admin/users', {
+   username: $('new-name').value.trim(),
+   email: $('new-email').value.trim(),
+   password: $('new-password').value,
+   app: $('new-app').value.trim(),
+   ...grantFields('new', true)
+  });
+  $('new-password').value = '';
+  $('new-password').type = 'password';
+  await refresh();
+  notice('用户已创建，可以在浏览器扩展中登录。');
+ } catch (error) {
+  notice(error.message, true);
+ } finally {
+  busy = false;
+  button.disabled = false;
+ }
+});
+
+$('set-quota').addEventListener('submit', async event => {
+ event.preventDefault();
+ if (!admin || busy) return;
+ if (!quotaSnapshot) {
+  notice('请先点击用户的“调整”。', true);
+  return;
+ }
+ busy = true;
+ const button = event.currentTarget.querySelector('button.primary');
+ const userId = Number($('quota-user').value), app = $('quota-app').value.trim();
+ const body = {user_id: userId, app, ...grantFields('quota', quotaUseTemplate)};
+ if (!quotaUseTemplate) {
+  body.request_limit = $('quota-requests').valueAsNumber;
+  body.audio_limit = $('quota-audio').valueAsNumber;
+  if (body.plan === 'legacy') {
+   for (const key of Object.keys(planFeatures)) body[key] = $('quota-' + key).checked;
+  }
+ }
+ button.disabled = true;
+ notice('正在保存权限与额度…');
+ try {
+  await api('/v1/admin/grants', body);
+  const data = await refresh();
+  const user = data?.users?.find(item => item.id === userId);
+  const grant = user?.grants.find(item => item.app === app);
+  if (grant) editGrant(user, grant);
+  notice('额度已更新，权限已保存。');
+ } catch (error) {
+  notice(error.message, true);
+ } finally {
+  busy = false;
+  button.disabled = false;
+ }
+});
 function filterUsers(){const value=$('user-search').value.trim().toLowerCase();for(const row of $('users-body').children)row.hidden=value&&!row.textContent.toLowerCase().includes(value);}
 $('user-search').addEventListener('input',filterUsers);
 $('generate-password').addEventListener('click',()=>{const bytes=crypto.getRandomValues(new Uint8Array(18));$('new-password').value=Array.from(bytes,b=>b.toString(16).padStart(2,'0')).join('');$('new-password').type='text';notice('已生成密码，创建前请复制保存并单独发给测试用户。');});
@@ -155,7 +306,7 @@ const analyticsNum=v=>analyticsKnown(v)?Number(v).toLocaleString('zh-CN',{maximu
 const analyticsPercent=v=>analyticsKnown(v)?(Number(v)*100).toLocaleString('zh-CN',{maximumFractionDigits:1})+'%':'—';
 function analyticsDuration(v){if(!analyticsKnown(v))return '—';const n=Math.max(0,Number(v));if(n<60)return Math.round(n)+' 秒';if(n<3600)return (n/60).toLocaleString('zh-CN',{maximumFractionDigits:1})+' 分钟';return (n/3600).toLocaleString('zh-CN',{maximumFractionDigits:1})+' 小时';}
 function beijingDay(offset=0){return new Date(Date.now()+8*3600000+offset*86400000).toISOString().slice(0,10);}
-function clearAnalytics(){analyticsLoad++;analyticsData=null;$('analytics-tab').hidden=true;$('analytics-panel').hidden=true;$('analytics-content').hidden=true;$('analytics-refresh').disabled=false;$('analytics-status').textContent='';$('analytics-user-search').value='';for(const id of ['analytics-stats','analytics-chart','analytics-courses','analytics-features','analytics-retention','analytics-cohorts','analytics-users','analytics-trend-rows','analytics-coverage-title','analytics-coverage-note','analytics-token-detail','analytics-request-detail','analytics-cost-detail','analytics-updated','analytics-user-count','official-pricing'])$(id).replaceChildren();}
+function clearAnalytics(){analyticsLoad++;analyticsData=null;$('analytics-tab').hidden=true;$('analytics-panel').hidden=true;$('analytics-content').hidden=true;$('analytics-refresh').disabled=false;$('analytics-status').textContent='';$('analytics-user-search').value='';for(const id of ['analytics-stats','analytics-chart','analytics-ai-chart','analytics-study-chart','analytics-language-chart','analytics-fee-chart','analytics-fee-note','analytics-collection-status','analytics-courses','analytics-features','analytics-retention','analytics-cohorts','analytics-users','analytics-trend-rows','analytics-coverage-title','analytics-coverage-note','analytics-token-detail','analytics-request-detail','analytics-cost-detail','analytics-accounts','analytics-registration-note','analytics-updated','analytics-user-count','official-pricing'])$(id).replaceChildren();}
 function setAnalyticsRange(value,load=true){analyticsRange=value;for(const button of document.querySelectorAll('[data-range]'))button.setAttribute('aria-pressed',String(button.dataset.range===value));$('analytics-filter').hidden=value!=='custom';if(value!=='custom'){const end=beijingDay();$('analytics-end').value=end;$('analytics-start').value=value==='today'?end:value==='month'?end.slice(0,8)+'01':beijingDay(-6);if(load)void loadAnalytics();}}
 function analyticsMessage(text,state='loading'){$('analytics-status').hidden=false;$('analytics-status').dataset.state=state;$('analytics-status').textContent=text;}
 async function loadAnalytics(){if(!admin||!token)return;const start=$('analytics-start').value,end=$('analytics-end').value;if(!start||!end||start>end){analyticsMessage('请选择有效的开始与结束日期。','error');return;}if((Date.parse(end)-Date.parse(start))/86400000>92){analyticsMessage('单次最多查看 93 天，请缩小日期范围。','error');return;}const own=generation,load=++analyticsLoad;$('analytics-refresh').disabled=true;$('analytics-content').hidden=true;analyticsData=null;analyticsMessage('正在汇总这段时间的使用情况…');$('analytics-range-label').textContent=start+' — '+end+' · 北京时间';
@@ -165,21 +316,152 @@ async function loadAnalytics(){if(!admin||!token)return;const start=$('analytics
 }
 function addAnalyticsStat(label,value,hint,icon){const card=el('article',undefined,'analytics-stat'),top=el('div',undefined,'analytics-stat-top'),mark=el('span',icon,'analytics-stat-icon');mark.setAttribute('aria-hidden','true');top.append(el('small',label),mark);card.append(top,el('strong',value),el('span',hint));$('analytics-stats').append(card);}
 function tokenEstimateText(estimate){if(!estimate)return 'Token 参考费用：暂无费率数据';if(estimate.complete&&analyticsKnown(estimate.amount_cny))return 'Token 参考费用 ¥ '+money(estimate.amount_cny,4);if(analyticsKnown(estimate.known_amount_cny)&&Number(estimate.priced_calls)>0)return '已知部分 ¥ '+money(estimate.known_amount_cny,4)+' · '+analyticsNum(estimate.unpriced_calls)+' 次未计价';return 'Token 参考费用：待核对';}
-function renderAnalytics(){if(!analyticsData||!admin)return;const data=analyticsData,s=data.summary||{},c=data.coverage||{};$('analytics-stats').replaceChildren();addAnalyticsStat('Token 总消耗',analyticsNum(s.total_tokens),s.token_estimate?tokenEstimateText(s.token_estimate):'来自服务端已记录的 usage','T');addAnalyticsStat('活跃账号',analyticsNum(s.active_users),'成功使用功能或有效活动 ≥ 60 秒','人');addAnalyticsStat('观看课节',analyticsNum(s.learning_lessons),'用户 × 课节去重 · 覆盖 '+analyticsNum(s.unique_courses)+' 个课节','课');addAnalyticsStat('有效使用时长',analyticsDuration(s.effective_seconds),'同账号重叠时段合并 · 估算值','◷');$('analytics-token-detail').textContent='输入 '+analyticsNum(s.input_tokens)+' / 输出 '+analyticsNum(s.output_tokens)+' Token';$('analytics-request-detail').textContent='模型调用 '+analyticsNum(s.requests)+' 次 · 待核对 '+analyticsNum(s.uncertain)+' 次';$('analytics-cost-detail').textContent=tokenEstimateText(s.token_estimate);$('analytics-cost-detail').title=s.token_estimate?.note||'按当前官方参考费率估算 Token 成本，不代表实际账单，不含其他计费项。';if(s.token_estimate?.source_url?.startsWith('https://docs.volcengine.com/')){const link=el('a','价格依据');link.href=s.token_estimate.source_url;link.target='_blank';link.rel='noopener noreferrer';link.title='官方费率核对日期 '+(s.token_estimate.checked_at||'—');$('analytics-cost-detail').append(document.createTextNode(' · '),link);}$('analytics-updated').textContent='更新于 '+(data.generated_at?date(data.generated_at):'—')+' · 手动刷新';$('analytics-coverage-title').textContent=c.started_at?'学习行为采集始于 '+date(c.started_at):'学习行为尚未开始采集';$('analytics-coverage-note').textContent=(c.note||'学习行为仅覆盖已登录且启用统计的新版扩展，不代表全站真实总量。')+(c.partial?' 所选时段包含采集前历史，学习数据不完整。':'')+' 已观测 '+analyticsNum(c.observed_users)+' 个账号；历史缺失显示 —，不补成 0。';renderAnalyticsChart();renderAnalyticsCourses();renderAnalyticsFeatures();renderAnalyticsRetention();renderAnalyticsUsers();}
+function renderAnalytics(){
+ if(!analyticsData||!admin)return;
+ const data=analyticsData,s=data.summary||{},c=data.coverage||{};
+ const collectionStatus=$('analytics-collection-status');
+ collectionStatus.hidden=!c.partial&&!!c.started_at;
+ collectionStatus.textContent=!c.started_at
+  ? '尚未收到客户端学习事件。截图、看课、字幕、翻译与完整问答在已登录的扩展成功上报后显示。'
+  : '学习行为从 '+date(c.started_at)+' 开始记录。采集前的日期显示为 —。';
+ $('analytics-stats').replaceChildren();
+ addAnalyticsStat('Token 总消耗',analyticsNum(s.total_tokens),s.token_estimate?tokenEstimateText(s.token_estimate):'来自服务端已记录的 usage','T');
+ addAnalyticsStat('活跃账号',analyticsNum(s.active_users),'成功使用功能或有效活动 ≥ 60 秒','人');
+ addAnalyticsStat('观看课节',analyticsNum(s.learning_lessons),'用户 × 课节去重 · 覆盖 '+analyticsNum(s.unique_courses)+' 个课节','课');
+ addAnalyticsStat('有效使用时长',analyticsDuration(s.effective_seconds),'同账号重叠时段合并 · 估算值','◷');
+ $('analytics-token-detail').textContent='输入 '+analyticsNum(s.input_tokens)+' / 输出 '+analyticsNum(s.output_tokens)+' Token';
+ $('analytics-request-detail').textContent='模型调用 '+analyticsNum(s.requests)+' 次 · 待核对 '+analyticsNum(s.uncertain)+' 次';
+ $('analytics-accounts').textContent='应用账号总数 '+analyticsNum(s.registered_users);
+ $('analytics-accounts').title='当前有此应用授权记录的账号，包含自助注册和人工开通';
+ $('analytics-cost-detail').textContent=tokenEstimateText(s.token_estimate);
+ $('analytics-cost-detail').title=s.token_estimate?.note||'按当前官方参考费率估算 Token 成本，不代表实际账单，不含其他计费项。';
+ if(s.token_estimate?.source_url?.startsWith('https://docs.volcengine.com/')){
+  const link=el('a','价格依据');
+  link.href=s.token_estimate.source_url;link.target='_blank';link.rel='noopener noreferrer';
+  link.title='官方费率核对日期 '+(s.token_estimate.checked_at||'—');
+  $('analytics-cost-detail').append(document.createTextNode(' · '),link);
+ }
+ $('analytics-updated').textContent='更新于 '+(data.generated_at?date(data.generated_at):'—')+' · 手动刷新';
+ $('analytics-coverage-title').textContent=c.started_at?'学习行为采集始于 '+date(c.started_at):'学习行为尚未开始采集';
+ $('analytics-coverage-note').textContent=(c.note||'学习行为仅覆盖已登录且启用统计的新版扩展，不代表全站真实总量。')+(c.partial?' 所选时段包含采集前历史，学习数据不完整。':'')+' 已观测 '+analyticsNum(c.observed_users)+' 个账号；历史缺失显示 —，不补成 0。';
+ $('analytics-registration-note').textContent=c.registrations_started_at?' 自助注册自 '+date(c.registrations_started_at)+' 起计数。':' 自助注册尚无可用统计。';
+ const rows=data.trend||[];
+ const unpriced=rows.reduce((total,row)=>total+(Number(row.unpriced_token_calls)||0),0);
+ $('analytics-fee-note').textContent='按官方 Token 参考费率估算。语音和其他费用另计。'+
+  (unpriced?' 所选日期有 '+analyticsNum(unpriced)+' 次待核对，橙色表示部分计价或金额待定。':'');
+ renderAnalyticsCharts();renderAnalyticsDaily(rows);renderAnalyticsCourses();renderAnalyticsFeatures();renderAnalyticsRetention();renderAnalyticsUsers();
+}
+function renderAnalyticsDaily(rows){
+ const table=$('analytics-trend-rows');
+ table.replaceChildren();
+ for(const item of [...rows].reverse()){
+  const row=el('tr');
+  td(row,item.date);
+  const accounts=td(row,analyticsNum(item.account_total));
+  if(analyticsKnown(item.account_change)){
+   const change=Number(item.account_change);
+   accounts.append(el('small','较前日 '+(change>0?'+':'')+analyticsNum(change)));
+  }
+  td(row,analyticsNum(item.token_requests));
+  td(row,analyticsNum(item.tokens));
+  table.append(row);
+ }
+ empty(table,4);
+}
 function analyticsSvg(tag,attrs={},text){const n=document.createElementNS('http://www.w3.org/2000/svg',tag);for(const [k,v] of Object.entries(attrs))n.setAttribute(k,String(v));if(text!==undefined)n.textContent=text;return n;}
-function renderAnalyticsChart(){const rows=analyticsData?.trend||[],metric=$('analytics-metric').value,label=$('analytics-metric').selectedOptions[0].textContent,format=metric==='effective_seconds'?analyticsDuration:analyticsNum,container=$('analytics-chart');container.replaceChildren();const table=$('analytics-trend-rows');table.replaceChildren();for(const item of rows){const tr=el('tr');td(tr,item.date);td(tr,analyticsNum(item.tokens));td(tr,analyticsNum(item.users));td(tr,analyticsNum(item.lessons));td(tr,analyticsDuration(item.effective_seconds));table.append(tr);}empty(table,5);const values=rows.map(r=>analyticsKnown(r[metric])?Number(r[metric]):null);if(!values.some(v=>v!==null)){container.append(el('div','这段时间暂无可用的'+label+'数据','analytics-empty'));return;}
- const width=Math.max(280,Math.min(640,container.clientWidth||640)),height=180,left=52,right=12,top=12,bottom=26,base=height-bottom,max=Math.max(1,...values.filter(v=>v!==null)),x=i=>left+(width-left-right)*(rows.length===1?.5:i/(rows.length-1)),y=v=>base-v/max*(base-top),svg=analyticsSvg('svg',{viewBox:'0 0 '+width+' '+height,role:'img','aria-label':label+'每日趋势。每日数值可在下方明细中查看。'}),defs=analyticsSvg('defs'),gradient=analyticsSvg('linearGradient',{id:'analytics-area',x1:0,y1:0,x2:0,y2:1});gradient.append(analyticsSvg('stop',{offset:'0%','stop-color':'#4b8bdf','stop-opacity':'.16'}),analyticsSvg('stop',{offset:'100%','stop-color':'#4b8bdf','stop-opacity':'.01'}));defs.append(gradient);svg.append(defs);
- for(let step=0;step<=3;step++){const value=max*step/3,lineY=y(value);svg.append(analyticsSvg('line',{x1:left,y1:lineY,x2:width-right,y2:lineY,class:'chart-grid'}),analyticsSvg('text',{x:left-10,y:lineY+3,'text-anchor':'end',class:'chart-label'},metric==='effective_seconds'?(value/3600).toLocaleString('zh-CN',{maximumFractionDigits:1})+'h':value>=1000?(value/1000).toLocaleString('zh-CN',{maximumFractionDigits:1})+'k':Math.round(value)));}
- let segment=[];const draw=()=>{if(!segment.length)return;const line=segment.map((p,i)=>(i?'L':'M')+p.join(',')).join(' ');svg.append(analyticsSvg('path',{d:line+' L'+segment.at(-1)[0]+','+base+' L'+segment[0][0]+','+base+' Z',fill:'url(#analytics-area)'}),analyticsSvg('path',{d:line,class:'chart-line'}));segment=[];};values.forEach((v,i)=>{if(v===null)draw();else segment.push([x(i),y(v)]);});draw();
- const ticks=new Set([0,Math.floor((rows.length-1)/3),Math.floor((rows.length-1)*2/3),rows.length-1]);rows.forEach((r,i)=>{if(ticks.has(i))svg.append(analyticsSvg('text',{x:x(i),y:height-5,'text-anchor':'middle',class:'chart-label'},r.date.slice(5)));if(values[i]!==null){const dot=analyticsSvg('circle',{cx:x(i),cy:y(values[i]),r:3,class:'chart-dot',tabindex:0,'aria-label':r.date+'，'+label+' '+format(values[i])});dot.append(analyticsSvg('title',{},r.date+' · '+format(values[i])));svg.append(dot);}});container.append(svg);
+function renderAnalyticsChart(){
+ const select=$('analytics-metric');
+ drawAnalyticsBars('analytics-chart',[[select.value,select.selectedOptions[0].textContent]]);
+}
+function renderAnalyticsStudy(){
+ const series=$('analytics-study-metric').value==='time'
+  ? [['effective_seconds','有效时长']]
+  : [['screenshot_uses','截图次数'],['lessons','观看课节']];
+ drawAnalyticsBars('analytics-study-chart',series);
+}
+function renderAnalyticsCharts(){
+ renderAnalyticsChart();
+ renderAnalyticsStudy();
+ drawAnalyticsBars('analytics-ai-chart',[['ai_uses','问答次数'],['ai_users','去重人数']]);
+ drawAnalyticsBars('analytics-language-chart',[['speech_uses','校准次数'],['translation_uses','翻译次数']]);
+ drawAnalyticsBars('analytics-fee-chart',[['api_cost_cny','API 参考费用']]);
+}
+const feeFormat=new Intl.NumberFormat('zh-CN',{style:'currency',currency:'CNY',maximumFractionDigits:6});
+const axisCount=new Intl.NumberFormat('zh-CN',{notation:'compact',maximumFractionDigits:1});
+function drawAnalyticsBars(id,series){
+ const container=$(id),rows=analyticsData?.trend||[];
+ container.replaceChildren();
+ const fees=series[0][0]==='api_cost_cny',duration=series[0][0]==='effective_seconds';
+ const format=fees?v=>feeFormat.format(v):duration?analyticsDuration:analyticsNum;
+ const values=rows.map(row=>series.map(([key])=>analyticsKnown(row[key])?Number(row[key]):null));
+ const available=values.flat().filter(value=>value!==null);
+ const hasUnpriced=fees&&rows.some(row=>row.unpriced_token_calls>0);
+ if(!available.length&&!hasUnpriced){
+  container.append(el('p','所选日期暂无可用数据','analytics-empty'));
+  return;
+ }
+ const width=Math.max(262,container.clientWidth),height=180,left=fees?72:56,right=10,top=12,bottom=28;
+ const base=height-bottom,peak=Math.max(0,...available);
+ const feeAxis=new Intl.NumberFormat('zh-CN',{style:'currency',currency:'CNY',
+  maximumFractionDigits:peak>=.03?2:peak>=.003?3:6});
+ const steps=fees||duration?3:Math.min(3,Math.max(peak,1));
+ const max=fees||duration?(peak||1):Math.max(steps,Math.ceil(peak/steps)*steps);
+ const dayWidth=(width-left-right)/rows.length;
+ const barWidth=Math.min(32,dayWidth*.74/series.length);
+ const center=i=>left+dayWidth*(i+.5);
+ const positionY=v=>base-v/max*(base-top);
+ const label=series.map(([,name])=>name).join('、');
+ const svg=analyticsSvg('svg',{viewBox:'0 0 '+width+' '+height,role:'group','aria-label':label+'每日柱状图'});
+ for(let step=0;step<=steps;step++){
+  const value=max*step/steps,y=positionY(value);
+  const tick=fees?feeAxis.format(value):duration?analyticsDuration(value):axisCount.format(value);
+  svg.append(analyticsSvg('line',{x1:left,y1:y,x2:width-right,y2:y,class:'chart-grid'}),
+             analyticsSvg('text',{x:left-7,y:y+3,'text-anchor':'end',class:'chart-label'},tick));
+ }
+ if(series.length>1){
+  const legend=el('div',undefined,'analytics-bar-legend');
+  series.forEach(([,name],i)=>legend.append(el('span',name,'chart-series-'+i)));
+  container.append(legend);
+ }
+ const readout=el('p',undefined,'analytics-chart-value');
+ let lastReadout='';
+ const tickEvery=Math.max(1,Math.ceil(rows.length/Math.max(3,Math.floor(width/92))));
+ rows.forEach((row,i)=>{
+  if(i===rows.length-1||i%tickEvery===0&&i<rows.length-tickEvery){
+   svg.append(analyticsSvg('text',{x:center(i),y:height-7,'text-anchor':'middle',class:'chart-label'},row.date.slice(5)));
+  }
+  const missingFees=fees?Number(row.unpriced_token_calls)||0:0;
+  const readoutText=row.date+' · '+series.map(([,name],j)=>{
+   const value=values[i][j];
+   return name+' '+(value===null?'—':format(value));
+  }).join(' · ')+(missingFees?' · '+analyticsNum(missingFees)+' 次待核对':'');
+  series.forEach(([,name],j)=>{
+   const value=values[i][j];
+   if(value===null&&!missingFees)return;
+   const barHeight=value===null?4:Math.max(1,base-positionY(value));
+   const barClass='chart-bar chart-series-'+j+(missingFees?(value===null?' chart-unknown':' chart-partial'):'');
+   const pointLabel=row.date+'，'+name+' '+(value===null?'暂无可估算金额':format(value))+
+    (missingFees?'，'+analyticsNum(missingFees)+' 次待核对':'');
+   const bar=analyticsSvg('rect',{x:center(i)+(j-series.length/2)*barWidth+.5,y:base-barHeight,
+    width:Math.max(1,barWidth-1),height:barHeight,rx:Math.min(barWidth/4,3),class:barClass,tabindex:0,
+    role:'img','aria-label':pointLabel});
+   bar.append(analyticsSvg('title',{},pointLabel));
+   const show=()=>{readout.textContent=readoutText;};
+   for(const event of ['pointerenter','focus','click'])bar.addEventListener(event,show);
+   svg.append(bar);
+   lastReadout=readoutText;
+  });
+ });
+ readout.textContent=lastReadout;
+ container.append(svg,readout);
 }
 function renderAnalyticsCourses(){const box=$('analytics-courses');box.replaceChildren();const items=[...(analyticsData?.courses||[])].sort((a,b)=>(b.users||0)-(a.users||0)).slice(0,5);for(const [i,item] of items.entries()){const row=el('div',undefined,'course-row'),name=el('div'),title=el('div',item.title||'未命名课节','course-title');title.title=item.title||'未命名课节';name.append(title,el('div',analyticsNum(item.lessons)+' 课节 · '+analyticsDuration(item.watch_seconds),'course-sub'));row.append(el('span',String(i+1).padStart(2,'0'),'course-rank'),name,el('span',analyticsNum(item.users)+' 人','course-count'));box.append(row);}if(!items.length)box.append(el('div','暂无课节数据\n完成有效观看后会出现在这里','analytics-empty'));}
 function renderAnalyticsFeatures(){const box=$('analytics-features');box.replaceChildren();const active=analyticsData?.summary?.active_users,items=analyticsData?.features||[];for(const [key,title,icon] of [['subtitle','字幕','字'],['translation','翻译','译'],['screenshot','截图','▣'],['ai','AI 问答','AI']]){const item=items.find(i=>i.feature===key)||{},rate=analyticsKnown(active)&&Number(active)>0&&analyticsKnown(item.users)?Number(item.users)/Number(active):null,row=el('div',undefined,'feature-row'),name=el('div',title,'feature-name'),bar=el('div',undefined,'feature-progress'),fill=el('span'),values=el('div',analyticsNum(item.users)+' 人 / '+analyticsNum(item.uses)+' 次','feature-values');name.append(el('small','成功使用'));fill.style.width=(rate===null?0:Math.max(0,Math.min(100,rate*100)))+'%';bar.append(fill);bar.setAttribute('aria-hidden','true');values.append(el('small','覆盖率 '+analyticsPercent(rate)));row.append(el('span',icon,'feature-icon'),name,bar,values);box.append(row);}}
 function renderAnalyticsRetention(){const data=analyticsData?.retention||{},box=$('analytics-retention');box.replaceChildren();for(const [key,label,explain,eligible] of [['d1','次日回访','第 1 天再次有效使用','d1_eligible_users'],['within7','7 日内回访','第 1–7 天任一天回来','d7_eligible_users'],['d7','第 7 日回访','恰好第 7 天再次使用','d7_eligible_users']]){const value=data[key+'_rate'],card=el('div',undefined,'retention-card'),has=analyticsKnown(value),cohorts=data.cohorts||[],status=cohorts.length?'观察中':'暂无数据';card.append(el('small',label),el('strong',has?analyticsPercent(value):status,has?'':'pending'),el('p',explain),el('p','成熟样本 '+analyticsNum(data[eligible])+' 人'));box.append(card);}const tbody=$('analytics-cohorts');tbody.replaceChildren();for(const item of data.cohorts||[]){const row=el('tr');td(row,item.date);td(row,analyticsNum(item.users));for(const key of ['d1','within7','d7']){const mature=item[(key==='within7'?'d7':key)+'_mature'],rate=item[key+'_rate'];td(row,analyticsKnown(rate)?analyticsPercent(rate):mature?'—':'观察中');}tbody.append(row);}empty(tbody,5);}
 function renderAnalyticsUsers(){const box=$('analytics-users');box.replaceChildren();const search=$('analytics-user-search').value.trim().toLowerCase(),sort=$('analytics-user-sort').value,items=(analyticsData?.users||[]).filter(u=>!search||(u.username||'').toLowerCase().includes(search)).slice().sort((a,b)=>{const av=analyticsKnown(a[sort])?Number(a[sort]):-1,bv=analyticsKnown(b[sort])?Number(b[sort]):-1;return bv-av||String(a.username).localeCompare(String(b.username),'zh-CN');});$('analytics-user-count').textContent=analyticsNum(items.length)+' 人';for(const user of items){const row=el('tr');td(row,user.username||'未命名账号');td(row,date(user.last_seen));td(row,analyticsNum(user.lessons));td(row,analyticsDuration(user.effective_seconds));td(row,analyticsNum(user.total_tokens));td(row,analyticsNum(user.ai_uses));box.append(row);}empty(box,6);}
 function renderOfficialPricing(data){const box=$('official-pricing');box.replaceChildren();const catalog=data.pricing_catalog;if(!catalog){box.append(el('strong','官方参考费率暂不可用'),el('span','服务器更新后自动加载。历史已配置费率仍可在下方查看。'));return;}box.append(el('strong','自动匹配模型，无需手动填写'));for(const model of catalog.models||[])box.append(el('div',(model.title||model.model)+'：输入 ¥'+money(model.input_per_million,2)+' / 输出 ¥'+money(model.output_per_million,2)+'（每百万 Token）'));box.append(el('p',catalog.note||'按当前官方常规在线 Token 费率参考估算，不代表实际账单。'));const reference=el('div','核对日期 '+(catalog.checked_at||'—')+' · ');if(typeof catalog.source_url==='string'&&catalog.source_url.startsWith('https://docs.volcengine.com/')){const link=el('a','官方定价');link.href=catalog.source_url;link.target='_blank';link.rel='noopener noreferrer';reference.append(link);}box.append(reference);if(data.summary?.token_estimate)box.append(el('div',tokenEstimateText(data.summary.token_estimate)));}
-let analyticsResize=0;window.addEventListener('resize',()=>{cancelAnimationFrame(analyticsResize);analyticsResize=requestAnimationFrame(()=>{if(admin&&analyticsData&&activeTab==='analytics')renderAnalyticsChart();});});
-for(const button of document.querySelectorAll('[data-range]'))button.addEventListener('click',()=>setAnalyticsRange(button.dataset.range));$('analytics-filter').addEventListener('submit',e=>{e.preventDefault();void loadAnalytics();});$('analytics-refresh').addEventListener('click',()=>void loadAnalytics());$('analytics-metric').addEventListener('change',renderAnalyticsChart);$('analytics-user-search').addEventListener('input',renderAnalyticsUsers);$('analytics-user-sort').addEventListener('change',renderAnalyticsUsers);setAnalyticsRange('7d',false);
+let analyticsResize=0;window.addEventListener('resize',()=>{cancelAnimationFrame(analyticsResize);analyticsResize=requestAnimationFrame(()=>{if(admin&&analyticsData&&activeTab==='analytics')renderAnalyticsCharts();});});
+for(const button of document.querySelectorAll('[data-range]'))button.addEventListener('click',()=>setAnalyticsRange(button.dataset.range));$('analytics-filter').addEventListener('submit',e=>{e.preventDefault();void loadAnalytics();});$('analytics-refresh').addEventListener('click',()=>void loadAnalytics());$('analytics-metric').addEventListener('change',renderAnalyticsChart);$('analytics-study-metric').addEventListener('change',renderAnalyticsStudy);$('analytics-user-search').addEventListener('input',renderAnalyticsUsers);$('analytics-user-sort').addEventListener('change',renderAnalyticsUsers);setAnalyticsRange('7d',false);
 let restoreTimer,restoreDelay=1000,restoring=false;
 async function restoreLogin(){
  if(!token||restoring||busy||!$('dashboard').hidden||document.visibilityState==='hidden')return;

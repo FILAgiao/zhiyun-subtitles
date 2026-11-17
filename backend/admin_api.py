@@ -1,8 +1,31 @@
 """Admin metadata and session activity; never persists prompts, images or tokens."""
 import re, sqlite3, time, json, secrets
+from calendar import monthrange
+from datetime import datetime, timedelta, timezone
 
 PASSWORD_REQUIREMENTS = '密码为 7–256 位，仅使用英文字母或数字'
-DEFAULT_REGISTRATION_PLAN = {'plan': 'free', 'request_limit': 0, 'audio_limit': 0}
+PLANS = ('free', 'trial', 'pro', 'ultra')
+FEATURES = ('learning', 'translation', 'speech')
+GRANT_FIELDS = ('enabled', *FEATURES, 'expires', 'plan', 'template_applied')
+BEIJING = timezone(timedelta(hours=8))
+
+def default_plan_template(plan):
+    advanced = plan != 'free'
+    return {'request_limit': 1000 if advanced else 0, 'audio_limit': 3600 if advanced else 0,
+            **dict.fromkeys(FEATURES, advanced)}
+
+def months_from_now(months, *, started_at=None):
+    if type(months) is not int or not 1 <= months <= 36:
+        raise Fault(400, '有效期请选择 1 至 36 个月或长期有效')
+    start = datetime.fromtimestamp(time.time() if started_at is None else started_at, BEIJING)
+    year, month = divmod(start.year * 12 + start.month - 1 + months, 12)
+    day = min(start.day, monthrange(year, month + 1)[1])
+    return int(start.replace(year=year, month=month + 1, day=day).timestamp())
+
+def grant_allows_feature(grant, feature):
+    if grant['template_applied'] or grant['plan'] == 'legacy':
+        return bool(grant[feature])
+    return grant['plan'] != 'free'
 
 def valid_new_password(password):
     return isinstance(password, str) and re.fullmatch(r'[A-Za-z0-9]{7,256}', password) is not None
@@ -20,7 +43,7 @@ def migrate(db):
     db.execute("CREATE TABLE IF NOT EXISTS activity_client_metadata(hash TEXT PRIMARY KEY,client_version TEXT NOT NULL DEFAULT '',client_channel TEXT NOT NULL DEFAULT 'unknown')")
     columns={
         'users': {'username': "TEXT NOT NULL DEFAULT ''", 'is_admin': 'INTEGER NOT NULL DEFAULT 0', 'enabled': 'INTEGER NOT NULL DEFAULT 1'},
-        'grants': {'enabled': 'INTEGER NOT NULL DEFAULT 1', 'learning': 'INTEGER NOT NULL DEFAULT 1', 'translation': 'INTEGER NOT NULL DEFAULT 1', 'speech': 'INTEGER NOT NULL DEFAULT 1', 'expires': 'INTEGER', 'plan': "TEXT NOT NULL DEFAULT 'legacy'"},
+        'grants': {'enabled': 'INTEGER NOT NULL DEFAULT 1', 'learning': 'INTEGER NOT NULL DEFAULT 1', 'translation': 'INTEGER NOT NULL DEFAULT 1', 'speech': 'INTEGER NOT NULL DEFAULT 1', 'expires': 'INTEGER', 'plan': "TEXT NOT NULL DEFAULT 'legacy'", 'template_applied': 'INTEGER NOT NULL DEFAULT 0'},
         'admin_actions': {'details': "TEXT NOT NULL DEFAULT '{}'"},
         'calls': {'model': "TEXT NOT NULL DEFAULT ''", 'feature': "TEXT NOT NULL DEFAULT ''", 'image_count': 'INTEGER NOT NULL DEFAULT 0', 'finished': 'INTEGER'},
     }
@@ -35,6 +58,9 @@ CREATE TABLE IF NOT EXISTS activity_sessions(hash TEXT PRIMARY KEY,user INTEGER,
 CREATE INDEX IF NOT EXISTS activity_user_time ON activity_sessions(user,started);
 CREATE TABLE IF NOT EXISTS admin_actions(id INTEGER PRIMARY KEY,actor INTEGER,target INTEGER,app TEXT,action TEXT,created INTEGER);
 CREATE TABLE IF NOT EXISTS registration_plan(id INTEGER PRIMARY KEY CHECK(id=1),plan TEXT NOT NULL,request_limit INTEGER NOT NULL,audio_limit INTEGER NOT NULL);
+CREATE TABLE IF NOT EXISTS plan_templates(plan TEXT PRIMARY KEY,request_limit INTEGER NOT NULL,audio_limit INTEGER NOT NULL,learning INTEGER NOT NULL,translation INTEGER NOT NULL,speech INTEGER NOT NULL);
+INSERT OR IGNORE INTO plan_templates(plan,request_limit,audio_limit,learning,translation,speech)
+SELECT plan,request_limit,audio_limit,plan<>'free',plan<>'free',plan<>'free' FROM registration_plan WHERE id=1;
 ''')
 
 class AdminMixin:
@@ -65,7 +91,8 @@ class AdminMixin:
         return {'calls':calls,'sessions':sessions}
     def admin_overview(self,period):
         with self.db() as db:
-            registration_plan = self.registration_plan(db)
+            templates = self.plan_templates(db)
+            registration_plan = self.registration_plan(db, templates)
             people=[dict(r) for r in db.execute('SELECT id,username,email,is_admin,enabled FROM users ORDER BY id DESC LIMIT 200')]
             for person in people:
                 grants=[dict(r) for r in db.execute('SELECT app,requests AS request_limit,audio AS audio_limit,enabled,learning,translation,speech,expires,plan FROM grants WHERE user=?',(person['id'],))]
@@ -73,78 +100,168 @@ class AdminMixin:
             total=dict(db.execute('SELECT COUNT(*) AS requests,COALESCE(SUM(total_tokens),0) AS total_tokens,COALESCE(SUM(input_tokens),0) AS input_tokens,COALESCE(SUM(output_tokens),0) AS output_tokens,COALESCE(SUM(seconds),0) AS audio_seconds,COALESCE(SUM(image_count),0) AS images,COALESCE(SUM(web_search),0) AS web_search FROM calls WHERE month=?',(period,)).fetchone())
         with self.db() as db:
             actions=[dict(r) for r in db.execute('SELECT a.actor,a.target,a.app,a.action,a.details,a.created,u.username AS actor_name,t.username AS target_name FROM admin_actions a LEFT JOIN users u ON u.id=a.actor LEFT JOIN users t ON t.id=a.target ORDER BY a.id DESC LIMIT 100')]
-        return {'month':period,'users':people,'totals':total,'actions':actions,'registration_plan':registration_plan,**self.history()}
+        return {'month':period,'users':people,'totals':total,'actions':actions,
+                'registration_plan':registration_plan,'plan_templates':templates,**self.history()}
 
-    def registration_plan(self, db):
-        row = db.execute('SELECT plan,request_limit,audio_limit FROM registration_plan WHERE id=1').fetchone()
-        return dict(row) if row else DEFAULT_REGISTRATION_PLAN.copy()
+    def plan_templates(self, db):
+        templates = {plan: default_plan_template(plan) for plan in PLANS}
+        for row in db.execute('SELECT * FROM plan_templates'):
+            if row['plan'] in templates:
+                templates[row['plan']] = {'request_limit': row['request_limit'], 'audio_limit': row['audio_limit'],
+                                          **{key: bool(row[key]) for key in FEATURES}}
+        return templates
+
+    def registration_plan(self, db, templates):
+        row = db.execute('SELECT plan FROM registration_plan WHERE id=1').fetchone()
+        plan = row['plan'] if row else 'free'
+        return {'plan': plan, **{key: templates[plan][key] for key in ('request_limit', 'audio_limit')}}
+
+    def write_plan_template(self, db, plan, template):
+        values = (template['request_limit'], template['audio_limit'], *(template[key] for key in FEATURES))
+        db.execute('''INSERT INTO plan_templates VALUES(?,?,?,?,?,?) ON CONFLICT(plan) DO UPDATE SET
+          request_limit=excluded.request_limit,audio_limit=excluded.audio_limit,
+          learning=excluded.learning,translation=excluded.translation,speech=excluded.speech''', (plan, *values))
+        db.execute('UPDATE registration_plan SET request_limit=?,audio_limit=? WHERE id=1 AND plan=?',
+                   (*values[:2], plan))
+
+    def save_plan_template(self, actor, body):
+        plan = body.get('plan')
+        requests, audio = body.get('request_limit'), body.get('audio_limit')
+        if plan not in PLANS or not valid_grant_limits(requests, audio):
+            raise Fault(400, '套餐或额度参数无效')
+        features = {key: body.get(key) for key in FEATURES}
+        if any(type(value) is not bool for value in features.values()):
+            raise Fault(400, '权限参数无效')
+        template = {'request_limit': requests, 'audio_limit': audio, **features}
+        with self.db() as db:
+            db.execute('BEGIN IMMEDIATE')
+            templates = self.plan_templates(db)
+            if templates[plan] != template:
+                self.write_plan_template(db, plan, template)
+                db.execute('INSERT INTO admin_actions(actor,target,app,action,created,details) VALUES(?,NULL,?,?,?,?)',
+                           (actor['id'], 'zhiyun-subtitles', 'plan_template', int(time.time()), json.dumps({'plan': plan, **template})))
+                templates[plan] = template
+            registration = self.registration_plan(db, templates)
+        return 200, {}, {'ok': True, 'plan_templates': templates, 'registration_plan': registration}
 
     def save_registration_plan(self, actor, body):
         plan = body.get('plan')
-        requests, audio = body.get('request_limit'), body.get('audio_limit')
-        if plan not in ('free', 'trial', 'pro', 'ultra'):
+        if plan not in PLANS:
             raise Fault(400, '请选择自助注册的默认套餐')
-        if not valid_grant_limits(requests, audio):
-            raise Fault(400, '额度参数无效')
-        if plan == 'free' and (requests or audio):
-            raise Fault(400, '基础免费套餐的调用和语音额度须为 0')
-        settings = {'plan': plan, 'request_limit': requests, 'audio_limit': audio}
         with self.db() as db:
             db.execute('BEGIN IMMEDIATE')
-            if settings != self.registration_plan(db):
+            templates = self.plan_templates(db)
+            previous = self.registration_plan(db, templates)
+            template = templates[plan]
+            requests, audio = template['request_limit'], template['audio_limit']
+            # Older admin pages sent edited limits with the registration plan.
+            if 'request_limit' in body or 'audio_limit' in body:
+                requests, audio = body.get('request_limit'), body.get('audio_limit')
+                if not valid_grant_limits(requests, audio):
+                    raise Fault(400, '额度参数无效')
+                if plan == 'free' and (requests or audio):
+                    raise Fault(400, '请在套餐配置中设置基础免费套餐的额度')
+                templates[plan] = {**template, 'request_limit': requests, 'audio_limit': audio}
+                if templates[plan] != template:
+                    self.write_plan_template(db, plan, templates[plan])
+            settings = {'plan': plan, 'request_limit': requests, 'audio_limit': audio}
+            if settings != previous:
                 db.execute('INSERT INTO registration_plan VALUES(1,?,?,?) ON CONFLICT(id) DO UPDATE SET plan=excluded.plan,request_limit=excluded.request_limit,audio_limit=excluded.audio_limit', (plan, requests, audio))
                 db.execute('INSERT INTO admin_actions(actor,target,app,action,created,details) VALUES(?,NULL,?,?,?,?)', (actor['id'], 'zhiyun-subtitles', 'registration_plan', int(time.time()), json.dumps(settings)))
-        return 200, {}, {'ok': True, 'registration_plan': settings}
+        return 200, {}, {'ok': True, 'registration_plan': settings, 'plan_templates': templates}
 
     def admin_request(self,method,path,user,body,period):
         if not user['is_admin']: raise Fault(403,'仅管理员可访问')
         if method=='GET' and path=='/v1/admin/overview': return 200,{},self.admin_overview(period)
+        if method=='POST' and path=='/v1/admin/plan-templates': return self.save_plan_template(user, body)
         if method=='POST' and path=='/v1/admin/registration-plan': return self.save_registration_plan(user, body)
         if method=='POST' and path=='/v1/admin/accounts': return self.manage_account(user,body)
         if method=='POST' and path in ('/v1/admin/users','/v1/admin/grants'):
-            # Older admin pages explicitly grant a positive quota but do not send plan.
-            legacy_create='plan' not in body and type(body.get('request_limit')) is int and body['request_limit']>0
-            grant_body={'plan':'legacy' if legacy_create else 'free',**body} if path.endswith('/users') else body
-            if path.endswith('/grants'):
-                target=body.get('user_id');app=body.get('app','zhiyun-subtitles')
-                if type(target) is not int or not isinstance(app,str): raise Fault(400,'用户或 APP 无效')
-                with self.db() as db:
-                    previous=db.execute('SELECT enabled,learning,translation,speech,expires,plan FROM grants WHERE user=? AND app=?',(target,app)).fetchone()
-                if previous: grant_body={**{k:bool(previous[k]) for k in ('enabled','learning','translation','speech')},'expires':previous['expires'],'plan':previous['plan'],**body}
-            options=self.grant_options(grant_body)
-            if path.endswith('/grants') and body.get('user_id')==user['id'] and (not options['enabled'] or options['expires'] is not None): raise Fault(400,'不能停用或限制自己的管理账号有效期')
-            app=body.get('app','zhiyun-subtitles');requests=body.get('request_limit',0 if options['plan']=='free' else 1000);audio=body.get('audio_limit',0 if options['plan']=='free' else 3600)
-            if not isinstance(app,str) or not re.fullmatch(r'[A-Za-z0-9_-]{1,64}',app) or not valid_grant_limits(requests, audio): raise Fault(400,'APP 或额度参数无效')
-            if path.endswith('/users'):
-                email=body.get('email','');password=body.get('password','');name=body.get('username','')
-                if not isinstance(email,str) or not 3<=len(email)<=254 or '@' not in email or any(ch.isspace() for ch in email) or not isinstance(name,str) or not 1<=len(name.strip())<=40 or any(ord(ch)<32 for ch in name): raise Fault(400,'请填写有效的用户名和邮箱')
-                if not valid_new_password(password): raise Fault(400,PASSWORD_REQUIREMENTS,'invalid_password')
-                try: target=self.add_user(email,password,app,requests,audio,username=name.strip(),permissions=options,create_only=True)
-                except sqlite3.IntegrityError: raise Fault(409,'邮箱或用户名已存在') from None
-                action='create_user'
-            else:
-                target=body.get('user_id')
-                if type(target) is not int: raise Fault(400,'用户 ID 无效')
-                with self.db() as db:
-                    if not db.execute('SELECT 1 FROM users WHERE id=?',(target,)).fetchone(): raise Fault(404,'用户不存在')
-                    db.execute('INSERT INTO grants(user,app,requests,audio,enabled,learning,translation,speech,expires,plan) VALUES(?,?,?,?,?,?,?,?,?,?) ON CONFLICT(user,app) DO UPDATE SET requests=excluded.requests,audio=excluded.audio,enabled=excluded.enabled,learning=excluded.learning,translation=excluded.translation,speech=excluded.speech,expires=excluded.expires,plan=excluded.plan',(target,app,requests,audio,*(options[k] for k in ('enabled','learning','translation','speech','expires','plan'))))
-                action='set_quota'
-            with self.db() as db:
-                db.execute('INSERT INTO admin_actions(actor,target,app,action,created,details) VALUES(?,?,?,?,?,?)',(user['id'],target,app,action,int(time.time()),json.dumps({**options,'request_limit':requests,'audio_limit':audio})))
-            return 200,{}, {'ok':True,'user_id':target}
+            return self.save_user_grant(user, body, create=path.endswith('/users'))
         raise Fault(404,'接口不存在')
 
-    def grant_options(self,body):
+    def save_user_grant(self, actor, body, *, create):
+        app = body.get('app', 'zhiyun-subtitles')
+        if not isinstance(app, str) or not re.fullmatch(r'[A-Za-z0-9_-]{1,64}', app):
+            raise Fault(400, 'APP 参数无效')
+
+        def audit(db, target, action):
+            db.execute('INSERT INTO admin_actions(actor,target,app,action,created,details) VALUES(?,?,?,?,?,?)',
+                       (actor['id'],target,app,action,int(time.time()),
+                        json.dumps({**{key: options[key] for key in GRANT_FIELDS if key != 'template_applied'},
+                                    'request_limit':requests,'audio_limit':audio})))
+
+        if create:
+            email=body.get('email','');password=body.get('password','');name=body.get('username','')
+            if not isinstance(email,str) or not 3<=len(email)<=254 or '@' not in email or any(ch.isspace() for ch in email) or not isinstance(name,str) or not 1<=len(name.strip())<=40 or any(ord(ch)<32 for ch in name):
+                raise Fault(400,'请填写有效的用户名和邮箱')
+            if not valid_new_password(password):
+                raise Fault(400,PASSWORD_REQUIREMENTS,'invalid_password')
+            with self.db() as db:
+                options, requests, audio = self.resolve_grant(db, body, create=True)
+            try:
+                target=self.add_user(email,password,app,requests,audio,username=name.strip(),permissions=options,create_only=True)
+            except sqlite3.IntegrityError:
+                raise Fault(409,'邮箱或用户名已存在') from None
+            with self.db() as db:
+                audit(db, target, 'create_user')
+        else:
+            target = body.get('user_id')
+            if type(target) is not int:
+                raise Fault(400,'用户 ID 无效')
+            with self.db() as db:
+                db.execute('BEGIN IMMEDIATE')
+                if not db.execute('SELECT 1 FROM users WHERE id=?',(target,)).fetchone():
+                    raise Fault(404,'用户不存在')
+                previous = db.execute('SELECT * FROM grants WHERE user=? AND app=?', (target, app)).fetchone()
+                options, requests, audio = self.resolve_grant(db, body, previous=previous)
+                if target == actor['id'] and (not options['enabled'] or options['expires'] is not None):
+                    raise Fault(400,'不能停用或限制自己的管理账号有效期')
+                db.execute('''INSERT INTO grants(user,app,requests,audio,enabled,learning,translation,speech,expires,plan,template_applied)
+                   VALUES(?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(user,app) DO UPDATE SET requests=excluded.requests,
+                   audio=excluded.audio,enabled=excluded.enabled,learning=excluded.learning,translation=excluded.translation,
+                   speech=excluded.speech,expires=excluded.expires,plan=excluded.plan,template_applied=excluded.template_applied''',
+                   (target, app, requests, audio, *(options[key] for key in GRANT_FIELDS)))
+                audit(db, target, 'set_quota')
+        return 200, {}, {'ok':True, 'user_id':target, 'expires':options['expires']}
+
+    def resolve_grant(self, db, body, *, previous=None, create=False):
+        legacy_create = create and type(body.get('request_limit')) is int and body['request_limit'] > 0
+        default_plan = previous['plan'] if previous else 'free' if create and not legacy_create else 'legacy'
+        snapshot = {key: bool(previous[key]) for key in (*FEATURES, 'enabled')} if previous else {}
+        grant = {**snapshot, 'expires': previous['expires'] if previous else None, 'plan': default_plan, **body}
+        plan = grant['plan']
+        use_template = body.get('use_template', 'plan' in body and plan in PLANS
+                                and 'request_limit' not in body and 'audio_limit' not in body)
+        if type(use_template) is not bool or (use_template and plan not in PLANS):
+            raise Fault(400, '请选择有效套餐')
+        if use_template:
+            template = self.plan_templates(db)[plan]
+            requests, audio = template['request_limit'], template['audio_limit']
+        else:
+            template = snapshot if previous and previous['plan'] == plan and previous['template_applied'] else None
+            defaults = (previous['requests'], previous['audio']) if previous else (0, 0) if plan == 'free' else (1000, 3600)
+            requests, audio = body.get('request_limit', defaults[0]), body.get('audio_limit', defaults[1])
+        if not valid_grant_limits(requests, audio):
+            raise Fault(400, '额度参数无效')
+        return self.grant_options(grant, template=template), requests, audio
+
+    def grant_options(self,body,*,template=None):
         options={}
         plan=body.get('plan','legacy')
-        if plan not in ('free','trial','pro','ultra','legacy'): raise Fault(400,'套餐必须为基础免费、免费体验、PRO 或 Ultra')
+        if plan not in (*PLANS, 'legacy'): raise Fault(400,'套餐必须为基础免费、免费体验、PRO 或 Ultra')
         options['plan']=plan
-        for key in ('enabled','learning','translation','speech'):
+        options['template_applied'] = template is not None
+        for key in ('enabled', *FEATURES):
             value=body.get(key,True)
             if type(value) is not bool: raise Fault(400,'权限参数无效')
-            if key!='enabled' and plan!='legacy': value=plan in ('trial','pro','ultra')
+            if key != 'enabled' and plan != 'legacy':
+                value = template[key] if template is not None else plan != 'free'
             options[key]=value
         expires=body.get('expires')
+        if 'duration_months' in body:
+            duration = body['duration_months']
+            expires = None if duration is None else months_from_now(duration)
         if expires is not None and (type(expires) is not int or not 0<expires<=253402300799): raise Fault(400,'有效期参数无效')
         options['expires']=expires
         return options
@@ -156,8 +273,9 @@ class AdminMixin:
             if not row or not row['enabled']: raise Fault(401,'账号已停用，请联系管理员','account_disabled')
         if feature:
             if grant['expires'] is not None and grant['expires']<=int(time.time()): raise Fault(403,'套餐已到期，基础功能仍可使用','payment_required')
-            if grant['plan']=='free': raise Fault(403,'请申请体验或开通 PRO / Ultra 后使用此功能','payment_required')
-            if grant['plan']=='legacy' and not grant[feature]: raise Fault(403,{'learning':'AI 问答未开通','translation':'字幕翻译未开通','speech':'语音智能校准未开通'}[feature])
+            if not grant_allows_feature(grant, feature):
+                if grant['plan']=='free': raise Fault(403,'请申请体验或开通 PRO / Ultra 后使用此功能','payment_required')
+                raise Fault(403,{'learning':'AI 问答未开通','translation':'字幕翻译未开通','speech':'语音智能校准未开通'}[feature])
         return grant
     def manage_account(self,actor,body):
         target=body.get('user_id');action=body.get('action')
@@ -184,13 +302,16 @@ class AdminMixin:
     def permissions(self,user,app):
         with self.db() as db:
             grant=self.check_grant(db,user,app)
-            active=grant['plan']!='free' and (grant['expires'] is None or grant['expires']>int(time.time())) and (grant['plan']!='legacy' or grant['requests']>0)
-            result={key:active and (grant['plan'] in ('trial','pro','ultra') or bool(grant[key])) for key in ('learning','translation','speech')}
-            return result | {'learning_records':result['learning'],'card_export':result['learning'],'expires':grant['expires']}
+        active=(grant['expires'] is None or grant['expires']>int(time.time())) and (grant['plan']!='legacy' or grant['requests']>0)
+        result={key:active and grant_allows_feature(grant, key) for key in FEATURES}
+        return result | {'learning_records':result['learning'],'card_export':result['learning'],'expires':grant['expires']}
 
     def membership(self,user,app):
         with self.db() as db:
             grant=self.check_grant(db,user,app)
             expired=grant['expires'] is not None and grant['expires']<=int(time.time())
-            active=not expired and grant['plan']!='free' and (grant['plan']!='legacy' or (grant['requests']>0 and any(grant[k] for k in ('learning','translation','speech'))))
-            return {'plan':grant['plan'],'active':active,'state':'expired' if expired else 'trial' if active and grant['plan']=='trial' else 'paid' if active else 'free','expires':grant['expires']}
+        plan = grant['plan']
+        advanced = any(grant_allows_feature(grant, key) for key in FEATURES)
+        active = not expired and (plan in ('trial', 'pro', 'ultra') or advanced and (plan == 'free' or grant['requests'] > 0))
+        state = 'expired' if expired else 'trial' if active and plan == 'trial' else 'paid' if active and plan != 'free' else 'free'
+        return {'plan':plan,'active':active,'state':state,'expires':grant['expires']}

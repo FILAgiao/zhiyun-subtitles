@@ -15,10 +15,10 @@ from email.message import EmailMessage
 from urllib.parse import parse_qs, urlsplit, urlunsplit
 
 try:
-    from .admin_api import Fault, PASSWORD_REQUIREMENTS, valid_new_password
+    from .admin_api import Fault, GRANT_FIELDS, PASSWORD_REQUIREMENTS, months_from_now, valid_new_password
     from .clips_api import ClipsMixin, migrate_clips
 except ImportError:
-    from admin_api import Fault, PASSWORD_REQUIREMENTS, valid_new_password
+    from admin_api import Fault, GRANT_FIELDS, PASSWORD_REQUIREMENTS, months_from_now, valid_new_password
     from clips_api import ClipsMixin, migrate_clips
 
 STUDY_APP = 'zhiyun-subtitles'
@@ -37,6 +37,10 @@ CREATE TABLE IF NOT EXISTS registration_codes(
     app TEXT NOT NULL,email TEXT NOT NULL,salt TEXT NOT NULL,code_hash TEXT NOT NULL,
     expires INTEGER NOT NULL,attempts INTEGER NOT NULL DEFAULT 0,created INTEGER NOT NULL,
     PRIMARY KEY(app,email));
+CREATE TABLE IF NOT EXISTS study_registrations(
+    user INTEGER NOT NULL,app TEXT NOT NULL,created INTEGER NOT NULL,
+    PRIMARY KEY(app,user));
+CREATE INDEX IF NOT EXISTS study_registrations_app_time ON study_registrations(app,created);
 CREATE TABLE IF NOT EXISTS study_conversations(
     user INTEGER NOT NULL,app TEXT NOT NULL,id TEXT NOT NULL,title TEXT NOT NULL,
     course TEXT NOT NULL,source TEXT NOT NULL,origin TEXT NOT NULL,history TEXT NOT NULL,
@@ -247,11 +251,15 @@ class StudyMixin(ClipsMixin):
                     salt = secrets.token_hex(16)
                     user = db.execute('INSERT INTO users(email,salt,password,username,is_admin,enabled) VALUES(?,?,?,?,0,1)',
                                       (email, salt, self.hash_password(password, salt), name)).lastrowid
-                    settings = self.registration_plan(db)
-                    options = self.grant_options(settings)
-                    db.execute('INSERT INTO grants(user,app,requests,audio,enabled,learning,translation,speech,expires,plan) VALUES(?,?,?,?,?,?,?,?,?,?)',
+                    templates = self.plan_templates(db)
+                    settings = self.registration_plan(db, templates)
+                    expires = months_from_now(1, started_at=now) if settings['plan'] == 'pro' else None
+                    options = self.grant_options({**settings, 'expires': expires}, template=templates[settings['plan']])
+                    db.execute('INSERT INTO grants(user,app,requests,audio,enabled,learning,translation,speech,expires,plan,template_applied) VALUES(?,?,?,?,?,?,?,?,?,?,?)',
                                (user, STUDY_APP, settings['request_limit'], settings['audio_limit'],
-                                *(options[key] for key in ('enabled', 'learning', 'translation', 'speech', 'expires', 'plan'))))
+                                *(options[key] for key in GRANT_FIELDS)))
+                    db.execute('INSERT INTO study_registrations(user,app,created) VALUES(?,?,?)',
+                               (user, STUDY_APP, now))
         if failure:
             raise Fault(400, '验证码无效或已过期，请重新获取', 'invalid_code')
         # Existing addresses get exactly the same response and are never reset or granted quota.

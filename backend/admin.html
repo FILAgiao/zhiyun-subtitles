@@ -16,9 +16,49 @@
   <div class="analytics-meta"><span id="analytics-range-label"></span><span id="analytics-updated">手动刷新 · 北京时间</span></div>
   <p id="analytics-status" class="analytics-status" role="status" aria-live="polite">正在获取统计数据…</p>
   <div id="analytics-content" hidden>
+    <p id="analytics-collection-status" class="analytics-collection-status" role="status" hidden></p>
     <div id="analytics-stats" class="analytics-stats"></div>
-    <div class="analytics-secondary"><span id="analytics-token-detail"></span><span id="analytics-request-detail"></span><span id="analytics-cost-detail"></span></div>
-    <div class="analytics-grid"><section class="analytics-card analytics-trend"><div class="analytics-card-title"><div><h3>使用趋势</h3><p>按日汇总，缺失历史留空</p></div><label class="visually-labeled">查看指标<select id="analytics-metric"><option value="tokens">Token 消耗</option><option value="users">活跃账号</option><option value="lessons">观看课节</option><option value="effective_seconds">有效使用时长</option></select></label></div><div id="analytics-chart" class="analytics-chart"></div><details class="analytics-chart-data"><summary>查看每日明细</summary><div class="table-wrap"><table><thead><tr><th>日期</th><th>Token</th><th>活跃账号</th><th>观看课节</th><th>有效时长</th></tr></thead><tbody id="analytics-trend-rows"></tbody></table></div></details></section>
+    <div class="analytics-secondary"><span id="analytics-token-detail"></span><span id="analytics-request-detail"></span><span id="analytics-cost-detail"></span><span id="analytics-accounts"></span></div>
+    <section class="analytics-card analytics-daily" aria-labelledby="analytics-daily-title">
+      <div class="analytics-card-title"><div><h3 id="analytics-daily-title">账号与 Token 每日明细</h3><p>北京时间。历史账号数取当天结束时的总数，今天取当前值。</p></div></div>
+      <div class="table-wrap" tabindex="0" role="region" aria-labelledby="analytics-daily-title">
+        <table><thead><tr><th scope="col">日期</th><th scope="col">应用账号总数</th><th scope="col">Token 接口调用次数</th><th scope="col">Token 消耗量</th></tr></thead><tbody id="analytics-trend-rows"></tbody></table>
+      </div>
+      <p class="analytics-footnote">— 表示缺少历史数据。Token 接口调用次数计入已记录的方舟请求，包含待核对调用。</p>
+    </section>
+    <div class="analytics-grid analytics-daily-charts">
+      <section class="analytics-card">
+        <div class="analytics-card-title"><div><h3>AI 问答</h3><p>完整回答次数与当天去重人数</p></div></div>
+        <div id="analytics-ai-chart" class="analytics-chart"></div>
+      </section>
+      <section class="analytics-card">
+        <div class="analytics-card-title"><div><h3>截图与看课</h3><p>成功截图、观看课节与有效时长</p></div>
+          <label class="visually-labeled">查看指标<select id="analytics-study-metric"><option value="counts">截图与课节</option><option value="time">有效时长</option></select></label>
+        </div>
+        <div id="analytics-study-chart" class="analytics-chart"></div>
+      </section>
+      <section class="analytics-card">
+        <div class="analytics-card-title"><div><h3>字幕校准与翻译</h3><p>成功的语音校准调用与实际展示的翻译</p></div></div>
+        <div id="analytics-language-chart" class="analytics-chart"></div>
+      </section>
+      <section class="analytics-card">
+        <div class="analytics-card-title"><div><h3>API 参考费用</h3><p>每日已计价 Token 费用（人民币）</p></div></div>
+        <div id="analytics-fee-chart" class="analytics-chart"></div>
+        <p id="analytics-fee-note" class="analytics-footnote"></p>
+      </section>
+    </div>
+    <div class="analytics-grid">
+    <section class="analytics-card analytics-trend">
+      <div class="analytics-card-title"><div><h3>更多用量趋势</h3><p>登录账号按当天去重。会话包含扩展衔接网页。</p></div>
+        <label class="visually-labeled">查看指标<select id="analytics-metric">
+          <optgroup label="模型用量"><option value="tokens">Token 总量</option><option value="input_tokens">输入 Token</option><option value="output_tokens">输出 Token</option><option value="token_requests">Token 接口调用次数</option><option value="requests">全部模型调用次数</option></optgroup>
+          <optgroup label="账号"><option value="account_total">应用账号总数</option><option value="login_sessions">登录会话次数</option><option value="login_users">登录账号数</option><option value="registrations">自助注册人数</option></optgroup>
+          <optgroup label="学习活动"><option value="users">活跃账号</option><option value="lessons">观看课节</option><option value="effective_seconds">有效使用时长</option></optgroup>
+        </select></label>
+      </div>
+      <div id="analytics-chart" class="analytics-chart"></div>
+      <p id="analytics-registration-note" class="analytics-footnote"></p>
+    </section>
     <section class="analytics-card"><div class="analytics-card-title"><div><h3>热门课节</h3><p>按观看人数排序</p></div><span class="small-badge">TOP 5</span></div><div id="analytics-courses" class="analytics-courses"></div></section></div>
     <div class="analytics-grid analytics-lower"><section class="analytics-card"><div class="analytics-card-title"><div><h3>大家都在用什么</h3><p>成功使用 · 已排除预取和重试</p></div></div><div id="analytics-features" class="analytics-features"></div><p class="analytics-footnote">覆盖率 = 功能使用人数 / 同期活跃账号。不同功能人数不可相加。</p></section>
     <section class="analytics-card"><div class="analytics-card-title"><div><h3>用户会回来吗</h3><p>首次观测用户 · 仅统计观察期结束的批次</p></div></div><div id="analytics-retention" class="analytics-retention"></div><details class="analytics-cohorts"><summary>查看首次使用日期明细</summary><div class="table-wrap"><table><thead><tr><th>首次观测日</th><th>人数</th><th>次日</th><th>7 日内</th><th>第 7 日</th></tr></thead><tbody id="analytics-cohorts"></tbody></table></div></details></section></div>
@@ -41,22 +81,82 @@
 <section class="operations-block"><div class="block-heading"><h3>人工充值与赠送记录</h3><span class="muted">收款记账与模型估算成本分别展示</span></div><div class="table-wrap"><table><thead><tr><th>时间 / 用户</th><th>类型 / 应用</th><th>增加额度</th><th>实收金额（元）</th><th>备注</th></tr></thead><tbody id="operations-credits"></tbody></table></div></section>
 </div></section>
 <section id="users-panel" class="tab-panel" hidden><div class="section-title"><h2>用户与额度</h2><p>创建账号后，将用户名和密码单独发给用户，在浏览器扩展内登录。</p></div><label class="search-field">查找账号<input id="user-search" type="search" placeholder="输入用户名或邮箱"></label><div class="table-wrap"><table><thead><tr><th>用户名 / 邮箱</th><th>权限</th><th>APP</th><th>请求额度</th><th>Token</th><th>语音秒数</th><th></th></tr></thead><tbody id="users-body"></tbody></table></div>
-<div class="forms" id="registration-plan-card" hidden><section class="card">
-  <h3>自助注册默认套餐</h3>
-  <p class="muted">保存后，仅首次完成邮箱注册的账号会获得这里的套餐和基础月额度。已注册账号继续使用原有配置。</p>
-  <form id="registration-plan-form">
-    <label>默认套餐<select id="registration-plan"><option value="free">基础免费</option><option value="trial">免费体验</option><option value="pro">PRO</option><option value="ultra">Ultra</option></select></label>
-    <div class="pair">
-      <label>基础月调用次数<input id="registration-plan-requests" type="number" min="0" max="1000000" value="0" required></label>
-      <label>基础月语音秒数<input id="registration-plan-audio" type="number" min="0" max="36000000" value="0" required></label>
-    </div>
-    <p id="registration-plan-note" class="form-hint"></p>
-    <button type="submit" class="primary" id="registration-plan-submit">保存注册默认套餐</button>
-    <p id="registration-plan-status" role="status" class="form-result"></p>
-  </form>
-</section></div>
-<div class="forms"><section class="card"><span class="eyebrow">新增账号</span><h3>创建用户账号</h3><p class="muted create-account-note">手动开户无需邮箱验证码。邮箱只作为账号标识；创建后请自行将用户名和密码单独交给用户，系统不会自动发信。</p><form id="create-user"><label>用户名<input id="new-name" required maxlength="40"></label><label>邮箱<input id="new-email" type="email" required maxlength="254"></label><label>密码（至少 7 位，仅英文字母或数字）<input id="new-password" type="password" required minlength="7" maxlength="256" pattern="[A-Za-z0-9]{7,256}" autocomplete="new-password"></label><label>APP<input id="new-app" value="zhiyun-subtitles" required maxlength="64"></label><label>账号套餐<select id="new-plan"><option value="free">基础免费 · 未开通 AI</option><option value="trial">免费体验 · 赠送额度</option><option value="pro">PRO · 已开通</option><option value="ultra">Ultra · 已开通</option></select></label><p id="new-plan-note" class="muted"></p><div class="pair"><label>基础月调用次数<input id="new-requests" type="number" min="0" max="1000000" value="0" required></label><label>基础月语音秒数<input id="new-audio" type="number" min="0" max="36000000" value="0" required></label></div><fieldset class="permissions"><legend>开通功能</legend><label><input id="new-learning" type="checkbox" checked>AI 问答 / PPT / 截图</label><label><input id="new-translation" type="checkbox" checked>字幕翻译</label><label><input id="new-speech" type="checkbox" checked>语音智能校准</label><label><input id="new-enabled" type="checkbox" checked>启用应用权限</label></fieldset><label>有效期（北京时间，留空长期有效）<input id="new-expires" type="datetime-local"></label><button type="button" id="generate-password">生成随机密码</button><button class="primary">创建用户</button></form></section>
-<section class="card"><span class="eyebrow">账号设置</span><h3>调整权限与额度</h3><p class="muted">点击用户表格中的“调整”后填写基础月额度；本月人工追加额度独立累计，不会被此处覆盖。本月充值或赠额请使用“额度与费用”的追加表单。保存后立即生效。</p><form id="set-quota"><input id="quota-user" type="hidden"><label>用户<input id="quota-name" readonly required></label><label>APP<input id="quota-app" value="zhiyun-subtitles" required maxlength="64"></label><label>账号套餐<select id="quota-plan"><option value="free">基础免费 · 未开通 AI</option><option value="trial">免费体验 · 赠送额度</option><option value="pro">PRO · 已开通</option><option value="ultra">Ultra · 已开通</option><option value="legacy">保留原有账号权限</option></select></label><p id="quota-plan-note" class="muted"></p><div class="pair"><label>基础月调用次数<input id="quota-requests" type="number" min="0" max="1000000" required></label><label>基础月语音秒数<input id="quota-audio" type="number" min="0" max="36000000" required></label></div><fieldset class="permissions"><legend>开通功能</legend><label><input id="quota-learning" type="checkbox" checked>AI 问答 / PPT / 截图</label><label><input id="quota-translation" type="checkbox" checked>字幕翻译</label><label><input id="quota-speech" type="checkbox" checked>语音智能校准</label><label><input id="quota-enabled" type="checkbox" checked>启用应用权限</label></fieldset><label>有效期（北京时间，留空长期有效）<input id="quota-expires" type="datetime-local"></label><button class="primary">保存权限与额度</button></form></section></div></section>
+<div class="forms" id="plan-settings" hidden>
+  <section class="card">
+    <h3>套餐配置</h3>
+    <p class="muted">保存后的配置用于新开户、自助注册和手动应用套餐的账号。</p>
+    <form id="plan-template-form">
+      <label>编辑套餐<select id="template-plan"><option value="free">基础免费</option><option value="trial">免费体验</option><option value="pro">PRO</option><option value="ultra">Ultra</option></select></label>
+      <div class="pair">
+        <label>基础月调用次数<input id="template-requests" type="number" min="0" max="1000000" required></label>
+        <label>基础月语音秒数<input id="template-audio" type="number" min="0" max="36000000" required></label>
+      </div>
+      <fieldset class="permissions">
+        <legend>套餐包含的功能</legend>
+        <label><input id="template-learning" type="checkbox">AI 问答 / PPT / 截图</label>
+        <label><input id="template-translation" type="checkbox">字幕翻译</label>
+        <label><input id="template-speech" type="checkbox">语音智能校准</label>
+      </fieldset>
+      <button type="submit" class="primary" id="template-submit">保存套餐配置</button>
+      <p id="template-status" role="status" class="form-result"></p>
+    </form>
+  </section>
+  <section class="card">
+    <h3>自助注册默认套餐</h3>
+    <form id="registration-plan-form">
+      <label>默认套餐<select id="registration-plan"><option value="free">基础免费</option><option value="trial">免费体验</option><option value="pro">PRO</option><option value="ultra">Ultra</option></select></label>
+      <p id="registration-plan-note" class="form-hint"></p>
+      <p class="muted">首次完成邮箱注册的账号会获得所选套餐。选择 PRO 时，新账号从注册日起有效一个月。额度和功能在「套餐配置」中修改。</p>
+      <button type="submit" class="primary" id="registration-plan-submit">保存注册默认套餐</button>
+      <p id="registration-plan-status" role="status" class="form-result"></p>
+    </form>
+  </section>
+</div>
+<div class="forms" id="account-forms">
+  <section class="card">
+    <h3>创建用户账号</h3>
+    <p class="muted create-account-note">手动开户无需邮箱验证码。创建后请将用户名和密码单独交给用户。</p>
+    <form id="create-user">
+      <label>用户名<input id="new-name" required maxlength="40"></label>
+      <label>邮箱<input id="new-email" type="email" required maxlength="254"></label>
+      <label>密码（至少 7 位，仅英文字母或数字）<input id="new-password" type="password" required minlength="7" maxlength="256" pattern="[A-Za-z0-9]{7,256}" autocomplete="new-password"></label>
+      <label>APP<input id="new-app" value="zhiyun-subtitles" required maxlength="64"></label>
+      <label>账号套餐<select id="new-plan"><option value="free">基础免费</option><option value="trial">免费体验</option><option value="pro">PRO</option><option value="ultra">Ultra</option></select></label>
+      <p id="new-plan-note" class="form-hint"></p>
+      <label>套餐有效期<select id="new-expires"><option value="long">长期有效</option></select></label>
+      <p class="muted">按月选择时，从开户时起算。</p>
+      <label class="check-label"><input id="new-enabled" type="checkbox" checked>启用应用权限</label>
+      <button type="button" id="generate-password">生成随机密码</button>
+      <button class="primary">创建用户</button>
+    </form>
+  </section>
+  <section class="card">
+    <h3>调整权限与额度</h3>
+    <p class="muted">从用户表格选中账号。更换套餐时会带入最新配置，本月人工追加额度继续独立累计。</p>
+    <form id="set-quota">
+      <input id="quota-user" type="hidden">
+      <label>用户<input id="quota-name" readonly required></label>
+      <label>APP<input id="quota-app" value="zhiyun-subtitles" required maxlength="64"></label>
+      <label>账号套餐<select id="quota-plan"><option value="free">基础免费</option><option value="trial">免费体验</option><option value="pro">PRO</option><option value="ultra">Ultra</option><option value="legacy">原有授权</option></select></label>
+      <button type="button" id="quota-apply-template" disabled>应用所选套餐配置</button>
+      <p id="quota-plan-note" class="form-hint"></p>
+      <div class="pair">
+        <label>基础月调用次数<input id="quota-requests" type="number" min="0" max="1000000" required></label>
+        <label>基础月语音秒数<input id="quota-audio" type="number" min="0" max="36000000" required></label>
+      </div>
+      <fieldset class="permissions">
+        <legend>开通功能</legend>
+        <label><input id="quota-learning" type="checkbox">AI 问答 / PPT / 截图</label>
+        <label><input id="quota-translation" type="checkbox">字幕翻译</label>
+        <label><input id="quota-speech" type="checkbox">语音智能校准</label>
+        <label><input id="quota-enabled" type="checkbox" checked>启用应用权限</label>
+      </fieldset>
+      <label>套餐有效期<select id="quota-expires"><option value="keep">保留当前有效期</option><option value="long">长期有效</option></select></label>
+      <p id="quota-expiry-note" class="form-hint">按月选择时，从保存时起算。</p>
+      <button class="primary">保存权限与额度</button>
+    </form>
+  </section>
+</div></section>
 <section id="account-controls" class="card" hidden><span class="eyebrow">账号安全</span><h3>账号状态与密码</h3><p class="muted">在用户表格点“调整”选择账号。停用或重置密码后，原登录会立即失效。</p><form id="manage-account"><input id="manage-user" type="hidden"><label>用户<input id="manage-name" readonly></label><label>操作<select id="manage-action"><option value="disable">停用账号</option><option value="enable">恢复账号</option><option value="reset_password">重置密码</option></select></label><label id="reset-password-label" hidden>新密码（至少 7 位，仅英文字母或数字）<input id="reset-password" type="password" minlength="7" maxlength="256" pattern="[A-Za-z0-9]{7,256}" autocomplete="new-password"></label><button class="primary">执行账号操作</button></form></section>
 <section id="prompts-panel" class="tab-panel" hidden><h2>官方提示词</h2><p>登录用户自动获取已启用的官方讲解方式。个人提示词由用户在扩展中管理，管理员列表不展示个人内容。</p><p id="official-prompt-status" role="status"></p><button type="button" id="official-prompt-refresh">刷新官方提示词</button><div id="official-prompt-list"></div><form id="official-prompt-form" class="card"><h3>新增 / 编辑官方提示词</h3><input type="hidden" id="official-prompt-id"><input type="hidden" id="official-prompt-revision" value="0"><label>名称<input id="official-prompt-label" required maxlength="50"></label><label>内容<textarea id="official-prompt-text" required maxlength="1800" rows="10"></textarea></label><label><input id="official-prompt-enabled" type="checkbox" checked>启用（关闭后用户列表隐藏）</label><button type="submit" class="primary">保存官方提示词</button><button type="button" id="official-prompt-new">新建</button></form></section>
 <section id="actions-panel" class="tab-panel" hidden><h2>最近 100 次管理操作</h2><div class="table-wrap"><table><thead><tr><th>时间 / 管理员</th><th>用户 / 应用</th><th>操作</th><th>调整内容</th></tr></thead><tbody id="actions-body"></tbody></table></div></section>

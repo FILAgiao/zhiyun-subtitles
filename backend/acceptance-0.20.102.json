@@ -1,7 +1,7 @@
 {
   "version": "0.20.102",
-  "backup": "/opt/zhiyun-gateway/backend/.rollback-release-0.20.102-20261117T044553Z",
-  "database_backup": "/data/gateway-before-0.20.102-20261117T044553Z.sqlite3",
+  "backup": "/opt/zhiyun-gateway/backend/.rollback-release-0.20.102-20261117T131628Z",
+  "database_backup": "/data/gateway-before-0.20.102-20261117T131628Z.sqlite3",
   "changed": [
     "analytics_api.py",
     "pricing.py",
@@ -45,12 +45,12 @@
   ],
   "public_files": {
     "clips.js": {
-      "bytes": 27057,
-      "sha256": "2fc2246f86ba1e6042a1a2bc70865352db17b593c09016ff7c9f1fde38e1ca22"
+      "bytes": 29151,
+      "sha256": "4193264cadf11666cecb8639fdb798211abe10cc6a3779e48957eb252dbdbf39"
     },
     "clips.css": {
-      "bytes": 11232,
-      "sha256": "16a7a5697fdc38fbfe98f813154fbc48628c6b17287052641076c7fc6ca0142c"
+      "bytes": 11393,
+      "sha256": "20112ff8d68157097efc1c74bfcbd0a5a5218f66cf12343ce73ddf87d3059217"
     },
     "install.user.js": {
       "bytes": 5626332,
@@ -61,16 +61,16 @@
       "sha256": "8251d9e348525889b6cbd497c54fa7e89a911cd10871428f74eff410f8db4781"
     },
     "admin.html": {
-      "bytes": 24860,
-      "sha256": "03a27b281f35571b1e2d7d2234e5be85954775cf87f49d1bfc1db1e5d3e98549"
+      "bytes": 28339,
+      "sha256": "4384adf034afcc5de80e2669a9d08fc699b05c9d9f272d5365867c30fd0cfc3e"
     },
     "admin.js": {
-      "bytes": 52164,
-      "sha256": "ca62e9c1de125c8e9c24ab9d8607c76687c5c4d58a92976f4c2e8d78ce399085"
+      "bytes": 58628,
+      "sha256": "ff305148132c0503df539a7885ead35577cfaeb0efe6340ea3cdc8c960f91278"
     },
     "admin.css": {
-      "bytes": 27485,
-      "sha256": "e3bfc1f190f4e6e86f7344a41e2d5048f0c31074b7629a812402d6088562f27c"
+      "bytes": 29327,
+      "sha256": "727490dfe21fa5e778de7444a47444d46eaa3effb8c95f0d909eaeff99a7f775"
     },
     "privacy.html": {
       "bytes": 7366,
@@ -121,8 +121,8 @@
       "sha256": "4173121d266a67f185a3973b447db39154a54095b12553ea60a13390a1705ebe"
     },
     "extension.zip": {
-      "bytes": 2102077,
-      "sha256": "6ec693a74acc72c13f040667fb68933e320e3843a4a28e3bafd6a1dd1468ea5d"
+      "bytes": 2102121,
+      "sha256": "94c10dd575ec8e5673d72cb6d88a92d52e736a18ac9d4a01c56a38d90b11d83f"
     },
     "landing/brand-logo.png": {
       "bytes": 16647,

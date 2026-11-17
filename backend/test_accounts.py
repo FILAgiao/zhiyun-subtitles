@@ -2,6 +2,8 @@ import time, sqlite3, unittest
 from backend import test_server as fixture
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import closing
+from datetime import datetime
+from unittest.mock import patch
 
 class AccountTests(unittest.TestCase):
     setUp=fixture.Tests.setUp
@@ -90,11 +92,17 @@ class AccountTests(unittest.TestCase):
         path=self.tmp.name+'/old.sqlite'
         with closing(sqlite3.connect(path)) as db:
             db.executescript('CREATE TABLE users(id INTEGER PRIMARY KEY,email TEXT UNIQUE,salt TEXT,password TEXT);CREATE TABLE grants(user INTEGER,app TEXT,requests INTEGER,audio INTEGER,PRIMARY KEY(user,app));')
+            db.execute('CREATE TABLE registration_plan(id INTEGER PRIMARY KEY,plan TEXT NOT NULL,request_limit INTEGER NOT NULL,audio_limit INTEGER NOT NULL)')
+            db.execute("INSERT INTO registration_plan VALUES(1,'trial',93,24)")
             db.execute('INSERT INTO grants VALUES(1,?,7,8)',('zhiyun-subtitles',));db.commit()
-        Gateway(path)
+        gateway = Gateway(path)
         with closing(sqlite3.connect(path)) as db:
             migrate(db);db.commit();row=db.execute('SELECT requests,audio,learning,translation,speech,enabled,expires FROM grants').fetchone()
         self.assertEqual(row,(7,8,1,1,1,1,None))
+        with gateway.db() as db:
+            templates = gateway.plan_templates(db)
+            self.assertEqual({'plan': 'trial', 'request_limit': 93, 'audio_limit': 24},
+                             gateway.registration_plan(db, templates))
 
     def test_free_account_cannot_bypass_paid_endpoints_with_positive_quota(self):
         owner=self.owner()
@@ -110,6 +118,47 @@ class AccountTests(unittest.TestCase):
         self.assertEqual(self.gateway.learning_jobs,{})
         self.call('/v1/history',headers=headers,method='GET')
         self.call('/v1/auth/logout',headers=headers)
+
+    def test_plan_template_is_applied_only_on_creation_or_explicit_assignment(self):
+        from backend.admin_api import BEIJING, months_from_now
+
+        owner = self.owner()
+        route = '/v1/admin/plan-templates'
+        template = {'plan': 'free', 'request_limit': 25, 'audio_limit': 60,
+                    'learning': True, 'translation': False, 'speech': False}
+        self.fails(403, lambda: self.call(route, template))
+        self.call(route, template, owner)
+        self.assertTrue(self.call('/v1/me', method='GET')[2]['permissions']['translation'])
+
+        account = {'username': 'template-user', 'email': 'template@example.test',
+                   'password': 'abc12345', 'plan': 'free'}
+        for months in (0, True, 37, '2'):
+            self.fails(400, lambda: self.call('/v1/admin/users', {**account, 'duration_months': months}, owner))
+        with patch('backend.admin_api.time.time', return_value=datetime(2027, 1, 31, 9, tzinfo=BEIJING).timestamp()):
+            self.assertEqual(datetime(2027, 2, 28, 9, tzinfo=BEIJING).timestamp(), months_from_now(1))
+
+        result = self.call('/v1/admin/users', {**account, 'duration_months': 2}, owner)[2]
+        token = self.call('/v1/auth/login', {'email': account['username'], 'password': account['password']})[2]['token']
+        headers = {**self.headers, 'Authorization': 'Bearer ' + token}
+        def profile():
+            return self.call('/v1/me', headers=headers, method='GET')[2]
+        me = profile()
+        self.assertGreater(result['expires'], int(time.time()) + 56 * 86400)
+        self.assertEqual(25, me['usage']['request_limit'])
+        self.assertTrue(me['membership']['active'])
+        self.assertTrue(me['permissions']['learning'])
+        self.assertFalse(me['permissions']['translation'])
+        self.fails(403, lambda: self.gateway.reserve(result['user_id'], 'zhiyun-subtitles', 'translation', feature='translation'))
+
+        self.call(route, {**template, 'request_limit': 50, 'learning': False}, owner)
+        self.assertEqual(25, profile()['usage']['request_limit'])
+        self.assertTrue(profile()['permissions']['learning'])
+        self.call('/v1/admin/grants', {'user_id': result['user_id'], 'plan': 'free', 'use_template': True}, owner)
+        self.assertEqual(result['expires'], profile()['membership']['expires'])
+        self.assertEqual(50, profile()['usage']['request_limit'])
+        self.assertFalse(profile()['permissions']['learning'])
+        self.call('/v1/admin/grants', {'user_id': result['user_id'], 'duration_months': None}, owner)
+        self.assertIsNone(profile()['membership']['expires'])
 
     def test_pro_ultra_same_features_different_quota_and_downgrade(self):
         owner=self.owner();features=[]

@@ -84,6 +84,15 @@ class TokenEstimate:
                 'checked_at': CHECKED_AT, 'source_url': PRICE_SOURCE, 'note': PRICE_NOTE,
                 'actual_billing_connected': False}
 
+    def merge(self, other):
+        self.amount += other.amount
+        self.priced += other.priced
+        self.unpriced += other.unpriced
+        self.cache_missing += other.cache_missing
+        self.excluded += other.excluded
+        for reason, count in other.reasons.items():
+            self.reasons[reason] += count
+
 
 def summarize_token_cost(calls):
     total = TokenEstimate()

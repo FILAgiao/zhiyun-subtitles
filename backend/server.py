@@ -17,14 +17,14 @@ CREATE TABLE IF NOT EXISTS learning_job_receipts(id TEXT PRIMARY KEY,user INTEGE
 CREATE TABLE IF NOT EXISTS attempts(key TEXT PRIMARY KEY,start INTEGER,count INTEGER);
 '''
 try:
-    from .admin_api import AdminMixin, Fault, PASSWORD_REQUIREMENTS, migrate, valid_new_password
+    from .admin_api import AdminMixin, Fault, GRANT_FIELDS, PASSWORD_REQUIREMENTS, migrate, valid_new_password
     from .prompt_api import PromptMixin, migrate_prompts
     from .study_api import StudyMixin, migrate_study
     from .operations_api import OperationsMixin, migrate_operations
     from .analytics_api import AnalyticsMixin, migrate_analytics
     from .speech_stream import SpeechStreams
 except ImportError:
-    from admin_api import AdminMixin, Fault, PASSWORD_REQUIREMENTS, migrate, valid_new_password
+    from admin_api import AdminMixin, Fault, GRANT_FIELDS, PASSWORD_REQUIREMENTS, migrate, valid_new_password
     from prompt_api import PromptMixin, migrate_prompts
     from study_api import StudyMixin, migrate_study
     from operations_api import OperationsMixin, migrate_operations
@@ -230,10 +230,12 @@ class Gateway(AdminMixin, PromptMixin, StudyMixin, OperationsMixin, AnalyticsMix
             db.execute('INSERT INTO grants(user,app,requests,audio) VALUES(?,?,?,?) ON CONFLICT(user,app) DO UPDATE SET requests=excluded.requests,audio=excluded.audio',(user,app,requests,audio))
             db.execute('UPDATE users SET username=?,is_admin=? WHERE id=?',(username or (row['username'] if row else email),1 if admin else row['is_admin'] if row else 0,user))
             if permissions is not None:
-                db.execute('UPDATE grants SET enabled=?,learning=?,translation=?,speech=?,expires=?,plan=? WHERE user=? AND app=?',(*(permissions[k] for k in ('enabled','learning','translation','speech','expires')),permissions.get('plan','legacy'),user,app))
+                grant = {'plan': 'legacy', 'template_applied': False, **permissions}
+                db.execute('UPDATE grants SET enabled=?,learning=?,translation=?,speech=?,expires=?,plan=?,template_applied=? WHERE user=? AND app=?',
+                           (*(grant[key] for key in GRANT_FIELDS), user, app))
             elif plan is not None:
                 options=self.grant_options({'plan':plan})
-                db.execute('UPDATE grants SET learning=?,translation=?,speech=?,plan=? WHERE user=? AND app=?',(*(options[k] for k in ('learning','translation','speech','plan')),user,app))
+                db.execute('UPDATE grants SET learning=?,translation=?,speech=?,plan=?,template_applied=0 WHERE user=? AND app=?',(*(options[k] for k in ('learning','translation','speech','plan')),user,app))
         return user
     def throttle(self,key,limit,window=60):
         now=int(time.time())

@@ -8,11 +8,12 @@ import tempfile
 import threading
 import time
 import unittest
+from datetime import datetime
 from pathlib import Path
 from unittest.mock import patch
 
 from backend import study_api
-from backend.admin_api import Fault
+from backend.admin_api import BEIJING, Fault
 from backend.server import Gateway, make_server
 from backend.study_api import STUDY_APP, StudyMixin, migrate_study
 
@@ -79,7 +80,7 @@ class StudyTests(unittest.TestCase):
     def test_integrated_gateway_requires_auth_and_free_records_work(self):
         def handle(method, path, body=None, headers=None):
             return self.gateway.handle(method, path, headers or self.headers, body or {}, 'integration-client')
-        self.assertFault('request_failed', lambda: handle('GET', '/v1/study/conversations'))
+        self.assertFault('session_invalid', lambda: handle('GET', '/v1/study/conversations'))
         handle('POST', '/v1/auth/register-code', {'email': 'learner@example.test'})
         handle('POST', '/v1/auth/register', {'email': 'learner@example.test', 'code': self.gateway.outbox['learner@example.test'], 'password': self.password})
         login = handle('POST', '/v1/auth/login', {'email': 'learner@example.test', 'password': self.password})[2]
@@ -173,13 +174,17 @@ class StudyTests(unittest.TestCase):
         first = self.register()
         with self.gateway.db() as db:
             before = dict(db.execute('SELECT * FROM users').fetchone())
+            registration = dict(db.execute('SELECT * FROM study_registrations').fetchone())
             db.execute('DELETE FROM attempts')
         self.send()
         self.password = secrets.token_hex(12)
         self.assertEqual(first, self.register())
         with self.gateway.db() as db:
             after = dict(db.execute('SELECT * FROM users').fetchone())
+            self.assertEqual([registration], [dict(row) for row in db.execute('SELECT * FROM study_registrations')])
         self.assertEqual(before, after)
+        self.assertEqual(before['id'], registration['user'])
+        self.assertEqual(STUDY_APP, registration['app'])
 
     def test_registration_default_is_admin_only_and_applies_at_account_creation(self):
         admin_email = 'admin@example.test'
@@ -214,6 +219,7 @@ class StudyTests(unittest.TestCase):
         pending_headers = login(pending)
         pending_me = handle('GET', '/v1/me', headers=pending_headers)
         self.assertEqual('trial', pending_me['membership']['plan'])
+        self.assertIsNone(pending_me['membership']['expires'])
         self.assertEqual((2, 5), (pending_me['usage']['request_limit'], pending_me['usage']['audio_limit']))
         user_id = self.user(pending)['id']
         self.assertFault('quota_exhausted', lambda: self.gateway.reserve(user_id, STUDY_APP, 'speech', 6, 'speech'))
@@ -222,13 +228,26 @@ class StudyTests(unittest.TestCase):
         self.assertFault('quota_exhausted', lambda: self.gateway.reserve(user_id, STUDY_APP, 'learning', feature='learning'))
 
         pro = {'plan': 'pro', 'request_limit': 50, 'audio_limit': 600}
-        handle('POST', route, pro, admin_headers)
+        handle('POST', '/v1/admin/plan-templates',
+               {**pro, 'learning': True, 'translation': False, 'speech': True}, admin_headers)
+        self.assertEqual(pro, handle('POST', route, {'plan': 'pro'}, admin_headers)['registration_plan'])
+        handle('POST', '/v1/admin/plan-templates',
+               {**pro, 'request_limit': 51, 'learning': True, 'translation': False, 'speech': True}, admin_headers)
         self.gateway = TestGateway(self.gateway.path)
-        self.send(later)
-        self.register(later)
-        later_me = handle('GET', '/v1/me', headers=login(later))
+        registered = datetime(2027, 1, 31, 18, 30, tzinfo=BEIJING)
+        expires = int(datetime(2027, 2, 28, 18, 30, tzinfo=BEIJING).timestamp())
+        with patch('backend.study_api.time.time', return_value=registered.timestamp()):
+            self.send(later)
+            self.register(later)
+            later_headers = login(later)
+            later_me = handle('GET', '/v1/me', headers=later_headers)
         self.assertEqual('pro', later_me['membership']['plan'])
-        self.assertEqual((50, 600), (later_me['usage']['request_limit'], later_me['usage']['audio_limit']))
+        self.assertEqual(expires, later_me['membership']['expires'])
+        self.assertTrue(later_me['membership']['active'])
+        self.assertEqual((51, 600), (later_me['usage']['request_limit'], later_me['usage']['audio_limit']))
+        self.assertFalse(later_me['permissions']['translation'])
+        with patch('backend.study_api.time.time', return_value=expires):
+            self.assertEqual('expired', handle('GET', '/v1/me', headers=later_headers)['membership']['state'])
 
         with self.gateway.db() as db:
             db.execute('DELETE FROM attempts')

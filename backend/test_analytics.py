@@ -209,7 +209,79 @@ class AnalyticsTests(unittest.TestCase):
         self.assertEqual(result['summary']['requests'], 131)
         self.assertEqual(result['summary']['uncertain'], 1)
         self.assertEqual(len(result['users']), 130)
-        self.assertEqual(result['trend'][0]['tokens'], 1300)
+        day_row = result['trend'][0]
+        self.assertEqual([day_row[key] for key in ('tokens', 'input_tokens', 'output_tokens', 'requests')],
+                         [1300, 910, 390, 131])
+
+    def test_daily_accounts_are_app_scoped_and_distinguish_zero_from_missing(self):
+        day = day_of(time.time() - 4 * DAY)
+        start = day_start(day)
+        self.insert_call(created=start - 1)
+        self.insert_call(created=start, input_tokens=2, output_tokens=3, total_tokens=5)
+        with self.gateway.db() as db:
+            db.executemany('INSERT INTO activity_sessions VALUES(?,?,?,?,?,?,NULL,NULL)', [
+                ('first', 1, APP, 'api', start - 1, start - 1),
+                ('second', 1, APP, 'api', start, start),
+                ('third', 1, APP, 'api', start + 1, start + 1),
+                ('fourth', 2, APP, 'api', start + 2, start + 2),
+                ('other-app', 2, 'other', 'api', start, start),
+            ])
+            db.execute('UPDATE analytics_meta SET value=? WHERE key=?', (start, 'registrations_started_at:' + APP))
+            db.execute('INSERT INTO study_registrations VALUES(?,?,?)', (2, APP, start))
+        trend = self.overview(shifted_day(day, -2), shifted_day(day, 2), now=start + DAY + 1)['trend']
+        self.assertEqual([r['tokens'] for r in trend], [0, 10, 5, 0, None])
+        self.assertEqual([r['requests'] for r in trend], [0, 1, 1, 0, None])
+        self.assertEqual([r['login_sessions'] for r in trend], [None, 1, 3, 0, None])
+        self.assertEqual([r['login_users'] for r in trend], [None, 1, 2, 0, None])
+        self.assertEqual([r['registrations'] for r in trend], [None, None, 1, 0, None])
+
+    def test_account_totals_follow_grant_changes_and_carry_over(self):
+        today = day_of(time.time())
+        with self.gateway.db() as db:
+            day_total = lambda: db.execute('SELECT accounts FROM analytics_account_totals WHERE app=? AND day=?', (APP, today)).fetchone()[0]
+            self.assertEqual(day_total(), 1)
+            user = db.execute('INSERT INTO users(email,salt,password,username) VALUES(?,?,?,?)',
+                              ('snapshot@example.test', '', '', 'snapshot')).lastrowid
+            db.execute('INSERT INTO grants(user,app,requests,audio) VALUES(?,?,1,0)', (user, APP))
+            self.assertEqual(day_total(), 2)
+            db.execute('UPDATE grants SET enabled=0 WHERE app=? AND user=?', (APP, user))
+            self.assertEqual(day_total(), 2)
+            db.execute('DELETE FROM grants WHERE app=? AND user=?', (APP, user))
+            self.assertEqual(day_total(), 1)
+            db.executemany('INSERT INTO analytics_account_totals VALUES(?,?,?)', [
+                (APP, shifted_day(today, -3), 4),
+                (APP, shifted_day(today, -1), 6),
+                ('other-app', shifted_day(today, -4), 9),
+            ])
+            migrate_analytics(db)
+            self.assertEqual(day_total(), 1)
+        rows = self.overview(shifted_day(today, -4), today)['trend']
+        self.assertEqual([row['account_total'] for row in rows], [None, 4, 4, 6, 1])
+        self.assertEqual([row['account_change'] for row in rows], [None, None, 0, 2, -5])
+        after = self.overview(shifted_day(today, -2), shifted_day(today, -1))['trend']
+        self.assertEqual([row['account_total'] for row in after], [4, 6])
+        self.assertEqual([row['account_change'] for row in after], [0, 2])
+
+    def test_daily_feature_counts_and_reference_price_coverage(self):
+        yesterday = day_of(time.time() - DAY)
+        today = shifted_day(yesterday, 1)
+        at = day_start(yesterday) + 60
+        self.ingest(self.event(at=at, feature='ai'), self.event(at=at, feature='ai'),
+                    self.event(at=at), self.event(at=at, feature='translation'))
+        self.ingest(self.event(at=at, feature='ai'), user=2)
+        self.insert_call(created=at)
+        self.insert_call(created=at, model='unpriced')
+        self.insert_call(created=at, kind='speech', input_tokens=0, output_tokens=0, total_tokens=0)
+        self.insert_call(created=at, kind='speech', state='unknown', input_tokens=0, output_tokens=0, total_tokens=0)
+        self.insert_call(created=day_start(today), model='unpriced')
+        first, second = self.overview(yesterday, today)['trend']
+        self.assertEqual([first[key] for key in ('requests', 'token_requests', 'speech_uses')], [4, 2, 1])
+        self.assertEqual([first[key] for key in ('ai_uses', 'ai_users', 'screenshot_uses', 'translation_uses')], [3, 2, 1, 1])
+        self.assertEqual(first['api_cost_cny'], '0.000014')
+        self.assertEqual(first['unpriced_token_calls'], 1)
+        self.assertIsNone(second['api_cost_cny'])
+        self.assertEqual(second['unpriced_token_calls'], 1)
+        self.assertEqual(second['ai_uses'], 0)
 
     def test_date_limits_query_validation_and_indexed_ranges(self):
         today = day_of(time.time())

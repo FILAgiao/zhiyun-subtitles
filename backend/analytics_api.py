@@ -10,8 +10,12 @@ from urllib.parse import parse_qs, urlsplit
 
 try:
     from .admin_api import Fault
+    from .pricing import TokenEstimate, pricing_catalog
+    from .study_api import STUDY_APP
 except ImportError:
     from admin_api import Fault
+    from pricing import TokenEstimate, pricing_catalog
+    from study_api import STUDY_APP
 
 DAY = 86400
 OFFSET = 28800
@@ -30,6 +34,20 @@ CREATE INDEX IF NOT EXISTS analytics_course_range ON analytics_courses(app,day,u
 CREATE TABLE IF NOT EXISTS analytics_first(user INTEGER,app TEXT,day TEXT NOT NULL,PRIMARY KEY(user,app));
 CREATE INDEX IF NOT EXISTS analytics_first_range ON analytics_first(app,day,user);
 CREATE INDEX IF NOT EXISTS analytics_call_range ON calls(app,created,user);
+CREATE INDEX IF NOT EXISTS activity_app_time ON activity_sessions(app,started);
+CREATE INDEX IF NOT EXISTS analytics_grants_app ON grants(app,user);
+CREATE TABLE IF NOT EXISTS analytics_account_totals(
+    app TEXT NOT NULL,day TEXT NOT NULL,accounts INTEGER NOT NULL,PRIMARY KEY(app,day));
+CREATE TRIGGER IF NOT EXISTS analytics_grant_added AFTER INSERT ON grants BEGIN
+    INSERT INTO analytics_account_totals(app,day,accounts)
+    SELECT NEW.app,date('now','+8 hours'),COUNT(*) FROM grants g JOIN users u ON u.id=g.user WHERE g.app=NEW.app
+    ON CONFLICT(app,day) DO UPDATE SET accounts=excluded.accounts;
+END;
+CREATE TRIGGER IF NOT EXISTS analytics_grant_removed AFTER DELETE ON grants BEGIN
+    INSERT INTO analytics_account_totals(app,day,accounts)
+    SELECT OLD.app,date('now','+8 hours'),COUNT(*) FROM grants g JOIN users u ON u.id=g.user WHERE g.app=OLD.app
+    ON CONFLICT(app,day) DO UPDATE SET accounts=excluded.accounts;
+END;
 '''
 
 
@@ -39,6 +57,10 @@ def migrate_analytics(db):
         db.execute('ALTER TABLE analytics_feature_sessions ADD COLUMN created REAL NOT NULL DEFAULT 0')
     db.execute('CREATE INDEX IF NOT EXISTS analytics_feature_session_expiry ON analytics_feature_sessions(created)')
     db.execute("INSERT OR IGNORE INTO analytics_meta VALUES('enabled_at',?)", (int(time.time()),))
+    db.execute('INSERT OR IGNORE INTO analytics_meta VALUES(?,?)',
+               ('registrations_started_at:' + STUDY_APP, int(time.time())))
+    db.execute('''INSERT OR IGNORE INTO analytics_account_totals(app,day,accounts)
+        SELECT g.app,date('now','+8 hours'),COUNT(*) FROM grants g JOIN users u ON u.id=g.user GROUP BY g.app''')
     if 'cached_input_tokens' not in {r[1] for r in db.execute('PRAGMA table_info(calls)')}:
         db.execute('ALTER TABLE calls ADD COLUMN cached_input_tokens INTEGER')
 
@@ -213,12 +235,32 @@ class AnalyticsMixin:
             features = [dict(r) for r in db.execute('SELECT user,day,feature,uses FROM analytics_features WHERE app=? AND day>=? AND day<=?', (app, start, end))]
             courses = [dict(r) for r in db.execute('SELECT user,day,course_id,title,seconds FROM analytics_courses WHERE app=? AND day>=? AND day<=?', (app, start, end))]
             calls = [dict(r) for r in db.execute('SELECT * FROM calls WHERE app=? AND created>=? AND created<?', (app, lo, hi))]
+            session_start = db.execute('SELECT MIN(started) FROM activity_sessions WHERE app=?', (app,)).fetchone()[0]
+            logins = {r['day']: (r['sessions'], r['users']) for r in db.execute('''
+                SELECT date(started,'unixepoch','+8 hours') AS day,COUNT(*) AS sessions,COUNT(DISTINCT user) AS users
+                FROM activity_sessions WHERE app=? AND started>=? AND started<? GROUP BY day
+            ''', (app, lo, hi))}
+            registration_start = db.execute('SELECT value FROM analytics_meta WHERE key=?', ('registrations_started_at:' + app,)).fetchone()
+            registrations = dict(db.execute('''
+                SELECT date(created,'unixepoch','+8 hours') AS day,COUNT(*)
+                FROM study_registrations WHERE app=? AND created>=? AND created<? GROUP BY day
+            ''', (app, lo, hi)))
+            earlier_total = db.execute('''SELECT accounts FROM analytics_account_totals
+                WHERE app=? AND day<? ORDER BY day DESC LIMIT 1''', (app, start)).fetchone()
+            account_totals = dict(db.execute('''SELECT day,accounts FROM analytics_account_totals
+                WHERE app=? AND day>=? AND day<=?''', (app, start, end)))
             names = {r['id']: r['username'] for r in db.execute('SELECT u.id,u.username FROM users u WHERE EXISTS(SELECT 1 FROM grants g WHERE g.user=u.id AND g.app=?)', (app,))}
             started_row = db.execute('SELECT value FROM analytics_meta WHERE key=?', ('started_at:' + app,)).fetchone()
             observed = db.execute('SELECT COUNT(*) FROM analytics_first WHERE app=?', (app,)).fetchone()[0]
             first = [dict(r) for r in db.execute('SELECT user,day FROM analytics_first WHERE app=? AND day>=? AND day<=?', (app, start, end))]
             retention_days = {(r['user'], r['day']) for r in db.execute('SELECT user,day FROM analytics_days WHERE app=? AND day>=? AND day<=? AND active=1', (app, start, shifted_day(end, 7)))}
         started = started_row[0] if started_row else None
+        activity_day = day_of(started) if started is not None else None
+        session_day = day_of(session_start) if session_start is not None else None
+        registration_day = day_of(registration_start[0]) if registration_start else None
+        today = day_of(now)
+        account_total = earlier_total['accounts'] if earlier_total else None
+        account_totals[today] = len(names)
         covered = started is not None and hi > started
         summary = {key: sum(c[key] for c in calls) for key in ('input_tokens', 'output_tokens', 'total_tokens')}
         summary.update(requests=len(calls), uncertain=sum(c['state'] in ('unknown', 'reserved') for c in calls), registered_users=len(names))
@@ -228,7 +270,12 @@ class AnalyticsMixin:
             if user not in user_stats:
                 user_stats[user] = {'user_id': user, 'username': names.get(user, '账号 ' + str(user)), 'last_seen': None, 'lessons': 0 if covered else None, 'effective_seconds': 0 if covered else None, 'watch_seconds': 0 if covered else None, 'total_tokens': 0, 'ai_uses': 0 if covered else None}
             return user_stats[user]
-        trend = {day_of(stamp): {'date': day_of(stamp), 'tokens': 0, 'users': set(), 'lessons': 0, 'effective_seconds': 0} for stamp in range(lo, hi, DAY)}
+        trend = {}
+        for stamp in range(lo, hi, DAY):
+            day = day_of(stamp)
+            trend[day] = {'date': day, 'tokens': 0, 'input_tokens': 0, 'output_tokens': 0, 'requests': 0,
+                          'token_requests': 0, 'speech_uses': 0, 'users': set(), 'lessons': 0, 'effective_seconds': 0,
+                          'ai_uses': 0, 'ai_users': 0, 'screenshot_uses': 0, 'translation_uses': 0}
         for row in days:
             item = user_stat(row['user'])
             item['effective_seconds'] += row['seconds']; item['watch_seconds'] += row['watch_seconds']
@@ -236,15 +283,28 @@ class AnalyticsMixin:
             trend[row['day']]['effective_seconds'] += row['seconds']
             if row['active']:
                 trend[row['day']]['users'].add(row['user'])
+        daily_costs = defaultdict(TokenEstimate)
         for call in calls:
             user_stat(call['user'])['total_tokens'] += call['total_tokens']
-            trend[day_of(call['created'])]['tokens'] += call['total_tokens']
+            day = day_of(call['created'])
+            item = trend[day]
+            item['tokens'] += call['total_tokens']
+            item['input_tokens'] += call['input_tokens']
+            item['output_tokens'] += call['output_tokens']
+            item['requests'] += 1
+            item['token_requests'] += call['kind'] == 'ark'
+            item['speech_uses'] += call['kind'] == 'speech' and call['state'] == 'complete'
+            daily_costs[day].add(call)
         feature_stats = []
         for feature in FEATURES:
             selected = [r for r in features if r['feature'] == feature]
             feature_stats.append({'feature': feature, 'users': len({r['user'] for r in selected}) if covered else None, 'uses': sum(r['uses'] for r in selected) if covered else None})
-            if feature == 'ai':
-                for row in selected:
+            for row in selected:
+                if feature != 'subtitle':
+                    trend[row['day']][feature + '_uses'] += row['uses']
+                if feature == 'ai':
+                    # Each feature row represents one account on one Beijing date.
+                    trend[row['day']]['ai_users'] += 1
                     user_stat(row['user'])['ai_uses'] += row['uses']
         course_users = defaultdict(float)
         course_stats = {}
@@ -264,11 +324,29 @@ class AnalyticsMixin:
         summary.update(active_users=len(active) if covered else None, learning_lessons=len(qualifying) if covered else None, unique_courses=len({course for _, course in qualifying}) if covered else None, effective_seconds=round(sum(r['seconds'] for r in days), 3) if covered else None, watch_seconds=round(sum(r['watch_seconds'] for r in days), 3) if covered else None, ai_uses=feature_stats[-1]['uses'])
         # A course_id is a recording/lesson ID, not a curriculum course ID.
         summary['unique_lessons'] = summary['unique_courses']
+        total_cost = TokenEstimate()
         for day, item in trend.items():
-            available = started is not None and day >= day_of(started) and day_start(day) <= now
+            available = activity_day is not None and activity_day <= day <= today
+            previous_total = account_total
+            account_total = account_totals.get(day, account_total)
+            item['account_total'] = account_total if day <= today else None
+            item['account_change'] = account_total - previous_total if day <= today and previous_total is not None else None
             item['users'] = len(item['users']) if available else None
             item['lessons'] = item['lessons'] if available else None
             item['effective_seconds'] = round(item['effective_seconds'], 3) if available else None
+            if not available:
+                for metric in ('ai_uses', 'ai_users', 'screenshot_uses', 'translation_uses'):
+                    item[metric] = None
+            item['login_sessions'], item['login_users'] = logins.get(day, (0, 0)) if session_day and session_day <= day <= today else (None, None)
+            item['registrations'] = registrations.get(day, 0) if registration_day and registration_day <= day <= today else None
+            estimate = daily_costs[day]
+            total_cost.merge(estimate)
+            price = estimate.result()
+            item['api_cost_cny'] = price['known_amount_cny'] if day <= today and (price['complete'] or price['priced_calls']) else None
+            item['unpriced_token_calls'] = price['unpriced_calls'] if day <= today else None
+            if day > today:
+                for metric in ('tokens', 'input_tokens', 'output_tokens', 'requests', 'token_requests', 'speech_uses'):
+                    item[metric] = None
         cohorts = defaultdict(list)
         for row in first:
             cohorts[row['day']].append(row['user'])
@@ -291,9 +369,5 @@ class AnalyticsMixin:
             denominator = sum(r['users'] for r in mature)
             retention[key + '_eligible_users'] = denominator
             retention[key + '_rate'] = sum(r[key + '_users'] for r in mature) / denominator if denominator else None
-        try:
-            from .pricing import summarize_token_cost, pricing_catalog
-        except ImportError:
-            from pricing import summarize_token_cost, pricing_catalog
-        summary['token_estimate'] = summarize_token_cost(calls)
-        return {'start': start, 'end': end, 'timezone': 'Asia/Shanghai', 'generated_at': now, 'summary': summary, 'features': feature_stats, 'trend': list(trend.values()), 'courses': sorted(course_stats.values(), key=lambda row: (-row['users'], -row['watch_seconds'], row['course_id'])), 'users': sorted(user_stats.values(), key=lambda row: (-row['total_tokens'], -(row['effective_seconds'] or 0), row['user_id'])), 'retention': retention, 'pricing_catalog': pricing_catalog(), 'coverage': {'started_at': started, 'observed_users': observed, 'partial': started is None or lo < started, 'metric_scope': 'recording', 'note': '功能、看课与留存仅统计已登录且启用采集的客户端；首次观测不代表新用户。有效使用为每日成功使用功能或有效活动满 60 秒。时间为客户端可观测活动，离线最多补报 7 天，统计可随补报修正。每日课次独立去重，不应相加作为跨日课次。'}}
+        summary['token_estimate'] = total_cost.result()
+        return {'start': start, 'end': end, 'timezone': 'Asia/Shanghai', 'generated_at': now, 'summary': summary, 'features': feature_stats, 'trend': list(trend.values()), 'courses': sorted(course_stats.values(), key=lambda row: (-row['users'], -row['watch_seconds'], row['course_id'])), 'users': sorted(user_stats.values(), key=lambda row: (-row['total_tokens'], -(row['effective_seconds'] or 0), row['user_id'])), 'retention': retention, 'pricing_catalog': pricing_catalog(), 'coverage': {'started_at': started, 'registrations_started_at': registration_start[0] if registration_start else None, 'observed_users': observed, 'partial': started is None or lo < started, 'metric_scope': 'recording', 'note': '功能、看课与留存仅统计已登录且启用采集的客户端；首次观测不代表新用户。有效使用为每日成功使用功能或有效活动满 60 秒。时间为客户端可观测活动，离线最多补报 7 天，统计可随补报修正。每日课次独立去重，不应相加作为跨日课次。'}}
