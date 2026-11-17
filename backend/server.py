@@ -248,11 +248,11 @@ class Gateway(AdminMixin, PromptMixin, StudyMixin, OperationsMixin, AnalyticsMix
     def auth(self,token,app,headers=None,path=None):
         with self.db() as db:
             row=db.execute('SELECT users.id,users.email,users.username,users.is_admin FROM sessions JOIN users ON users.id=sessions.user WHERE hash=? AND (expires IS NULL OR expires>?)',(digest(token),int(time.time()))).fetchone()
-            if not row: raise Fault(401,'请登录或重新登录')
+            if not row: raise Fault(401,'请登录或重新登录','session_invalid')
             web=db.execute('SELECT parent,app FROM web_sessions WHERE hash=?',(digest(token),)).fetchone()
             if web:
                 parent=db.execute('SELECT 1 FROM sessions WHERE hash=? AND user=? AND (expires IS NULL OR expires>?)',(web['parent'],row['id'],int(time.time()))).fetchone()
-                if not parent or web['app']!=app: raise Fault(401,'请登录或重新登录')
+                if not parent or web['app']!=app: raise Fault(401,'请登录或重新登录','session_invalid')
                 if path not in ('/v1/me','/v1/auth/logout','/v1/study/conversations','/v1/study/clips','/v1/study/clip-image','/v1/study/capabilities'):
                     raise Fault(403,'网页会话仅用于查看和整理个人学习记录','web_session_scope')
             self.check_grant(db,row['id'],app)
@@ -338,7 +338,7 @@ class Gateway(AdminMixin, PromptMixin, StudyMixin, OperationsMixin, AnalyticsMix
             now=int(time.time());web_token=secrets.token_urlsafe(32)
             with self.db() as db:
                 parent=db.execute('SELECT expires FROM sessions WHERE hash=?',(digest(token),)).fetchone()
-                if not parent or (parent['expires'] is not None and parent['expires']<=now): raise Fault(401,'请登录或重新登录')
+                if not parent or (parent['expires'] is not None and parent['expires']<=now): raise Fault(401,'请登录或重新登录','session_invalid')
                 expires=parent['expires']
                 db.execute('DELETE FROM sessions WHERE expires<=? OR hash IN (SELECT web_sessions.hash FROM web_sessions LEFT JOIN sessions parent ON parent.hash=web_sessions.parent WHERE parent.hash IS NULL OR parent.expires<=?)',(now,now))
                 db.execute('DELETE FROM web_sessions WHERE hash NOT IN (SELECT hash FROM sessions)')

@@ -16,3 +16,6 @@
 @media(max-width:540px){.nav-actions{flex-wrap:wrap;gap:12px}.usage-scope{font-size:11px;margin-top:18px}.quick-links{gap:8px}.quick-links a{font-size:12px;padding:10px 12px}.records-note{font-size:10px}.install-resources{flex-direction:column;gap:22px;text-align:center}.install-qr img{width:148px;height:148px}.install-zip{max-width:280px}}
 
 .nav-actions [hidden]{display:none!important}.nav-account{max-width:clamp(6ch,15vw,24ch);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.disclaimer a{color:var(--muted);text-decoration:underline;text-underline-offset:2px;margin-left:8px}#portal-session-notice:empty{display:none}.store-button.edge[href]:hover{border-color:var(--ink);background:#f1e9db}
+.nav-admin{color:#68564c;white-space:nowrap;padding-block:8px}
+@media(min-width:541px) and (max-width:850px){.nav-actions{gap:12px;flex-wrap:wrap;justify-content:flex-end}}
+@media(max-width:540px){.nav-actions{gap:8px}}

@@ -38,7 +38,7 @@ try{
  const card=await downloadEvent;await card.saveAs('.testdeps/extension-knowledge-card.png');
  const png=fs.readFileSync('.testdeps/extension-knowledge-card.png');assert.equal(png.subarray(1,4).toString(),'PNG');assert.equal(png.readUInt32BE(16),1080);assert.ok(png.readUInt32BE(20)<1200);
  assert.equal(await worker.evaluate(()=>globalThis.requests.length),callsBeforeExport,'knowledge cards make no backend/model requests');
- assert.match(await ui.locator('#ai-status').textContent(),/已保存所选回答及对应问题/);
+ await ui.locator('#ai-card-export-status [role="status"]').filter({hasText:'知识卡已下载'}).waitFor();
 
  await page.reload();await ui.waitFor();await worker.evaluate(async()=>{const [tab]=await chrome.tabs.query({active:true,lastFocusedWindow:true});await chrome.tabs.sendMessage(tab.id,{type:'zy-open'});});assert.match(await ui.locator('#gateway-state').textContent(),/已登录/);assert.equal(await ui.locator('#gateway-status').textContent(),'额度已更新');
  const web=await context.newPage();await context.route('https://example.test/**',r=>r.fulfill({contentType:'text/html; charset=utf-8',body:'<h1>学习笔记</h1><p>选中文字后右键问上课爽，或中键截图提问。</p>'}));await web.goto('https://example.test/');await web.locator('#zy-subtitle-host').waitFor();await web.waitForFunction(()=>document.getElementById('zy-subtitle-host').shadowRoot.querySelector('#ai-mode option[value=gossip]'));assert.deepEqual(errors,[]);console.log('PASS: native MV3 service worker, isolated content UI, login/storage, AI poll proxy, paired sentence PNG export without network calls, selection and reload, ordinary webpage.');

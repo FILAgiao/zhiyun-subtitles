@@ -17,24 +17,64 @@ with tempfile.TemporaryDirectory() as folder:
   await page.goto(base+'/gateway/study#clips');await page.locator('#study-guest').waitFor();await page.locator('[data-login]').first().click();await page.locator('#login-name').fill(setup.demo.username);await page.locator('#login-password').fill(setup.demo.password);await page.locator('#login-submit').click();await page.locator('#clips-workspace').waitFor({state:'visible'});await page.getByText('还没有收藏的截图',{exact:true}).waitFor();
   const samples=await page.evaluate(()=>{
    const result=[];for(const [course,courseKey,color] of [['大学物理','physics','#3d6470'],['高等数学','math','#9a6743'],['机器学习','ml','#596c99']])for(let n=1;n<=3;n++){
-    const c=document.createElement('canvas');c.width=1000;c.height=620;const x=c.getContext('2d');x.fillStyle='#fffdf6';x.fillRect(0,0,1000,620);x.fillStyle=color;x.fillRect(0,0,1000,14);x.font='22px sans-serif';x.fillText(course+' / CHAPTER 0'+n,55,65);x.font='bold 42px sans-serif';x.fillText(courseKey==='physics'?'动量守恒与系统边界':courseKey==='math'?'导数：从割线到切线':'理解梯度下降',55,145);x.font='28px serif';x.fillText(courseKey==='physics'?'p = m₁v₁ + m₂v₂ = constant':courseKey==='math'?"f′(x) = lim [f(x+h) − f(x)] / h":'θ ← θ − η∇L(θ)',55,230);x.strokeStyle=color;x.lineWidth=4;x.beginPath();x.moveTo(70,510);x.lineTo(840,510);x.moveTo(70,510);x.lineTo(70,290);x.stroke();x.beginPath();x.moveTo(70,500);x.bezierCurveTo(230,490,450,310,830,300);x.stroke();x.fillStyle='#8b8579';x.font='20px sans-serif';x.fillText('示例课件 · 仅用于本地界面验收',55,585);const t=document.createElement('canvas');t.width=280;t.height=174;t.getContext('2d').drawImage(c,0,0,280,174);result.push({id:courseKey+'-'+n,title:['','理解核心概念','画出推导过程','整理本章重点'][n],course,courseKey,origin:'https://school.example.test/lesson?secret=not-saved',note:'示例笔记：'+(courseKey==='physics'?'先选好研究系统，再判断外力是否可以忽略。':courseKey==='math'?'割线无限靠近时，斜率趋向切线。':'学习率决定每一步的大小。')+(n===3?'\n长笔记自然滚动。'.repeat(60):''),position:'12:30',image:c.toDataURL('image/png'),thumbnail:t.toDataURL('image/png')});
+    const c=document.createElement('canvas');c.width=1000;c.height=620;const x=c.getContext('2d');x.fillStyle='#fffdf6';x.fillRect(0,0,1000,620);x.fillStyle=color;x.fillRect(0,0,1000,14);x.font='22px sans-serif';x.fillText(course+' / CHAPTER 0'+n,55,65);x.font='bold 42px sans-serif';x.fillText(courseKey==='physics'?'动量守恒与系统边界':courseKey==='math'?'导数：从割线到切线':'理解梯度下降',55,145);x.font='28px serif';x.fillText(courseKey==='physics'?'p = m₁v₁ + m₂v₂ = constant':courseKey==='math'?"f′(x) = lim [f(x+h) − f(x)] / h":'θ ← θ − η∇L(θ)',55,230);x.strokeStyle=color;x.lineWidth=4;x.beginPath();x.moveTo(70,510);x.lineTo(840,510);x.moveTo(70,510);x.lineTo(70,290);x.stroke();x.beginPath();x.moveTo(70,500);x.bezierCurveTo(230,490,450,310,830,300);x.stroke();x.fillStyle='#8b8579';x.font='20px sans-serif';x.fillText('示例课件 · 仅用于本地界面验收',55,585);const t=document.createElement('canvas');t.width=280;t.height=174;t.getContext('2d').drawImage(c,0,0,280,174);result.push({id:courseKey+'-'+n,title:['','理解核心概念','画出推导过程','整理本章重点'][n],course,courseKey,origin:'https://interactivemeta.cmc.zju.edu.cn/lesson?secret=not-saved',note:'示例笔记：'+(courseKey==='physics'?'先选好研究系统，再判断外力是否可以忽略。':courseKey==='math'?'割线无限靠近时，斜率趋向切线。':'学习率决定每一步的大小。')+(n===3?'\n长笔记自然滚动。'.repeat(60):''),position:'12:30',image:c.toDataURL('image/png'),thumbnail:t.toDataURL('image/png')});
    }return result;
   });
   for(const sample of samples)await api('/v1/study/clips',sample,token);
-  await page.locator('#clips-refresh').click();await page.locator('.clip-card').nth(8).waitFor();assert.equal(await page.locator('.clip-card').count(),9);
+  const webClips=[
+   {...samples[0],id:'web-bili-1',title:'B 站第一张',course:'视频一',courseKey:'bili-1',origin:'https://www.bilibili.com/video/BV1'},
+   {...samples[0],id:'web-bili-2',title:'B 站第二张',course:'视频二',courseKey:'bili-2',origin:'https://www.bilibili.com/video/BV2'},
+   {...samples[0],id:'web-other',title:'博客第三张',course:'网页标题',courseKey:'blog',origin:'https://example.test/posts/1'}
+  ];
+  for(const sample of webClips)await api('/v1/study/clips',sample,token);
+  await page.locator('#clips-refresh').click();await page.locator('.clip-card').nth(11).waitFor();assert.equal(await page.locator('.clip-card').count(),12);
+  assert.equal(await page.locator('#clips-course option').allTextContents().then(names=>names.filter(name=>name==='网页摘录').length),1);
+  await page.locator('#clips-course').selectOption({label:'网页摘录'});
+  assert.equal(await page.locator('.clip-card').count(),3);
+  await page.locator('.clip-card[data-clip-id="web-bili-2"]').click();
+  assert.equal(await page.locator('#clip-reader-course').innerText(),'网页摘录');
+  assert.equal(await page.locator('#clip-origin').getAttribute('href'),webClips[1].origin);
+  assert.equal(await page.locator('#clip-position').innerText(),'2 / 3');
+  await page.locator('#clip-close').click();
+  await page.locator('#clips-course').selectOption('physics');
+  await page.locator('.clip-card[data-clip-id="physics-3"]').click();
+  assert.equal(await page.locator('#clip-next').isDisabled(),true,'navigation respects an active course filter');
+  await page.locator('#clip-close').click();
+  await page.locator('#clips-course').selectOption('');
   await page.screenshot({path:'dist/suiyizhai-desktop.png',fullPage:true});
   await page.locator('#clips-search').fill('割线');assert.equal(await page.locator('.clip-card').count(),3);await page.locator('#clips-search').fill('');
   await page.locator('#clips-course').selectOption('physics');assert.equal(await page.locator('.clip-card').count(),3);await page.locator('#clips-course').selectOption('');
   await page.locator('#clips-date').fill('2000-01-01');assert.equal(await page.locator('.clip-card').count(),0);await page.locator('#clips-date').fill('');
   await page.locator('.clip-card').filter({hasText:'整理本章重点'}).filter({hasText:'大学物理'}).click();await page.locator('#clip-stage[data-state=ready]').waitFor();await page.locator('#clip-full-image').evaluate(img=>img.decode());
   assert.equal(await page.locator('#clip-position').innerText(),'3 / 3');assert.equal(await page.locator('#clip-prev-course').isDisabled(),true);
-  const stage=page.locator('#clip-stage');await stage.focus();await page.keyboard.press('ArrowUp');assert.equal(await page.locator('#clip-position').innerText(),'2 / 3');await page.keyboard.press('ArrowRight');assert.equal(await page.locator('#clip-reader-course').innerText(),'高等数学');
+  const stage=page.locator('#clip-stage');
+  await page.locator('#clip-next').click();
+  assert.equal(await page.locator('#clip-reader-course').innerText(),'高等数学');
+  assert.equal(await page.locator('#clip-position').innerText(),'1 / 3');
+  await stage.focus();await page.keyboard.press('ArrowUp');
+  assert.equal(await page.locator('#clip-reader-course').innerText(),'大学物理');
+  assert.equal(await page.locator('#clip-position').innerText(),'3 / 3');
+  await stage.hover();await page.mouse.wheel(0,110);
+  await page.waitForFunction(()=>document.querySelector('#clip-reader-course').textContent==='高等数学');
+  assert.equal(await page.locator('#clip-position').innerText(),'1 / 3');
+  await page.waitForTimeout(500);await page.locator('#clip-prev').click();
+  await stage.focus();await page.keyboard.press('ArrowUp');assert.equal(await page.locator('#clip-position').innerText(),'2 / 3');await page.keyboard.press('ArrowRight');assert.equal(await page.locator('#clip-reader-course').innerText(),'高等数学');
   await page.locator('#clip-prev-course').click();assert.equal(await page.locator('#clip-position').innerText(),'2 / 3','returns to remembered picture in prior course');
   await stage.hover();await page.mouse.wheel(0,110);await page.waitForFunction(()=>document.querySelector('#clip-position').textContent==='3 / 3');await page.waitForTimeout(500);await page.mouse.wheel(110,0);await page.waitForFunction(()=>document.querySelector('#clip-reader-course').textContent==='高等数学');
   await page.locator('#clip-stage[data-state=ready]').waitFor();await page.locator('#clip-full-image').evaluate(img=>img.decode());await page.locator('#clip-zoom').click();assert.equal(await page.locator('#clip-zoom-dialog').evaluate(d=>d.open),true);await page.locator('#clip-zoom-close').click();
   await page.setViewportSize({width:390,height:844});assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));await page.screenshot({path:'dist/suiyizhai-mobile-reader.png',fullPage:false});
   // Single-pointer swipes emulate real pointer events; no document-wide interception.
-  const touchBox=await stage.boundingBox(),cdp=await page.context().newCDPSession(page);await cdp.send('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[{x:touchBox.x+220,y:touchBox.y+100}]});await cdp.send('Input.dispatchTouchEvent',{type:'touchMove',touchPoints:[{x:touchBox.x+80,y:touchBox.y+100}]});await cdp.send('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});await page.waitForFunction(()=>document.querySelector('#clip-reader-course').textContent==='机器学习');await page.locator('#clip-zoom:not([disabled])').waitFor();
+  const touchBox=await stage.boundingBox(),cdp=await page.context().newCDPSession(page);await cdp.send('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[{x:touchBox.x+220,y:touchBox.y+100}]});await cdp.send('Input.dispatchTouchEvent',{type:'touchMove',touchPoints:[{x:touchBox.x+80,y:touchBox.y+100}]});await cdp.send('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});await page.waitForFunction(()=>document.querySelector('#clip-reader-course').textContent==='机器学习');
+  await stage.focus();await page.keyboard.press('ArrowDown');await page.keyboard.press('ArrowDown');
+  assert.equal(await page.locator('#clip-position').innerText(),'3 / 3');
+  await cdp.send('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[{x:touchBox.x+100,y:touchBox.y+170}]});
+  await cdp.send('Input.dispatchTouchEvent',{type:'touchMove',touchPoints:[{x:touchBox.x+100,y:touchBox.y+65}]});
+  await cdp.send('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});
+  await page.waitForFunction(()=>document.querySelector('#clip-reader-course').textContent==='网页摘录');
+  assert.equal(await page.locator('#clip-position').innerText(),'1 / 3');
+  await page.locator('#clip-next').click();await page.locator('#clip-next').click();
+  assert.equal(await page.locator('#clip-next').isDisabled(),true,'the last visible image is the only forward boundary');
+  await page.locator('#clip-zoom:not([disabled])').waitFor();
   // Full images fit both axes without cropping or horizontal scrollbars, including 4K and portrait screenshots.
   for(const viewport of [{width:1440,height:1000},{width:390,height:844}]){
    await page.setViewportSize(viewport);
@@ -46,7 +86,7 @@ with tempfile.TemporaryDirectory() as folder:
    }
   }
   await page.locator('#clip-close').click();await page.screenshot({path:'dist/suiyizhai-mobile.png',fullPage:true});
-  await page.locator('.clip-card').first().click();await page.locator('#clip-delete').click();await page.locator('#clip-delete-confirm').click();await page.waitForFunction(()=>document.querySelectorAll('.clip-card').length===8);
+  await page.locator('.clip-card').first().click();await page.locator('#clip-delete').click();await page.locator('#clip-delete-confirm').click();await page.waitForFunction(()=>document.querySelectorAll('.clip-card').length===11);
   if(process.argv.includes('--web-only')){assert.deepEqual(errors,[]);console.log('PASS: private image API, account isolation, library controls, and 4K/portrait/wide full-image fit on desktop and mobile.');return;}
   // Capture through real Edge MV3, actual native pixels, original pinned bridge, real local HTTP backend.
   const dir=path.resolve(process.env.ZY_TEST_EXTENSION_DIR||'dist/extension');ext=await chromium.launchPersistentContext(path.resolve('.test-media/clips-edge-'+Date.now()),{headless:true,executablePath:'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe',viewport:{width:2560,height:1600},args:['--disable-extensions-except='+dir,'--load-extension='+dir]});

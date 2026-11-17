@@ -97,7 +97,15 @@ if(typeof chrome!=='undefined'){
    }catch(e){post({type:timedOut?'timeout':controller.signal.aborted?'abort':'error'});}finally{clearTimeout(timer);}
   });
  });
- chrome.action.onClicked.addListener(()=>chrome.tabs.create({url:GATEWAY+'/'}));
+ chrome.action.onClicked.addListener(async tab=>{
+  if(Number.isInteger(tab?.id)&&/^https?:\/\//.test(tab.url||'')){
+   try{
+    const response=await chrome.tabs.sendMessage(tab.id,{type:'zy-open'},{frameId:0});
+    if(response?.ok)return;
+   }catch(_){}
+  }
+  await chrome.tabs.create({url:GATEWAY+'/account?tab=register&login=1'});
+ });
  chrome.commands.onCommand.addListener(async command=>{if(command!=='zy-capture-page')return;const [tab]=await chrome.tabs.query({active:true,currentWindow:true});if(tab?.id&&/^https?:\/\//.test(tab.url||''))try{await chrome.tabs.sendMessage(tab.id,{type:'zy-capture-page'});}catch(_){}});
  chrome.runtime.onInstalled.addListener(()=>chrome.contextMenus.create({id:'zy-ask',title:'问上课爽',contexts:['selection'],documentUrlPatterns:['http://*/*','https://*/*']}));
  chrome.contextMenus.onClicked.addListener(async(info,tab)=>{if(info.menuItemId==='zy-ask'&&tab?.id)try{await chrome.tabs.sendMessage(tab.id,{type:'zy-ask',text:String(info.selectionText||'').slice(0,4000)});}catch(_){}});

@@ -10,7 +10,7 @@ const init=allowedRequest({url:'https://47.77.182.216.sslip.io/gateway/v1/auth/l
 for(const url of ['https://ark.cn-beijing.volces.com/api/v3/responses','https://47.77.182.216.sslip.io/gateway/v1/admin/users','https://evil.test','http://video.cmc.zju.edu.cn/a','https://user:password@video.cmc.zju.edu.cn/a'])assert.throws(()=>allowedRequest({url}));
 const image=allowedRequest({url:'https://video.cmc.zju.edu.cn/a',headers:{Authorization:'Bearer session',Range:'bytes=0-1'}});assert.equal(image.headers.Authorization,undefined);assert.equal(image.headers.Range,'bytes=0-1');assert.equal(image.credentials,'include');assert.throws(()=>allowedRequest({url:'https://video.cmc.zju.edu.cn/a',method:'POST',data:'{}'}));
 });
-test('store package uses MV3 and persistent screenshot access with local code and no private files',()=>{const m=JSON.parse(fs.readFileSync('dist/extension/manifest.json'));assert.equal(m.manifest_version,3);assert.equal(m.version,require('./package.json').version);assert.deepEqual(m.permissions,['storage','contextMenus','activeTab']);assert.deepEqual(m.host_permissions,['<all_urls>']);assert.equal(m.action.default_title,'浙大上课爽 · 功能介绍与学习记录');assert.equal(m.homepage_url,'https://47.77.182.216.sslip.io/gateway/');assert.ok(m.commands['zy-capture-page']);assert.equal(m.permissions.includes('tabs'),false,'persistent pixels do not require unrestricted tab metadata');assert.equal(m.content_scripts[0].all_frames,false);assert.deepEqual(m.content_scripts.find(script=>script.js.includes('portal-bridge.js')).matches,['https://47.77.182.216.sslip.io/gateway/*'],'the official bridge must also run with query strings and hash links');assert.deepEqual(fs.readdirSync('dist/extension').sort(),['THIRD_PARTY_NOTICES.txt','background.js','content.js','icon128.png','icon16.png','icon32.png','icon48.png','manifest.json','portal-bridge.js'].sort());assert.match(fs.readFileSync('dist/extension/content.js','utf8'),/const DEFAULT_ORIGIN="https:\/\/47\.77\.182\.216\.sslip\.io\/gateway"/);});
+test('store package uses MV3 and persistent screenshot access with local code and no private files',()=>{const m=JSON.parse(fs.readFileSync('dist/extension/manifest.json'));assert.equal(m.manifest_version,3);assert.equal(m.version,require('./package.json').version);assert.deepEqual(m.permissions,['storage','contextMenus','activeTab']);assert.deepEqual(m.host_permissions,['<all_urls>']);assert.equal(m.action.default_title,'浙大上课爽 · 登录与账号');assert.equal(m.homepage_url,'https://47.77.182.216.sslip.io/gateway/');assert.ok(m.commands['zy-capture-page']);assert.equal(m.permissions.includes('tabs'),false,'persistent pixels do not require unrestricted tab metadata');assert.equal(m.content_scripts[0].all_frames,false);assert.deepEqual(m.content_scripts.find(script=>script.js.includes('portal-bridge.js')).matches,['https://47.77.182.216.sslip.io/gateway/*'],'the official bridge must also run with query strings and hash links');assert.deepEqual(fs.readdirSync('dist/extension').sort(),['THIRD_PARTY_NOTICES.txt','background.js','content.js','icon128.png','icon16.png','icon32.png','icon48.png','manifest.json','portal-bridge.js'].sort());assert.match(fs.readFileSync('dist/extension/content.js','utf8'),/const DEFAULT_ORIGIN="https:\/\/47\.77\.182\.216\.sslip\.io\/gateway"/);});
 const {captureSenderTab}=require('./extension/background.js');
 test('native screenshot validates sender and active tab before and after capture',async()=>{
  let captureCount=0,changed=false;const sender={id:'fixture-id',frameId:0,url:'https://example.test/',tab:{id:42,windowId:901}};
@@ -41,14 +41,20 @@ test('speech streaming pins all five bridge actions and rejects provider sockets
 test('private screenshot save uses only the pinned clips POST endpoint',()=>{assert.equal(allowedRequest({url:'https://47.77.182.216.sslip.io/gateway/v1/study/clips',method:'POST',data:'{}'}).method,'POST');for(const url of ['https://elsewhere.test/gateway/v1/study/clips','https://47.77.182.216.sslip.io/gateway/v1/study/clips?user=other','https://47.77.182.216.sslip.io/gateway/v1/study/clip-image'])assert.throws(()=>allowedRequest({url,method:'POST',data:'{}'}));});
 
 
-test('toolbar opens the home page on every browser page while the capture shortcut stays explicit',async()=>{
+test('toolbar opens the account panel and falls back to the website login while capture stays explicit',async()=>{
  const vm=require('node:vm'),handlers={},opened=[],messages=[];
  const event=name=>({addListener(fn){handlers[name]=fn;}});
- const chrome={runtime:{onMessage:event('message'),onConnect:event('connect'),onInstalled:event('installed')},action:{onClicked:event('action')},commands:{onCommand:event('command')},contextMenus:{onClicked:event('context'),create(){}},tabs:{create:async options=>{opened.push(options);},query:async()=>[{id:42,url:'https://example.test/'}],sendMessage:async(id,message)=>{messages.push({id,message});}}};
+ const chrome={runtime:{onMessage:event('message'),onConnect:event('connect'),onInstalled:event('installed')},action:{onClicked:event('action')},commands:{onCommand:event('command')},contextMenus:{onClicked:event('context'),create(){}},tabs:{create:async options=>{opened.push(options);},query:async()=>[{id:42,url:'https://example.test/'}],sendMessage:async(id,message,options)=>{
+  messages.push({id,message,options});
+  if(id===44)throw Error('No receiving content script');
+  return {ok:id===42};
+ }}};
  vm.runInNewContext(fs.readFileSync('extension/background.js','utf8'),{chrome,URL,AbortController});
- for(const tab of [{id:42,url:'https://example.test/'},{id:43,url:'chrome://newtab/'},{}])await handlers.action(tab);
- assert.equal(opened.length,3);for(const options of opened)assert.equal(options.url,'https://47.77.182.216.sslip.io/gateway/');
- assert.equal(messages.length,0,'toolbar clicks must never start a screenshot');
- await handlers.command('unrelated');assert.equal(messages.length,0);
+ await handlers.action({id:42,url:'https://example.test/'});
+ assert.equal(opened.length,0);
+ for(const tab of [{id:43,url:'chrome://newtab/'},{id:44,url:'https://example.test/'},{id:45,url:'https://example.test/'},{}])await handlers.action(tab);
+ assert.equal(opened.length,4);for(const options of opened)assert.equal(options.url,'https://47.77.182.216.sslip.io/gateway/account?tab=register&login=1');
+ assert.deepEqual(messages.map(({id,message,options})=>[id,message.type,options.frameId]),[[42,'zy-open',0],[44,'zy-open',0],[45,'zy-open',0]]);
+ messages.length=0;await handlers.command('unrelated');assert.equal(messages.length,0);
  await handlers.command('zy-capture-page');assert.equal(messages.length,1);assert.equal(messages[0].id,42);assert.equal(messages[0].message.type,'zy-capture-page');
 });

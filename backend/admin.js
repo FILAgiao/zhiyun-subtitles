@@ -1,14 +1,24 @@
 'use strict';
 const $=id=>document.getElementById(id),APP='zhiyun-subtitles',prefix=location.pathname.replace(/\/admin\/?$/,'');
 function savedLogin(){try{if(localStorage.getItem('gateway-web-logged-out'))return '';return localStorage.getItem('gateway-web-session')||sessionStorage.getItem('gateway-web-session')||'';}catch{return sessionStorage.getItem('gateway-web-session')||'';}}
-function saveLogin(value){try{if(value){localStorage.setItem('gateway-web-session',value);localStorage.removeItem('gateway-web-logged-out');}else{localStorage.removeItem('gateway-web-session');localStorage.setItem('gateway-web-logged-out','1');}}catch{}try{value?sessionStorage.setItem('gateway-web-session',value):sessionStorage.removeItem('gateway-web-session');}catch{}}
+function saveLogin(value,loggedOut=false){try{if(value){localStorage.setItem('gateway-web-session',value);localStorage.removeItem('gateway-web-logged-out');}else{if(loggedOut)localStorage.setItem('gateway-web-logged-out','1');localStorage.removeItem('gateway-web-session');}}catch{}try{value?sessionStorage.setItem('gateway-web-session',value):sessionStorage.removeItem('gateway-web-session');}catch{}}
 let token=savedLogin(),generation=0,admin=false,activeTab='analytics',busy=false;
 const num=v=>Number(v||0).toLocaleString('zh-CN'),date=v=>v?new Date(v*1000).toLocaleString('zh-CN',{timeZone:'Asia/Shanghai',hour12:false}):'—';
 const planNames={free:'基础免费',trial:'免费体验',pro:'PRO',ultra:'Ultra',legacy:'原有授权'};
 const feature={translation:'逐句翻译',translation_context:'术语翻译',learning:'AI 讲解',alignment:'语音校准'},states={complete:'已完成',unknown:'待核对',reserved:'处理中'};
 function notice(text,error=false){$('notice').textContent=text;$('notice').classList.toggle('error',error);}
-async function api(path,body,auth=token){const response=await fetch(prefix+path,{method:body===undefined?'GET':'POST',headers:{'Content-Type':'application/json','X-App-Id':APP,'X-Client-Type':'admin-web',...(auth?{Authorization:'Bearer '+auth}:{})},...(body===undefined?{}:{body:JSON.stringify(body)}),cache:'no-store'});let data;try{data=await response.json();}catch{if(response.ok)throw Error('服务器返回了无法读取的响应');data={error:'服务器返回了无法读取的响应'};}if(!response.ok){if(response.status===401&&auth===token)reset();const error=Error(data.error||'服务请求失败');error.status=response.status;throw error;}return data;}
-function reset(){generation++;renderRegistrationPlan(null);clearAnalytics();activeTab='analytics';admin=false;operationsData=null;operationsLoad++;creditPending=null;sessionStorage.removeItem('gateway-admin-credit-pending');token='';saveLogin('');$('dashboard').hidden=true;$('account').hidden=true;$('login-panel').hidden=false;$('login-password').value='';$('official-prompt-list').replaceChildren();$('official-prompt-form').reset();$('operations-content').hidden=true;$('operations-tab').hidden=true;$('manual-credit-form').reset();$('cost-rate-form').reset();$('access-settings-form').reset();$('credit-user').replaceChildren(el('option','选择账号'));$('credit-user').firstChild.value='';for(const id of ['credit-submit','rate-submit','access-submit','operations-refresh'])$(id).disabled=false;for(const id of ['credit-status','rate-status','access-status'])$(id).textContent='';for(const id of ['users-body','calls-body','sessions-body','actions-body','operations-users','operations-models','operations-credits','operations-rates','operations-alerts','operations-stats','operations-configured-cost'])$(id).replaceChildren();}
+async function api(path,body,auth=token){
+ const response=await fetch(prefix+path,{method:body===undefined?'GET':'POST',headers:{'Content-Type':'application/json','X-App-Id':APP,'X-Client-Type':'admin-web',...(auth?{Authorization:'Bearer '+auth}:{})},...(body===undefined?{signal:AbortSignal.timeout(15000)}:{body:JSON.stringify(body)}),cache:'no-store'});
+ let data;
+ try{data=await response.json();}catch{if(response.ok)throw Error('服务器返回了无法读取的响应');data={error:'服务器返回了无法读取的响应'};}
+ if(!response.ok){
+  const invalid=['session_invalid','account_disabled'].includes(data?.error_code)||['请登录或重新登录','账号已停用，请联系管理员'].includes(data?.error);
+  if(response.status===401&&auth&&auth===token&&invalid)reset();
+  const error=Error(data?.error||'服务请求失败');error.status=response.status;throw error;
+ }
+ return data;
+}
+function reset(loggedOut=false){generation++;renderRegistrationPlan(null);clearAnalytics();activeTab='analytics';admin=false;operationsData=null;operationsLoad++;creditPending=null;sessionStorage.removeItem('gateway-admin-credit-pending');token='';saveLogin('',loggedOut);$('dashboard').hidden=true;$('account').hidden=true;$('login-panel').hidden=false;$('login-password').value='';$('official-prompt-list').replaceChildren();$('official-prompt-form').reset();$('operations-content').hidden=true;$('operations-tab').hidden=true;$('manual-credit-form').reset();$('cost-rate-form').reset();$('access-settings-form').reset();$('credit-user').replaceChildren(el('option','选择账号'));$('credit-user').firstChild.value='';for(const id of ['credit-submit','rate-submit','access-submit','operations-refresh'])$(id).disabled=false;for(const id of ['credit-status','rate-status','access-status'])$(id).textContent='';for(const id of ['users-body','calls-body','sessions-body','actions-body','operations-users','operations-models','operations-credits','operations-rates','operations-alerts','operations-stats','operations-configured-cost'])$(id).replaceChildren();}
 function el(tag,text,className){const node=document.createElement(tag);if(text!==undefined)node.textContent=text;if(className)node.className=className;return node;}
 function td(row,primary,secondary,className){const cell=el('td',primary,className);if(secondary)cell.append(el('small',secondary));row.append(cell);return cell;}
 function empty(body,columns){if(!body.children.length){const row=el('tr'),cell=el('td','暂无记录');cell.colSpan=columns;row.append(cell);body.append(row);}}
@@ -24,7 +34,7 @@ function render(data,me){
 }
 async function refresh(){const own=generation,me=await api('/v1/me'),data=me.is_admin?await api('/v1/admin/overview'):{...await api('/v1/history'),month:me.usage.month};if(own!==generation)return;render(data,me);}
 $('login-form').addEventListener('submit',async e=>{e.preventDefault();if(busy)return;busy=true;$('login-button').disabled=true;try{const data=await api('/v1/auth/login',{email:$('login-name').value.trim(),password:$('login-password').value},'');token=data.token;generation++;saveLogin(token);$('login-password').value='';await refresh();notice('已登录。');}catch(error){notice(error.message,true);}finally{busy=false;$('login-button').disabled=false;}});
-$('logout').addEventListener('click',async()=>{const old=token;reset();try{await api('/v1/auth/logout',{},old);notice('已退出。');}catch(e){notice('本机已退出；服务器会话撤销失败，请稍后检查。',true);}});
+$('logout').addEventListener('click',async()=>{const old=token;reset(true);try{await api('/v1/auth/logout',{},old);notice('已退出。');}catch(e){notice('本机已退出；服务器会话撤销失败，请稍后检查。',true);}});
 
 function syncRegistrationPlanFields(){
  const free=$('registration-plan').value==='free';
@@ -170,7 +180,26 @@ function renderAnalyticsUsers(){const box=$('analytics-users');box.replaceChildr
 function renderOfficialPricing(data){const box=$('official-pricing');box.replaceChildren();const catalog=data.pricing_catalog;if(!catalog){box.append(el('strong','官方参考费率暂不可用'),el('span','服务器更新后自动加载。历史已配置费率仍可在下方查看。'));return;}box.append(el('strong','自动匹配模型，无需手动填写'));for(const model of catalog.models||[])box.append(el('div',(model.title||model.model)+'：输入 ¥'+money(model.input_per_million,2)+' / 输出 ¥'+money(model.output_per_million,2)+'（每百万 Token）'));box.append(el('p',catalog.note||'按当前官方常规在线 Token 费率参考估算，不代表实际账单。'));const reference=el('div','核对日期 '+(catalog.checked_at||'—')+' · ');if(typeof catalog.source_url==='string'&&catalog.source_url.startsWith('https://docs.volcengine.com/')){const link=el('a','官方定价');link.href=catalog.source_url;link.target='_blank';link.rel='noopener noreferrer';reference.append(link);}box.append(reference);if(data.summary?.token_estimate)box.append(el('div',tokenEstimateText(data.summary.token_estimate)));}
 let analyticsResize=0;window.addEventListener('resize',()=>{cancelAnimationFrame(analyticsResize);analyticsResize=requestAnimationFrame(()=>{if(admin&&analyticsData&&activeTab==='analytics')renderAnalyticsChart();});});
 for(const button of document.querySelectorAll('[data-range]'))button.addEventListener('click',()=>setAnalyticsRange(button.dataset.range));$('analytics-filter').addEventListener('submit',e=>{e.preventDefault();void loadAnalytics();});$('analytics-refresh').addEventListener('click',()=>void loadAnalytics());$('analytics-metric').addEventListener('change',renderAnalyticsChart);$('analytics-user-search').addEventListener('input',renderAnalyticsUsers);$('analytics-user-sort').addEventListener('change',renderAnalyticsUsers);setAnalyticsRange('7d',false);
-if(token)refresh().catch(e=>notice(e.message,true));
+let restoreTimer,restoreDelay=1000,restoring=false;
+async function restoreLogin(){
+ if(!token||restoring||busy||!$('dashboard').hidden||document.visibilityState==='hidden')return;
+ clearTimeout(restoreTimer);
+ restoring=true;
+ $('login-panel').hidden=true;
+ notice('正在恢复登录…');
+ try{await refresh();notice('');}
+ catch(error){
+  if(token&&(!error.status||[401,408,425,429].includes(error.status)||error.status>=500)){
+   notice('账号服务暂时不可用，正在自动重连…');
+   restoreTimer=setTimeout(restoreLogin,restoreDelay);
+   restoreDelay=Math.min(restoreDelay*2,30000);
+  }else{$('login-panel').hidden=false;notice(error.message,true);}
+ }finally{restoring=false;}
+}
+window.addEventListener('online',restoreLogin);
+window.addEventListener('focus',restoreLogin);
+document.addEventListener('visibilitychange',restoreLogin);
+if(token)void restoreLogin();
 
 if(token)saveLogin(token);
 window.addEventListener('storage',event=>{if(event.storageArea!==localStorage||(event.key!=='gateway-web-session'&&event.key!=='gateway-web-logged-out'&&event.key!==null))return;const next=savedLogin();if(next!==token)location.reload();});

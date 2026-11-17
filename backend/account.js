@@ -12,8 +12,9 @@
   function closed(){$('channel-closed').hidden=false;$('channel-retry').hidden=false;channelNotice();}
   function channelError(message){channelNotice(message);$('channel-retry').hidden=false;}
   function showRegistration() {
-    const signedIn=!!P.session().profile;
-    registration.hidden=!mailReady||signedIn;
+    const {profile,pending}=P.session();
+    const signedIn=!!profile;
+    registration.hidden=!mailReady||signedIn||pending;
     $('register-signed-in').hidden=!mailReady||!signedIn;
   }
   function safeImage(raw){
@@ -65,7 +66,7 @@
       image.src=url;
     }catch{if(own===channelGeneration)channelError('暂时无法核对渠道开放状态，请稍后重试。');}
   }
-  function member(){const me=P.session().profile;$('account-guest').hidden=!!me;$('account-member').hidden=!me;if(!me){$('member-name').textContent='';$('member-plan').textContent='';$('member-quota').replaceChildren();$('member-expiry').textContent='';return;}
+  function member(){const {profile:me,pending,notice}=P.session();$('account-guest').hidden=!!me||pending;$('account-member').hidden=!me;$('portal-session-notice').textContent=notice||(pending?'正在恢复登录…':'');if(!me){$('member-name').textContent='';$('member-plan').textContent='';$('member-quota').replaceChildren();$('member-expiry').textContent='';return;}
     const names={free:'基础免费',trial:'免费体验',pro:'PRO',ultra:'Ultra',legacy:'原有授权'},plan=me.membership?.plan||me.permissions?.plan||'free';$('member-name').textContent=me.username||me.email||'我的账号';$('member-plan').textContent=names[plan]||'我的账号';$('member-quota').replaceChildren();
     const use=me.usage||{},rows=[['本月调用剩余',use.request_limit,use.requests,'次'],['本月语音剩余',use.audio_limit,use.audio_seconds,'秒']];for(const [label,limit,used,unit] of rows){const wrap=document.createElement('div'),dt=document.createElement('dt'),dd=document.createElement('dd');dt.textContent=label;dd.textContent=Number.isFinite(limit)&&limit>=0&&Number.isFinite(used)?Math.max(0,Math.floor(limit-used)).toLocaleString('zh-CN')+' '+unit:'待核对';wrap.append(dt,dd);$('member-quota').append(wrap);}
     const expires=Number(me.membership?.expires||me.permissions?.expires||0);$('member-expiry').textContent=expires>0?'有效期至 '+P.date(expires*1000)+'（北京时间）':'未设置到期时间';

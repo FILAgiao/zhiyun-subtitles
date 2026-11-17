@@ -115,10 +115,16 @@ async function startExtension(run){
  const GM_deleteValue=key=>{delete saved[key];persist(()=>chrome.storage.local.remove(key));};
  const GM_registerMenuCommand=()=>{};
  chrome.storage.onChanged.addListener((changes,area)=>{if(area==='local')for(const [key,value] of Object.entries(changes)){if(Object.hasOwn(value,'newValue'))saved[key]=value.newValue;else delete saved[key];}});
- chrome.runtime.onMessage.addListener((m,sender)=>{
+ chrome.runtime.onMessage.addListener((m,sender,respond)=>{
   if(sender.id!==chrome.runtime.id)return;const shadow=document.getElementById('zy-subtitle-host')?.shadowRoot;if(!shadow)return;
   if(m.type==='zy-capture-page'){const button=shadow.getElementById('web-page-ask')||shadow.getElementById('ai-screenshot');if(button){authorize(true);button.click();}}
-  if(m.type==='zy-open'){const panel=shadow.getElementById('panel');if(panel)panel.hidden=false;const compact=shadow.getElementById('compact');if(compact)compact.hidden=true;shadow.getElementById('web-settings-open')?.click();shadow.getElementById('account-open')?.click();}
+  if(m.type==='zy-open'){
+   const account=shadow.getElementById('account-open');if(!account)return;
+   const panel=shadow.getElementById('panel');if(panel)panel.hidden=false;
+   const compact=shadow.getElementById('compact');if(compact)compact.hidden=true;
+   account.click();
+   respond({ok:shadow.getElementById('settings-dialog')?.hidden===false});
+  }
   if(m.type==='zy-ask'&&typeof m.text==='string'&&m.text.trim()){
    const panel=shadow.getElementById('ai-learning'),question=shadow.getElementById('ai-question');if(!panel||!question)return;question.value='请解释以下选中文字：\n'+m.text.slice(0,4000);shadow.getElementById('ai-compose')?.dispatchEvent(new Event('submit',{bubbles:true,cancelable:true}));
   }

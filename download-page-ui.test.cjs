@@ -31,6 +31,12 @@ with tempfile.TemporaryDirectory() as folder:
   for(const edge of await edges.all()){assert.equal(await edge.getAttribute('href'),settings.edgeStoreUrl);assert.equal(await edge.getAttribute('target'),'_blank');assert.match(await edge.getAttribute('rel'),/noopener/);}
   assert.equal(await page.getByRole('link',{name:'管理员登录',exact:true}).getAttribute('href'),'/gateway/admin');
   const admin=await context.request.get(base+'/gateway/admin');assert.equal(admin.status(),200);assert.match(await admin.text(),/登录账号管理后台/);
+  const adminEntry=page.getByRole('navigation',{name:'主导航'}).getByRole('link',{name:'管理后台',exact:true});
+  await adminEntry.click();
+  await page.waitForURL(base+'/gateway/admin');
+  await page.getByRole('heading',{name:'登录账号管理后台'}).waitFor();
+  assert.equal(await page.locator('#dashboard').isHidden(),true);
+  await page.goto(base+'/gateway/download?from=qr');
   const edge=edges.last();
   assert.match(await page.locator('.usage-scope').textContent(),/缓存加速、字幕同步和 PPT 联动.*浙大智云网课的视频页面/);
   assert.equal(await page.locator('.quick-links').getByRole('link',{name:/历史问答/}).getAttribute('href'),'/gateway/study');
@@ -51,6 +57,12 @@ with tempfile.TemporaryDirectory() as folder:
 
   const home=await context.newPage();
   await home.goto(base+'/gateway/');
+  for(const width of [320,390,541,768,1024,1440]){
+   await page.setViewportSize({width,height:844});
+   const link=await adminEntry.boundingBox();
+   assert.ok(link&&link.x>=0&&link.x+link.width<=width,'admin entry fits viewport '+width);
+   assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),'home fits viewport '+width);
+  }
   await page.getByRole('link',{name:'登录账号',exact:true}).click();
   await page.locator('#login-name').fill('preview@example.test');
   await page.locator('#login-password').fill('local-preview-only-2026');
@@ -59,6 +71,7 @@ with tempfile.TemporaryDirectory() as folder:
   await home.reload();
   await home.getByRole('link',{name:'我的账号与额度'}).waitFor();
   assert.equal(await home.getByRole('link',{name:'登录账号',exact:true}).isVisible(),false);
+  assert.equal(await home.getByRole('link',{name:'管理后台',exact:true}).isVisible(),true);
   await page.locator('[data-logout]').click();
   await home.getByRole('link',{name:'登录账号',exact:true}).waitFor();
 

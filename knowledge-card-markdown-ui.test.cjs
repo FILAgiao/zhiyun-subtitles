@@ -50,12 +50,35 @@ const fs=require('fs'),assert=require('node:assert/strict'),{chromium}=require('
   await host.locator('#ai-save-card').click();await page.keyboard.press('Shift+Tab');
   assert.equal(await dialog.locator('#ai-card-cancel').evaluate(n=>n===n.getRootNode().activeElement),true,'focus stays inside modal');
   await dialog.locator('#ai-card-cancel').click();
+  // Rendering runs after the modal closes and uses the confirmed snapshot.
+  await reset();
+  const hold=()=>page.evaluate(()=>{
+   const original=ZYCardRender.render;
+   let release;
+   const gate=new Promise(resolve=>release=resolve);
+   window.releaseCard=()=>{ZYCardRender.render=original;release();};
+   ZYCardRender.render=async (...args)=>{await gate;return original(...args);};
+  });
+  await hold();
+  await host.locator('#ai-save-card').click();
+  const backgroundDownload=page.waitForEvent('download');
+  await dialog.locator('#ai-card-confirm').click();await dialog.waitFor({state:'detached'});
+  const cardProgress=host.locator('#ai-card-export-status');
+  await cardProgress.locator('progress').waitFor();
+  await ask('导出进行中追加的问题');
+  assert.equal(await host.locator('#ai-save-card').isDisabled(),true);
+  await page.evaluate(()=>releaseCard());
+  await backgroundDownload;
+  assert.deepEqual(await exported(),['第一问','第一句讲直觉。第二句举例子！第三句是结论。','第二问','第一句讲直觉。第二句举例子！第三句是结论。']);
+  await cardProgress.getByRole('status').filter({hasText:'知识卡已下载'}).waitFor();
+  await cardProgress.locator('[data-dismiss]').click();
   // Rendering failure keeps the selected excerpt and permits retry.
   await host.locator('#ai-save-card').click();await dialog.locator('#ai-card-sentences').click();await pairs.nth(0).locator('.ai-sentence-choice').nth(1).click();
   await page.evaluate(()=>{window.goodRender=ZYCardRender.render;ZYCardRender.render=async()=>{throw Error('fixture rendering failure');};});
-  await dialog.locator('#ai-card-confirm').click();await dialog.locator('#ai-card-summary').filter({hasText:'生成失败'}).waitFor();
-  assert.equal(await pairs.nth(0).locator('.ai-sentence-choice').nth(1).getAttribute('aria-pressed'),'true');
-  await page.evaluate(()=>ZYCardRender.render=window.goodRender);await reset();await download();assert.deepEqual(await exported(),['第一问','第二句举例子！']);
+  await dialog.locator('#ai-card-confirm').click();await cardProgress.getByRole('status').filter({hasText:'生成失败'}).waitFor();
+  await page.evaluate(()=>ZYCardRender.render=window.goodRender);await reset();
+  const retryDownload=page.waitForEvent('download');await cardProgress.getByRole('button',{name:'重试'}).click();await retryDownload;
+  assert.deepEqual(await exported(),['第一问','第二句举例子！']);
   // A paired image survives excerpt export from a restored conversation.
   const attached=await page.evaluate(()=>{const c=document.createElement('canvas');c.width=16;c.height=12;c.getContext('2d').fillRect(0,0,16,12);return c.toDataURL('image/png');});
   await page.evaluate(image=>ai.send('截图中的问题',{image}),attached);

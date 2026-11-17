@@ -4,12 +4,14 @@
   const KEY='gateway-web-session', LOGOUT='gateway-web-logged-out', MANUAL='gateway-web-manual-login', BRIDGE='gateway-web-bridge-session', API='/gateway', APP='zhiyun-subtitles';
   const $=id=>document.getElementById(id), controllers=new Set();
   let token='', profile=null, generation=0, busy=false,sessionNotice='',checking=false;
+  let retryTimer=null,retryDelay=1000;
   function stored(){try{if(localStorage.getItem(LOGOUT))return '';return localStorage.getItem(KEY)||sessionStorage.getItem(KEY)||'';}catch{try{return sessionStorage.getItem(KEY)||'';}catch{return '';}}}
   token=stored();
-  const session=()=>({token,profile,generation,notice:sessionNotice});
+  const pending=()=>!profile&&(checking||retryTimer!==null);
+  const session=()=>({token,profile,generation,pending:pending(),notice:sessionNotice});
   function update(){
-    document.querySelectorAll('[data-login]').forEach(button=>button.hidden=!!profile||(checking&&button.tagName==='A'));
-    document.querySelectorAll('[data-session-pending]').forEach(node=>node.hidden=!checking);
+    document.querySelectorAll('[data-login]').forEach(button=>button.hidden=!!profile||pending());
+    document.querySelectorAll('[data-session-pending]').forEach(node=>node.hidden=!pending());
     document.querySelectorAll('.signed-user').forEach(node=>node.hidden=!profile);
     document.querySelectorAll('[data-user-name]').forEach(node=>node.textContent=profile?.username||profile?.email||'我的账号');
     window.dispatchEvent(new CustomEvent('portal-session-change',{detail:{profile,generation}}));
@@ -41,7 +43,8 @@
     }catch{}
   }
   function resetPassword(){if(!$('login-password'))return;$('login-password').value='';$('login-password').type='password';$('password-toggle').textContent='显示';$('password-toggle').setAttribute('aria-pressed','false');}
-  function clear(message='',loggedOut=false){generation++;sessionNotice=message;for(const controller of controllers)controller.abort();controllers.clear();token='';profile=null;checking=false;save('',loggedOut);resetPassword();update();}
+  function resetRetry(){clearTimeout(retryTimer);retryTimer=null;retryDelay=1000;}
+  function clear(message='',loggedOut=false){generation++;resetRetry();sessionNotice=message;for(const controller of controllers)controller.abort();controllers.clear();token='';profile=null;checking=false;save('',loggedOut);resetPassword();update();}
   async function api(path,{method='GET',body,auth=token,timeout=15000,responseType='json'}={}){
     if(!path.startsWith('/v1/'))throw Error('请求路径无效');
     const controller=new AbortController();if(auth||method!=='GET')controllers.add(controller);let timedOut=false;
@@ -54,8 +57,9 @@
         let message=typeof data?.error==='string'?data.error:'服务暂时不可用，请稍后再试。';
         if(response.status===401){
           if(path==='/v1/auth/login')message='账号或密码不正确，请核对后重试。';
-          else if(typeof data?.error==='string'){
-            message='登录已失效，请重新登录。';
+          else if(['session_invalid','account_disabled'].includes(data?.error_code)||
+                  ['请登录或重新登录','账号已停用，请联系管理员'].includes(data?.error)){
+            message=data?.error_code==='account_disabled'||data?.error==='账号已停用，请联系管理员'?'账号已停用，请联系管理员。':'登录已失效，请重新登录。';
             if(auth&&auth===token){
               if(!isBridgeSession(auth))rememberManualLogin();
               clear(message);
@@ -89,7 +93,7 @@
       if(own!==generation)return;
       if(typeof data.token!=='string'||!data.token)throw Error('登录响应异常，请稍后再试。');
       const me=await api('/v1/me',{auth:data.token});if(own!==generation)return;
-      generation++;sessionNotice='';token=data.token;profile=me;checking=false;rememberManualLogin();save(token);showSessionNotice();resetPassword();notice('');$('login-dialog').close();update();
+      generation++;resetRetry();sessionNotice='';token=data.token;profile=me;checking=false;rememberManualLogin();save(token);showSessionNotice();resetPassword();notice('');$('login-dialog').close();update();
       const params=new URLSearchParams(location.search);if(params.has('login')){params.delete('login');history.replaceState(null,'',location.pathname+(params.size?'?'+params:'')+location.hash);}
     }catch(error){if(error.name!=='AbortError'&&own===generation)notice(error.message,true);}
     finally{busy=false;$('login-submit').disabled=false;}
@@ -116,9 +120,11 @@
     const own=generation, canRestore=allowHandoff&&isBridgeSession(token);
     try{
       if(token){
+        checking=true;
         const me=await api('/v1/me');
         if(own!==generation)return;
         profile=me;
+        resetRetry();
         sessionNotice='';
         showSessionNotice();
       }
@@ -132,7 +138,15 @@
         if(recovery===generation)await checkSession(false);
         return;
       }
-      if(error.name!=='AbortError'&&own===generation){sessionNotice=error.message;showSessionNotice();}
+      if(error.name!=='AbortError'&&own===generation){
+        const temporary=!error.status||[401,408,425,429].includes(error.status)||error.status>=500;
+        sessionNotice=temporary?'账号服务暂时不可用，正在自动重连…':error.message;
+        showSessionNotice();
+        if(temporary&&token&&!profile){
+          retryTimer=setTimeout(()=>{retryTimer=null;retrySession();},retryDelay);
+          retryDelay=Math.min(retryDelay*2,30000);
+        }
+      }
     }finally{
       if(own===generation){checking=false;update();}
     }
@@ -147,18 +161,23 @@
     if(new URLSearchParams(location.search).get('login')==='1'&&!profile&&!token&&!busy)openLogin();
   })();
   function retrySession(){
-    if(!token||profile||checking||busy)return;
+    if(!token||profile||checking||busy||document.visibilityState==='hidden')return;
+    clearTimeout(retryTimer);
+    retryTimer=null;
     checking=true;
     update();
     void checkSession();
   }
   window.addEventListener('online',retrySession);
+  window.addEventListener('focus',retrySession);
+  document.addEventListener('visibilitychange',retrySession);
   window.addEventListener('pageshow',event=>{if(event.persisted)retrySession();});
   window.addEventListener('storage',async event=>{
     if(event.storageArea!==localStorage||(event.key!==KEY&&event.key!==LOGOUT&&event.key!==null))return;
     const next=localStorage.getItem(LOGOUT)?'':localStorage.getItem(KEY)||'';
     if(next===token)return;
     generation++;
+    resetRetry();
     for(const controller of controllers)controller.abort();
     controllers.clear();
     token=next;

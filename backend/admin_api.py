@@ -153,7 +153,7 @@ class AdminMixin:
         if not grant or not grant['enabled']: raise Fault(403,'账号未开通此应用或已暂停')
         if user>0:
             row=db.execute('SELECT enabled FROM users WHERE id=?',(user,)).fetchone()
-            if not row or not row['enabled']: raise Fault(401,'账号已停用，请联系管理员')
+            if not row or not row['enabled']: raise Fault(401,'账号已停用，请联系管理员','account_disabled')
         if feature:
             if grant['expires'] is not None and grant['expires']<=int(time.time()): raise Fault(403,'套餐已到期，基础功能仍可使用','payment_required')
             if grant['plan']=='free': raise Fault(403,'请申请体验或开通 PRO / Ultra 后使用此功能','payment_required')

@@ -108,6 +108,6 @@
     catch(error){if(error.name!=='AbortError'&&valid(own,auth)){$('delete-status').textContent=error.message;$('delete-status').classList.add('error');}}
     finally{deleteBusy=false;$('delete-confirm').disabled=false;}
   });
-  function sessionChanged(){initialized=true;reset();notice(P.session().notice||'',!!P.session().notice);const signed=!!P.session().profile;$('study-guest').hidden=signed;$('study-workspace').hidden=!signed;if(signed)load();}
+  function sessionChanged(){initialized=true;reset();const {profile,pending,notice:message}=P.session();notice(message||(pending?'正在恢复登录…':''),!!message);$('study-guest').hidden=!!profile||pending;$('study-workspace').hidden=!profile;if(profile)load();}
   window.addEventListener('portal-session-change',sessionChanged);P.ready.then(()=>{if(!initialized)sessionChanged();});
 })();

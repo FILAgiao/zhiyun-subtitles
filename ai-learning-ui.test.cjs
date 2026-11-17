@@ -61,7 +61,7 @@ const {chromium}=require(process.env.PLAYWRIGHT_MODULE||'playwright');
  const download=await downloadEvent;assert.match(download.suggestedFilename(),/^浙大上课爽-知识卡-.*\.png$/);assert.equal(await download.failure(),null);
  await download.saveAs('knowledge-card-preview.png');
  const png=fs.readFileSync('knowledge-card-preview.png');assert.equal(png.subarray(1,4).toString(),'PNG');assert.equal(png.readUInt32BE(16),1080);assert.ok(png.readUInt32BE(20)>=1040);
- assert.equal(await page.evaluate(()=>calls.length),requestsBeforeCard);assert.match(await host.locator('#ai-status').textContent(),/已保存全部对话/);
+ assert.equal(await page.evaluate(()=>calls.length),requestsBeforeCard);await host.locator('#ai-card-export-status [role="status"]').filter({hasText:'知识卡已下载'}).waitFor();
 
  await page.screenshot({path:'ai-learning-preview.png'});
  const beforeMissingSlide=await page.evaluate(()=>calls.length);await page.evaluate(()=>{assistant.resetCourse();assistant.close();slide=null;});await host.locator('#ai-open').click();assert.match(await host.locator('#ai-status').textContent(),/请先打开.*PPT/);assert.equal(await page.evaluate(()=>calls.length),beforeMissingSlide,'missing PPT does not trigger a paid model request');

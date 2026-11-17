@@ -13,5 +13,11 @@ const fs=require('node:fs'),assert=require('node:assert/strict'),{chromium}=requ
  await page.evaluate(()=>{ai.destroy();mount();});p=await page.locator('#zy-subtitle-host').locator('#panel').boundingBox();assert.ok(p.x<250&&p.y<300,'Position restored after remount');await page.setViewportSize({width:320,height:400});p=await page.locator('#zy-subtitle-host').locator('#panel').boundingBox();assert.ok(p.x>=0&&p.y>=0&&p.x+p.width<=320&&p.y+p.height<=400);assert.deepEqual(errors,[]);
  // Login interception must also ignore a drag on an unauthenticated launcher.
  await page.evaluate(()=>{ai.destroy();delete saved['gateway-account-v1'];mount();});const loggedOut=page.locator('#zy-subtitle-host'),loggedOutButton=loggedOut.locator('#web-page-ask');b=await loggedOutButton.boundingBox();await page.mouse.move(b.x+15,b.y+15);await page.mouse.down();await page.mouse.move(60,80,{steps:6});await page.mouse.up();assert.equal(await loggedOut.locator('#settings-dialog').isVisible(),false);assert.equal(await loggedOut.locator('#panel').isVisible(),true);
- console.log('PASS: drag without click; saved position and viewport bounds; immediate capture feedback; two-page pending capture; cancel/retry; native capture without DOM rendering.');
+ const login=loggedOut.locator('#account-open');assert.equal(await login.innerText(),'登录');
+ await login.click();assert.equal(await loggedOut.locator('#settings-tab-connection').getAttribute('aria-selected'),'true');
+ assert.equal(await loggedOut.locator('#gateway-login-form').isVisible(),true);
+ assert.equal(await loggedOut.locator('#gateway-email').evaluate(input=>input.getRootNode().activeElement===input),true);
+ assert.equal(await loggedOut.getByRole('link',{name:'管理员登录 ↗'}).getAttribute('href'),'https://47.77.182.216.sslip.io/gateway/admin');
+ await page.keyboard.press('Escape');assert.equal(await loggedOut.locator('#settings-dialog').isVisible(),false);
+ console.log('PASS: launcher drag and bounds, native capture and retry, direct login and administrator entry.');
 }finally{await browser.close();}})().catch(e=>{console.error(e);process.exitCode=1;});

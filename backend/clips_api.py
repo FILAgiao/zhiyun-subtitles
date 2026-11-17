@@ -96,7 +96,8 @@ def data_url(raw):
 def summary(row):
     result = {key: row[key] for key in ('id', 'title', 'course', 'origin', 'note', 'position', 'width', 'height', 'created', 'updated')}
     result['courseKey'] = row['course_key']
-    result['thumbnail'] = data_url(row['thumbnail'])
+    if 'thumbnail' in row.keys():
+        result['thumbnail'] = data_url(row['thumbnail'])
     return result
 
 
@@ -119,8 +120,12 @@ class ClipsMixin:
         if route.path.endswith('/clip-image'):
             if method != 'GET' or not identifier:
                 raise Fault(400, '请指定收藏图片', 'invalid_clip')
+            variant = query.get('variant', ['original'])[0]
+            if variant not in ('original', 'thumbnail'):
+                raise Fault(400, '收藏图片规格无效', 'invalid_clip')
+            column = 'thumbnail' if variant == 'thumbnail' else 'image'
             with self.db() as db:
-                row = db.execute('SELECT image FROM study_clips WHERE user=? AND app=? AND id=?', (*owner, identifier)).fetchone()
+                row = db.execute(f'SELECT {column} AS image FROM study_clips WHERE user=? AND app=? AND id=?', (*owner, identifier)).fetchone()
             if not row:
                 raise Fault(404, '收藏不存在或已删除', 'clip_not_found')
             # Keep the JSON data URL for older extension clients. The web reader
@@ -178,7 +183,8 @@ class ClipsMixin:
                 raise ValueError()
         except ValueError:
             raise Fault(400, '分页参数无效', 'invalid_pagination') from None
+        thumbnail_column = '' if query.get('thumbnails') == ['0'] else ',thumbnail'
         with self.db() as db:
-            rows = db.execute('SELECT id,title,course,course_key,origin,note,position,thumbnail,width,height,created,updated FROM study_clips WHERE user=? AND app=? ORDER BY created DESC,id LIMIT ? OFFSET ?', (*owner, limit + 1, offset)).fetchall()
+            rows = db.execute(f'SELECT id,title,course,course_key,origin,note,position,width,height,created,updated{thumbnail_column} FROM study_clips WHERE user=? AND app=? ORDER BY created DESC,id LIMIT ? OFFSET ?', (*owner, limit + 1, offset)).fetchall()
             used = db.execute('SELECT COALESCE(SUM(length(image)+length(thumbnail)),0) FROM study_clips WHERE user=? AND app=?', owner).fetchone()[0]
         return 200, {}, {'items': [summary(row) for row in rows[:limit]], 'next_offset': offset + limit if len(rows) > limit else None, 'usedBytes': used, 'maxBytes': MAX_STORAGE}

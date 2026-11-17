@@ -6,8 +6,10 @@
 | --- | --- |
 | POST /v1/study/clips | 主动新建/覆盖稳定 id 的截图收藏，返回 ok/id；不会调用模型 |
 | GET /v1/study/clips?limit=50&offset=0 | 当前用户缩略图与元数据，next_offset、usedBytes、maxBytes，不读取原图字段 |
+| GET /v1/study/clips?thumbnails=0&limit=50&offset=0 | 同样的分页和用量字段，列表仅返回元数据 |
 | GET /v1/study/clip-image?id=ID | 兼容旧客户端，鉴权读取单张 PNG data URL；无公开图片 URL |
 | GET /v1/study/clip-image?id=ID&format=png | 鉴权读取 PNG 二进制，Content-Type: image/png；支持私有 ETag 重验证 |
+| GET /v1/study/clip-image?id=ID&format=png&variant=thumbnail | 鉴权读取私有 PNG 缩略图，同样支持 ETag 重验证 |
 | DELETE /v1/study/clips?id=ID | 只删除当前用户记录及图片、缩略图；不改本机历史 |
 
 POST 字段：id（1–100 位字母数字/下划线/短横线）、title（200）、course（200）、courseKey（200）、origin（2000）、note（4000）、position（100）、image、thumbnail。课程身份由客户端课程标识摘要分组（安全上下文用 SHA256，普通 HTTP 用本地确定性摘要），不把该标识用于账号鉴权。origin 仅 HTTP(S)，删除查询、片段及带用户名密码的地址。

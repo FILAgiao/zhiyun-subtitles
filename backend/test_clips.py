@@ -52,6 +52,20 @@ class ClipsTests(unittest.TestCase):
         limits=self.gateway.capabilities()['study_clip_limits']
         self.assertEqual({'max_edge':3840,'max_image':4000000,'max_thumbnail_edge':320,'max_thumbnail':80000},limits)
 
+    def test_metadata_only_list_and_private_binary_thumbnail(self):
+        thumbnail = image(3, 2)
+        self.call('POST', body=self.payload(thumbnail=thumbnail))
+        legacy = self.call('GET')['items'][0]
+        metadata = self.call('GET', '/v1/study/clips?thumbnails=0')['items'][0]
+        self.assertEqual(thumbnail, legacy.pop('thumbnail'))
+        self.assertEqual(legacy, metadata)
+        route = '/v1/study/clip-image?id=one&format=png&variant=thumbnail'
+        status, headers, raw = self.gateway.study_private('GET', route, self.headers, {}, self.users[0], 'zhiyun-subtitles')
+        self.assertEqual((200, 'image/png', base64.b64decode(thumbnail[22:])), (status, headers['Content-Type'], raw))
+        conditional = {**self.headers, 'If-None-Match': headers['ETag']}
+        self.assertEqual(304, self.gateway.study_private('GET', route, conditional, {}, self.users[0], 'zhiyun-subtitles')[0])
+        self.fault('clip_not_found', lambda: self.gateway.study_private('GET', route, conditional, {}, self.users[1], 'zhiyun-subtitles'))
+
     def test_high_resolution_image_keeps_pixels_and_is_lazy_loaded(self):
         original=image(3840,2160)
         self.call('POST',body=self.payload('high-resolution',image=original))

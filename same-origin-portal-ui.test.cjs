@@ -8,8 +8,8 @@ const previewDir=process.env.ZY_STUDY_PREVIEW_DIR||root;
 fs.mkdirSync(previewDir,{recursive:true});
 const serve=http.createServer((req,res)=>{
   const route=new URL(req.url,'http://localhost').pathname;
-  const name=route==='/gateway/study'?'study.html':route==='/gateway/account'?'account.html':route.replace(/^\/gateway\//,'');
-  if(!/^(?:study\.(?:html|js|css)|account\.(?:html|js|css)|(?:portal|clips)\.(?:js|css)|landing\/brand-logo\.png)$/.test(name)){res.writeHead(404);return res.end();}
+  const name=['/gateway/study','/gateway/account','/gateway/admin'].includes(route)?route.slice('/gateway/'.length)+'.html':route.replace(/^\/gateway\//,'');
+  if(!/^(?:(?:study|account|admin)\.(?:html|js|css)|(?:portal|clips)\.(?:js|css)|landing\/brand-logo\.png)$/.test(name)){res.writeHead(404);return res.end();}
   res.writeHead(200,{'Content-Type':name.endsWith('.js')?'text/javascript':name.endsWith('.css')?'text/css':name.endsWith('.png')?'image/png':'text/html;charset=utf-8'});res.end(fs.readFileSync(path.join(base,name)));
 });
 const hostile='<img src=x onerror="window.__xss=1"><script>window.__xss=2</script>';
@@ -41,11 +41,14 @@ const owners={a:[record('a1','自己的问题 A','程序设计',hostile),record(
         if(loginMode==='wrong')return reply(401,{error:'邮箱或密码错误'});
         return reply(200,{token:body.email==='user-b'?'fixture-b':'fixture-a'});
       }
-      if(!owner||privateExpired)return reply(401,{error:'登录失效'});
+      if(!owner||privateExpired)return reply(401,{error:'登录失效',error_code:'session_invalid'});
       if(endpoint==='me'&&meMode==='html401')return route.fulfill({status:401,contentType:'text/html',body:'<h1>Unauthorized</h1>'});
+      if(endpoint==='me'&&meMode==='json401')return reply(401,{error:'Proxy authentication unavailable'});
       if(endpoint==='me'&&meMode==='network')return route.abort('failed');
+      if(endpoint==='me'&&meMode==='502')return reply(502,{error:'upstream temporarily unavailable'});
       if(endpoint==='me')return reply(200,{username:'个人账号 '+owner,membership:{plan:'trial',expires:Math.floor(now/1000)+86400*7},usage:{requests:4,request_limit:100,audio_seconds:20,audio_limit:600}});
       if(endpoint==='auth/logout')return reply(200,{ok:true});
+      if(endpoint==='history')return reply(200,{calls:[],sessions:[]});
       if(endpoint==='study/conversations'){
         assert.equal(url.searchParams.has('user_id'),false);assert.equal(url.searchParams.has('user'),false);
         const id=url.searchParams.get('id');if(!id)return reply(200,{items:owners[owner].map(({history,...item})=>item),next_offset:null});
@@ -100,13 +103,27 @@ const owners={a:[record('a1','自己的问题 A','程序设计',hostile),record(
     await page.locator('#conversation-delete').click();await page.locator('#delete-confirm').click();await page.locator('#empty-title').filter({hasText:'还没有保存'}).waitFor();assert.equal(owners.b.length,0);
     // Expired private sessions immediately remove the last user's content and local token.
     privateExpired=true;await page.locator('#study-refresh').click();await page.locator('#study-guest').waitFor({state:'visible'});assert.equal(await page.evaluate(()=>sessionStorage.getItem('gateway-web-session')),null);assert.match(await page.locator('#study-notice').textContent(),/登录已失效/);privateExpired=false;
-    // Proxy errors preserve the stored session for retry when the network recovers.
-    meMode='html401';await page.evaluate(()=>{localStorage.removeItem('gateway-web-logged-out');sessionStorage.setItem('gateway-web-session','fixture-a');});
-    await page.goto(origin+'/gateway/study');await page.locator('#study-notice').filter({hasText:'服务暂时不可用'}).waitFor();
+    // A gateway restart can leave the browser online while the API is unreachable.
+    await page.evaluate(()=>{localStorage.removeItem('gateway-web-logged-out');sessionStorage.setItem('gateway-web-session','fixture-a');});
+    const loginCount=apiCalls.filter(c=>c.endpoint==='auth/login').length;
+    for(const mode of ['html401','json401','network','502']){
+      meMode=mode;
+      await page.goto(origin+'/gateway/study');
+      await page.locator('#study-notice').filter({hasText:'正在自动重连'}).waitFor();
+      assert.equal(await page.locator('#study-guest').isVisible(),false);
+      assert.equal(await page.evaluate(()=>localStorage.getItem('gateway-web-session')),'fixture-a');
+      meMode='ok';
+      await page.locator('#study-workspace').waitFor();
+    }
+    meMode='502';
+    await page.goto(origin+'/gateway/admin');
+    await page.locator('#notice').filter({hasText:'正在自动重连'}).waitFor();
+    assert.equal(await page.locator('#login-panel').isVisible(),false);
     assert.equal(await page.evaluate(()=>localStorage.getItem('gateway-web-session')),'fixture-a');
-    meMode='ok';await page.evaluate(()=>window.dispatchEvent(new Event('online')));await page.locator('#study-workspace').waitFor();
-    meMode='network';await page.evaluate(()=>{localStorage.removeItem('gateway-web-logged-out');sessionStorage.setItem('gateway-web-session','fixture-a');});await page.goto(origin+'/gateway/study');await page.locator('#study-notice').filter({hasText:'无法连接'}).waitFor();assert.equal(await page.locator('#study-guest').isVisible(),true);
-    meMode='ok';await page.evaluate(()=>{localStorage.removeItem('gateway-web-session');sessionStorage.removeItem('gateway-web-session');});
+    meMode='ok';
+    await page.locator('#dashboard').waitFor();
+    assert.equal(apiCalls.filter(c=>c.endpoint==='auth/login').length,loginCount,'automatically revalidate the existing token without password login');
+    await page.evaluate(()=>{localStorage.removeItem('gateway-web-session');sessionStorage.removeItem('gateway-web-session');});
     mailMode='open';
     for(let i=0;i<2;i++){
       await page.goto(origin+'/gateway/account?tab=register');

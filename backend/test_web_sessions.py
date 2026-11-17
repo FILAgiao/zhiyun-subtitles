@@ -17,6 +17,7 @@ class WebSessionTests(unittest.TestCase):
     def fails(self,status,path,token,method='GET'):
         with self.assertRaises(Fault) as caught:self.call(path,token=token,method=method)
         self.assertEqual(caught.exception.status,status)
+        return caught.exception
     def child(self):return self.call('/v1/auth/web-session')[2]['token']
     def test_independent_scoped_session_and_website_logout(self):
         result=self.call('/v1/auth/web-session')[2];child=result['token']
@@ -77,7 +78,11 @@ class WebSessionTests(unittest.TestCase):
         self.fails(401,'/v1/me',self.parent);self.fails(401,'/v1/me',child)
 
     def test_missing_and_invalid_parent_are_rejected(self):
-        self.fails(401,'/v1/auth/web-session','',method='POST')
-        self.fails(401,'/v1/auth/web-session','invalid-session',method='POST')
+        self.assertEqual('session_invalid',self.fails(401,'/v1/auth/web-session','',method='POST').code)
+        self.assertEqual('session_invalid',self.fails(401,'/v1/auth/web-session','invalid-session',method='POST').code)
+
+    def test_disabled_account_is_a_definitive_auth_failure(self):
+        with self.gateway.db() as db:db.execute('UPDATE users SET enabled=0 WHERE id=?',(self.user,))
+        self.assertEqual('account_disabled',self.fails(401,'/v1/me',self.parent).code)
 
 if __name__=='__main__':unittest.main()
