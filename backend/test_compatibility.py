@@ -60,7 +60,7 @@ class CompatibilityTests(unittest.TestCase):
             try:yield {'type':'response.completed','response':{'status':'completed','output':[],'usage':{'total_tokens':1}}}
             finally:finished.set()
         self.gateway.upstream_stream=stream
-        key=self.call('/v1/learning/jobs/create',self.body)[2]['id']
+        key=self.call('/v1/learning/jobs/create',self.question)[2]['id']
         self.assertTrue(finished.wait(5))
         calls=self.gateway.usage(1,'zhiyun-subtitles')['requests']
         replacement=Gateway(self.gateway.path,self.upstream)
@@ -84,7 +84,7 @@ class CompatibilityTests(unittest.TestCase):
             try:yield {'type':'response.completed','response':{'status':'completed','output':[],'usage':{'total_tokens':1}}}
             finally:finished.set()
         self.gateway.upstream_stream=stream
-        key=self.call('/v1/learning/jobs/create',self.body)[2]['id']
+        key=self.call('/v1/learning/jobs/create',self.question)[2]['id']
         self.assertTrue(entered.wait(5));self.gateway.begin_drain()
         try:
             with self.assertRaises(Fault) as error:self.call('/v1/ark/responses',self.body)
@@ -100,7 +100,7 @@ class CompatibilityTests(unittest.TestCase):
 
     def test_drain_cancelled_job_does_not_wait_for_an_extra_poll(self):
         self.gateway.upstream_stream=lambda *args:iter([])
-        key=self.call('/v1/learning/jobs/create',self.body)[2]['id']
+        key=self.call('/v1/learning/jobs/create',self.question)[2]['id']
         self.call('/v1/learning/jobs/cancel',{'id':key})
         self.gateway.begin_drain()
         self.assertTrue(self.gateway.wait_for_drain(2))

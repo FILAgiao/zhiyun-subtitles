@@ -13,15 +13,15 @@ import sqlite3
 import time
 
 try:
-    from .admin_api import Fault
+    from .admin_api import Fault, translation_limit
     from .pricing import TokenEstimate, pricing_catalog
 except ImportError:
-    from admin_api import Fault
+    from admin_api import Fault, translation_limit
     from pricing import TokenEstimate, pricing_catalog
 
 COST_NOTE = '按配置的输入/输出/音频/工具单价估算，未含缓存折扣/阶梯与供应商优惠，实际以账单为准。实际账单尚未接入；图片已计入输入 Token，不重复计费。'
 RATE_FIELDS = ('input_per_million', 'output_per_million', 'audio_per_minute', 'web_search_per_call')
-METRICS = ('requests', 'input_tokens', 'output_tokens', 'total_tokens', 'audio_seconds', 'images', 'web_search', 'uncertain')
+METRICS = ('requests', 'translation_requests', 'translation_chars', 'input_tokens', 'output_tokens', 'total_tokens', 'audio_seconds', 'images', 'web_search', 'uncertain')
 
 
 def migrate_operations(db):
@@ -113,6 +113,8 @@ def empty_metrics():
 def add_call(target, call, cost):
     target['_token_estimate'].add(call)
     target['requests'] += 1
+    target['translation_requests'] += int(call['translation_chars'] > 0)
+    target['translation_chars'] += call['translation_chars']
     for key in ('input_tokens', 'output_tokens', 'total_tokens', 'web_search'):
         target[key] += call[key] or 0
     target['audio_seconds'] += call['seconds'] or 0
@@ -291,7 +293,7 @@ class OperationsMixin:
                 cost = call_cost(call, rates_by_model)
                 for target in (summary, by_user[(call['user'], call['app'])], by_model[call['model'] or '(未记录模型)']):
                     add_call(target, call, cost)
-            grants = [dict(r) for r in db.execute('SELECT u.id AS user_id,u.username,u.email,u.enabled,g.app,g.plan,g.enabled AS grant_enabled,g.requests AS request_limit,g.audio AS audio_limit,g.expires FROM users u JOIN grants g ON u.id=g.user')]
+            grants = [dict(r) for r in db.execute('SELECT u.id AS user_id,u.username,u.email,u.enabled,g.app,g.plan,g.enabled AS grant_enabled,g.requests,g.requests AS request_limit,g.audio AS audio_limit,g.expires,g.translation,g.template_applied,g.translation_limit FROM users u JOIN grants g ON u.id=g.user')]
             credits = [dict(r) for r in db.execute('SELECT c.*,u.username,a.username AS actor_name FROM operation_credits c LEFT JOIN users u ON u.id=c.user LEFT JOIN users a ON a.id=c.actor WHERE c.month=? ORDER BY c.id DESC', (period,))]
             monthly = {(r['user'], r['app']): dict(r) for r in db.execute('SELECT user,app,SUM(request_credit) AS requests,SUM(audio_credit_seconds) AS audio FROM operation_credits WHERE month=? GROUP BY user,app', (period,))}
         people = []; alerts = []
@@ -301,7 +303,9 @@ class OperationsMixin:
             stats = finish_metrics(by_user.pop(key, empty_metrics()))
             grant['base_request_limit'] = grant['request_limit']; grant['base_audio_limit'] = grant['audio_limit']
             grant['request_limit'] += added['requests']; grant['audio_limit'] += added['audio']
-            grant['request_ratio'] = stats['requests'] / grant['request_limit'] if grant['request_limit'] else None
+            grant['translation_limit'] = translation_limit(grant)
+            stats['quota_requests'] = stats['requests'] - stats['translation_requests']
+            grant['request_ratio'] = stats['quota_requests'] / grant['request_limit'] if grant['request_limit'] else None
             grant['audio_ratio'] = stats['audio_seconds'] / grant['audio_limit'] if grant['audio_limit'] else None
             grant['status'] = 'paused' if not grant['enabled'] or not grant['grant_enabled'] else 'expired' if grant['expires'] is not None and grant['expires'] <= now else 'active'
             person = {**grant, **stats}; people.append(person)
@@ -311,6 +315,7 @@ class OperationsMixin:
             elif grant['status'] == 'expired': alert('expired', '套餐已到期，基础功能保留')
             elif grant['expires'] is not None and grant['expires'] <= now + 7 * 86400: alert('expiring', '套餐将在 7 天内到期')
             if grant['request_ratio'] is not None and grant['request_ratio'] >= .8: alert('request_quota', '本月请求额度已使用 80% 以上')
+            if grant['translation_limit'] and stats['translation_chars'] >= grant['translation_limit'] * .8: alert('translation_quota', '本月专用字幕翻译字符额度已使用 80% 以上')
             if grant['audio_ratio'] is not None and grant['audio_ratio'] >= .8: alert('audio_quota', '本月音频额度已使用 80% 以上')
             if stats['uncertain']: alert('uncertain', '存在待核对的上游调用')
         # Keep usage even if a grant was removed directly from a legacy database.

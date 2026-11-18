@@ -7,8 +7,8 @@ function failure(response){
  const supplied=body.error_code||body.error?.code;
  const status=Number(response.status)||0;
  const legacy={'本月额度已用完':'quota_exhausted','请等待当前请求完成':'concurrency_limit','请求过于频繁，请稍后再试':'rate_limit'};
- const code=status===429?legacy[detail]||(['quota_exhausted','concurrency_limit','rate_limit'].includes(supplied)?supplied:'unclassified_limit'):status===401?'authentication_required':status===403?'permission_denied':status===503&&supplied==='server_updating'?'server_updating':'translation_failed';
- const messages={quota_exhausted:'本月调用额度已用完，请查看账号额度。',concurrency_limit:'当前请求仍在处理，正在等待空闲名额。',rate_limit:'请求过于频繁，正在等待服务恢复。',server_updating:'翻译服务正在更新，本次请求尚未提交，正在等待服务恢复。',unclassified_limit:'翻译服务暂时限制请求，已暂停；请稍后重试。',authentication_required:'登录已失效，请重新登录账号。',permission_denied:'当前账号没有翻译所需的模型权限，请查看账号权限。'};
+ const code=status===429?legacy[detail]||(['quota_exhausted','translation_quota_exhausted','concurrency_limit','rate_limit'].includes(supplied)?supplied:'unclassified_limit'):status===401?'authentication_required':status===403?'permission_denied':status===503&&supplied==='server_updating'?'server_updating':'translation_failed';
+ const messages={quota_exhausted:'本月调用额度已用完，请查看账号额度。',translation_quota_exhausted:'本月专用字幕翻译字符额度不足，请查看账号额度。',concurrency_limit:'当前请求仍在处理，正在等待空闲名额。',rate_limit:'请求过于频繁，正在等待服务恢复。',server_updating:'翻译服务正在更新，本次请求尚未提交，正在等待服务恢复。',unclassified_limit:'翻译服务暂时限制请求，已暂停；请稍后重试。',authentication_required:'登录已失效，请重新登录账号。',permission_denied:'当前账号没有翻译所需的模型权限，请查看账号权限。'};
  const error=new Error(messages[code]||`翻译服务请求失败（HTTP ${status}），已暂停；请稍后重试。`);
  error.code=code;error.status=status;error.safeToRetry=code==='concurrency_limit'||code==='rate_limit'||code==='server_updating';
  const header=String(response.responseHeaders||'').match(/^retry-after:\s*(.+)$/im)?.[1]?.trim();

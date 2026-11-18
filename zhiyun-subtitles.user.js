@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         浙大上课爽
 // @namespace    zhiyunzimu.local
-// @version      0.20.102
+// @version      0.20.105
 // @description  网课不硬扛，浙大上课爽！智云课堂同步字幕、PPT 讲解与本机缓存。
 // @match        https://*/*
 // @match        http://*/*
@@ -311,14 +311,33 @@ function mount({shadow,mascot}){
  for(const id of ['cache-progressive','cache-auto'])$('settings-storage').append($(id).closest('label'));
  for(const id of ['cache-folder','cache-default-folder','cache-location'])$('settings-storage').append($(id));
  
- $('settings-translation').insertAdjacentHTML('beforeend','<div class="section"><label>翻译方案<select id="translation-profile"><option value="context">术语增强 · 结合上下文</option><option value="economy">逐句省流</option></select></label><label>前后各参考句数<input id="translation-context-size" type="number" min="3" max="30" value="12"></label><label for="translation-domain">课程背景</label><textarea id="translation-domain" placeholder="例如：计算机体系结构，保持寄存器与指令集术语一致"></textarea><label for="translation-glossary">术语表 · 每行 原词 = 译法</label><textarea id="translation-glossary" placeholder="register = 寄存器"></textarea></div>');
+ $('settings-translation').insertAdjacentHTML('beforeend',`
+   <div class="section">
+     <label>翻译方案<select id="translation-profile" aria-describedby="translation-seed-note translation-context-note">
+       <option value="economy">默认字幕翻译 · 豆包</option>
+       <option value="context">逐句翻译 · 术语增强</option>
+     </select></label>
+     <p id="translation-seed-note"><strong>默认字幕翻译</strong>使用豆包 Seed Translation。新版服务按原文字符单独计量。</p>
+     <p id="translation-context-note"><strong>术语增强</strong>使用大模型，参考课程术语和前后文。会消耗与 AI 问答共用的调用额度。</p>
+     <div id="translation-seed-fields">
+       <label>每批最多字幕条数<input id="translation-batch-size" type="number" min="1" max="24" step="1" value="12"></label>
+       <p>优先翻译当前字幕。设为 1 条时逐条发送。</p>
+     </div>
+     <div id="translation-context-fields" hidden>
+       <label>前后各参考句数<input id="translation-context-size" type="number" min="3" max="30" value="12"></label>
+       <label for="translation-domain">课程背景</label>
+       <textarea id="translation-domain" placeholder="例如：计算机体系结构，保持寄存器与指令集术语一致"></textarea>
+       <label for="translation-glossary">术语表 · 每行 原词 = 译法</label>
+       <textarea id="translation-glossary" placeholder="register = 寄存器"></textarea>
+     </div>
+   </div>`);
  const syncBox=document.createElement('details');syncBox.id='study-sync';syncBox.innerHTML='<summary aria-label="打开手动时间微调"><span>手动时间微调</span><span class="sync-manual-access">免登录可以使用</span></summary>';syncBox.append(syncSection);shadow.append(syncBox);for(const details of syncSection.querySelectorAll('details'))details.open=true;
  $('settings-sync').insertAdjacentHTML('beforeend','<label>定时自动校准<input id="auto-sync" type="checkbox"></label><label>播放多久后复查<select id="sync-interval"><option value="120">2 分钟</option><option value="300" selected>5 分钟</option><option value="600">10 分钟</option></select></label><p id="sync-status" role="status"></p><p>手动微调立即停用自动校准，重新勾选才恢复。优先流式识别，可靠匹配后立即结束；每次最多听取 20 秒课程音轨，按实际使用时长计费。</p>');
  // Keep the existing controls and listeners; only their visual home changes.
  const layoutSettings=$('settings-layout-panel');
  for(const id of ['reset-ppt','slides-status','edit-layout','layout-editor'])layoutSettings.append($(id));
  $('settings-about').insertAdjacentHTML('beforeend','<p><strong>浙大上课爽 · v0.20.18</strong></p><p>网课不硬扛，浙大上课爽！</p><p>个人学习工具，非浙江大学官方产品。</p><div class="social-accounts"><p><strong>侃侃你的（浙大上岸版） · 抖音</strong>抖音号：42249371667</p><p><strong>侃侃你的（浙大上岸版） · 小红书</strong>小红书号：156626670</p></div>');
- for(const p of prefs.querySelectorAll('p'))if(p.textContent.includes('翻译仅发送'))p.textContent='增强翻译参考前后字幕与术语表；语音校准仅采集视频音轨，不使用麦克风。导出前请加载完整字幕。';
+ for(const p of prefs.querySelectorAll('p'))if(p.textContent.includes('翻译仅发送'))p.textContent='平台已有译文优先使用。导出前请加载完整字幕。';
  // A small daily workspace: captions, one primary action, and contextual tools.
  $('settings-translation').prepend($('translation-ready'));
  const modeLabel=$('mode').closest('label'),enabled=$('enabled'),status=$('translation-status');
@@ -2593,8 +2612,8 @@ function failure(response){
  const supplied=body.error_code||body.error?.code;
  const status=Number(response.status)||0;
  const legacy={'本月额度已用完':'quota_exhausted','请等待当前请求完成':'concurrency_limit','请求过于频繁，请稍后再试':'rate_limit'};
- const code=status===429?legacy[detail]||(['quota_exhausted','concurrency_limit','rate_limit'].includes(supplied)?supplied:'unclassified_limit'):status===401?'authentication_required':status===403?'permission_denied':status===503&&supplied==='server_updating'?'server_updating':'translation_failed';
- const messages={quota_exhausted:'本月调用额度已用完，请查看账号额度。',concurrency_limit:'当前请求仍在处理，正在等待空闲名额。',rate_limit:'请求过于频繁，正在等待服务恢复。',server_updating:'翻译服务正在更新，本次请求尚未提交，正在等待服务恢复。',unclassified_limit:'翻译服务暂时限制请求，已暂停；请稍后重试。',authentication_required:'登录已失效，请重新登录账号。',permission_denied:'当前账号没有翻译所需的模型权限，请查看账号权限。'};
+ const code=status===429?legacy[detail]||(['quota_exhausted','translation_quota_exhausted','concurrency_limit','rate_limit'].includes(supplied)?supplied:'unclassified_limit'):status===401?'authentication_required':status===403?'permission_denied':status===503&&supplied==='server_updating'?'server_updating':'translation_failed';
+ const messages={quota_exhausted:'本月调用额度已用完，请查看账号额度。',translation_quota_exhausted:'本月专用字幕翻译字符额度不足，请查看账号额度。',concurrency_limit:'当前请求仍在处理，正在等待空闲名额。',rate_limit:'请求过于频繁，正在等待服务恢复。',server_updating:'翻译服务正在更新，本次请求尚未提交，正在等待服务恢复。',unclassified_limit:'翻译服务暂时限制请求，已暂停；请稍后重试。',authentication_required:'登录已失效，请重新登录账号。',permission_denied:'当前账号没有翻译所需的模型权限，请查看账号权限。'};
  const error=new Error(messages[code]||`翻译服务请求失败（HTTP ${status}），已暂停；请稍后重试。`);
  error.code=code;error.status=status;error.safeToRetry=code==='concurrency_limit'||code==='rate_limit'||code==='server_updating';
  const header=String(response.responseHeaders||'').match(/^retry-after:\s*(.+)$/im)?.[1]?.trim();
@@ -2763,7 +2782,7 @@ return {create,opaque,courseKey,MAX_EVENTS,MAX_BATCH};
 (function(root,factory){const api=factory();if(typeof module==='object'&&module.exports)module.exports=api;else root.ZYGateway=api;})(globalThis,function(){
 'use strict';
 const DEFAULT_ORIGIN="https://47.77.182.216.sslip.io/gateway";
-const CLIENT_VERSION='0.20.102';
+const CLIENT_VERSION='0.20.105';
 function clientHeaders(){return {'X-Client-Version':CLIENT_VERSION,'X-Client-Channel':'userscript'};}
 const KEY='gateway-account-v1',APP='zhiyun-subtitles',CLIENT=globalThis.ZY_CLIENT_TYPE||'userscript';
 function baseURL(value){const u=new URL(String(value).trim());if(u.username||u.password||u.search||u.hash||!['/','/gateway','/gateway/'].includes(u.pathname)||(u.protocol!=='https:'&&!(u.protocol==='http:'&&['localhost','127.0.0.1'].includes(u.hostname))))throw Error('请填写 HTTPS 服务地址；本机调试可使用 http://127.0.0.1:8080');return u.origin+(u.pathname==='/'?'':'/gateway');}
@@ -2952,10 +2971,11 @@ function create({request,getValue,setValue}){
   <div id="gateway-member" hidden><button id="gateway-usage" type="button">查看额度</button><button id="gateway-logout" type="button">退出登录</button></div>
   <p class="account-admin-link"><a href="https://47.77.182.216.sslip.io/gateway/admin" target="_blank" rel="noopener noreferrer">管理员登录 ↗</a></p>
   <section id="gateway-membership" hidden aria-label="账号有效期"><div><span id="gateway-membership-title"></span><strong id="gateway-membership-value"></strong><p id="gateway-membership-deadline"></p></div><span class="account-access-dot" aria-hidden="true"></span></section>
-  <section id="gateway-quota-section" hidden><div class="quota-heading"><strong>我的可用额度</strong><a id="gateway-recharge" href="https://47.77.182.216.sslip.io/gateway/account?tab=recharge" target="_blank" rel="noopener noreferrer">充值 / 增加额度 ↗</a></div><div id="gateway-quota" aria-label="剩余额度"></div><p class="account-meter-note">调用次数由 AI 问答、字幕翻译和语音提交共用，按月统计；语音额度按实际识别音频时长计算。</p></section>
+  <section id="gateway-quota-section" hidden><div class="quota-heading"><strong>我的可用额度</strong><a id="gateway-recharge" href="https://47.77.182.216.sslip.io/gateway/account?tab=recharge" target="_blank" rel="noopener noreferrer">充值 / 增加额度 ↗</a></div><div id="gateway-quota" aria-label="剩余额度"></div><p class="account-meter-note">专用字幕翻译按原文字符单独计量。AI 问答、术语增强翻译和语音提交共用调用次数。各项额度按月统计。</p></section>
   <div id="gateway-recharge-note" hidden role="status"><strong>申请体验 / 账号帮助</strong><p>账号按人独立发放。请前往统一的账号申请与充值页面查看开放状态和办理方式；通道未配置时显示暂未开放。</p><button id="gateway-recharge-close" type="button">我知道了</button></div>
   <p id="gateway-status" role="status" aria-live="polite"></p><div id="gateway-basic-note"><span>基础看课，免登录可以使用</span><p>原文字幕 · PPT 缩放 · 课堂全屏 · 本机缓存</p><small>AI 对话包含截图问；高级功能按账号授权和额度使用。</small></div>`;
   const style=document.createElement('style');style.textContent=(globalThis.ZYWarmTheme?.css||'')+`
+#gateway-account #gateway-quota[data-translation-quota=true]{grid-template-columns:repeat(2,minmax(0,1fr))}
 #gateway-account .account-admin-link{margin:12px 0 0;text-align:right;font-size:12px}#gateway-account .account-admin-link a{color:var(--zy-accent,#b84a1d)}
 #gateway-account{--account-surface:var(--zy-card,#fff);box-sizing:border-box;max-width:520px;margin:0 auto;padding:12px 0 4px!important;color:var(--zy-text,#30343b)}#gateway-account *{box-sizing:border-box}#gateway-account [hidden]{display:none!important}#gateway-account .account-head{display:flex;gap:14px;align-items:center;margin:0 0 18px}#gateway-account #gateway-apply,#gateway-account #gateway-recharge{color:var(--zy-accent,#b94e22);font-size:11px;text-decoration:none;line-height:1.8;display:inline-flex;align-items:center;min-height:32px}#gateway-avatar{isolation:isolate;flex:none;display:grid;place-items:center;width:58px;height:58px;border-radius:17px;background:var(--zy-soft,#fdebdD);border:1px solid var(--zy-line,#eedccd);color:var(--zy-accent,#c45221);font-size:22px;font-weight:650}#gateway-avatar img{width:42px;height:42px;object-fit:contain;mix-blend-mode:multiply}.account-brand-copy{flex:1;min-width:0}.account-eyebrow{font-size:10px;letter-spacing:.8px;color:var(--zy-muted,#68717d)}#gateway-account #gateway-name{margin:4px 0 0;font-size:23px;line-height:1.35;letter-spacing:-.5px;color:var(--zy-text,#30343b)}#gateway-account #gateway-state{font-size:11px;line-height:1.6;color:var(--zy-muted,#68717d);margin:6px 0 0}#gateway-account #gateway-intro{font-size:14px;color:var(--zy-muted,#68717d);margin:0 0 28px;line-height:1.7}#gateway-plan-badge{font-size:10px;padding:5px 8px;border-radius:7px;background:var(--zy-soft);color:var(--zy-accent);white-space:nowrap;align-self:flex-start;margin-top:4px}
 #gateway-account #gateway-login-form{display:grid;gap:20px;max-width:none}#gateway-account #gateway-login-form label{display:grid;gap:9px;margin:0;font-size:12px;font-weight:600;color:var(--zy-text)}#gateway-account #gateway-login-form input{display:block;width:100%!important;max-width:none!important;height:48px;border:1px solid var(--zy-line,#eedccd);border-radius:12px;padding:0 14px;background:var(--account-surface);color:var(--zy-text);font:400 14px 'Segoe UI','Microsoft YaHei',sans-serif;box-shadow:0 2px 5px #392b2303;outline:none}#gateway-account #gateway-login-form input::placeholder{color:var(--zy-muted);opacity:.7}#gateway-account #gateway-login-form input:focus{border-color:var(--zy-accent);box-shadow:0 0 0 3px var(--zy-soft)}#gateway-account .account-password{display:flex;position:relative;align-items:center}#gateway-account .account-password input{padding-right:64px}#gateway-account #gateway-password-toggle{position:absolute;right:7px;top:7px;height:34px;padding:0 10px;border:0;background:transparent;color:var(--zy-muted);font:12px 'Microsoft YaHei',sans-serif;box-shadow:none;border-radius:8px}#gateway-account #gateway-password-toggle:hover{background:var(--zy-soft);color:var(--zy-accent)}#gateway-account #gateway-login{display:flex;align-items:center;justify-content:space-between;width:100%;height:46px;padding:0 17px;border:1px solid var(--zy-accent);border-radius:12px;background:var(--zy-accent);color:white;box-shadow:0 5px 14px #c4522118;font:600 14px 'Microsoft YaHei',sans-serif}#gateway-account #gateway-login:hover{background:var(--zy-accent-hover)}#gateway-account #gateway-login:disabled{opacity:.6;cursor:wait}#gateway-account .account-login-help{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-top:-6px;font-size:11px;color:var(--zy-muted)}#gateway-account #gateway-apply{padding:3px 0;border:0;box-shadow:none;background:transparent;color:var(--zy-accent);font-size:11px}
@@ -2974,9 +2994,14 @@ function create({request,getValue,setValue}){
   $('gateway-password-toggle').onclick=()=>{const visible=$('gateway-password').type==='password';$('gateway-password').type=visible?'text':'password';$('gateway-password-toggle').textContent=visible?'隐藏':'显示';$('gateway-password-toggle').setAttribute('aria-label',visible?'隐藏密码':'显示密码');$('gateway-password-toggle').setAttribute('aria-pressed',String(visible));};
   const renderQuota=()=>{
    const signed=!!credential(),u=signed?usageData:null,quota=$('gateway-quota');quota.replaceChildren();
+   const splitTranslation=u?.translation_limit!=null;
+   quota.dataset.translationQuota=String(splitTranslation);
+   const note=shadow.querySelector('.account-meter-note');
+   note.textContent=splitTranslation?'专用字幕翻译按原文字符单独计量。AI 问答、术语增强翻译和语音提交共用调用次数。各项额度按月统计。':'调用次数由 AI 问答、字幕翻译和语音提交共用，按月统计。';
    for(const item of [
     {label:'基础字幕与缓存',color:'#2c9a83',unlimited:true,detail:'原文字幕、手动微调与缓存 · 免登录可以使用'},
-    {feature:'learning',label:'AI 问答与翻译',color:'#C45221',used:u?.requests,total:u?.request_limit,unit:'次',detail:'AI、翻译与语音提交共享调用次数'},
+    {feature:'learning',label:splitTranslation?'共用调用次数':'AI 问答与翻译',color:'#C45221',used:u?.requests,total:u?.request_limit,unit:'次',detail:splitTranslation?'AI 问答、术语增强翻译、语音提交':'AI、翻译与语音提交共享调用次数'},
+    ...(splitTranslation?[{feature:'translation',label:'专用字幕翻译',color:'#3e79a8',used:u.translation_chars,total:u.translation_limit,unit:'字符',detail:'按发送的原字幕计量'}]:[]),
     {feature:'speech',label:'语音识别',color:'#df9a36',used:u?.audio_seconds==null?null:Math.ceil(u.audio_seconds),total:u?.audio_limit,unit:'秒',detail:'自动语音校准使用识别额度'}
    ]){
     const locked=(!signed||!canUse(item.feature))&&!item.unlimited,limit=Number(item.total),spent=Number(item.used),known=item.total!=null&&item.used!=null&&Number.isFinite(limit)&&limit>=0&&Number.isFinite(spent)&&spent>=0,remaining=known?Math.max(0,limit-spent):0;
@@ -6939,9 +6964,8 @@ const ZY_ONBOARDING_ARTWORK="data:image/webp;base64,UklGRvzlBwBXRUJQVlA4WAoAAAAw
     throw Object.assign(new Error('语音识别结果等待超时（120 秒），云端任务可能仍在执行'),{code:'speech_result_timeout'});
   }
   function translationBody(text, source = 'en', target = 'zh') {
-    if(source==='auto') return contextualTranslationBody(text,source,target);
     return { model: 'doubao-seed-translation-250915', input: [{ role: 'user', content: [{
-      type: 'input_text', text, translation_options: { source_language: source, target_language: target }
+      type: 'input_text', text, translation_options: { ...(source==='auto'?{}:{source_language:source}), target_language: target }
     }] }] };
   }
   function contextualTranslationBody(text, source = 'en', target = 'zh', context = {}, model = 'doubao-seed-2-1-lite-260915') {
@@ -6988,13 +7012,46 @@ const ZY_ONBOARDING_ARTWORK="data:image/webp;base64,UklGRvzlBwBXRUJQVlA4WAoAAAAw
       return !duplicates.has(id)&&usableTranslation(entry.text,value,target)?value.trim():null;
     });
   }
-  function translationJobs(cues, index, radius = 12, context = {}, playbackRate = 1) {
+  const MAX_SEED_BATCH = 24;
+  const seedTranslationEncoder = new TextEncoder();
+  const seedLineLabel = /^(?:\[(\d{1,2})\]|［(\d{1,2})］|【(\d{1,2})】)\s*(.*)$/;
+  function seedLine(entry, index) {
+    return '[' + String(index + 1).padStart(2,'0') + '] ' + entry.text.replace(/\s*[\r\n]+\s*/g,' ').trim();
+  }
+  function seedBatchSize(queue, cap) {
+    const first = queue[0];
+    if (cap===1 || first.priority || !Number.isInteger(first.position)) return 1;
+    let size=0, bytes=0;
+    for (const entry of queue.slice(0,cap)) {
+      if (entry.position!==first.position+size || entry.priority || seedLineLabel.test(entry.text.trim())) break;
+      const lineBytes=seedTranslationEncoder.encode(seedLine(entry,size)).length+(size?1:0);
+      if (bytes+lineBytes>900) break;
+      size++;bytes+=lineBytes;
+    }
+    if (size>=2) return size;
+    // A lone future cue can join the next batch. The current cue always goes immediately.
+    return size===1 && queue.length===1 ? 0 : 1;
+  }
+  function seedBatchTranslationBody(entries, source, target) {
+    return translationBody(entries.map(seedLine).join('\n'), source, target);
+  }
+  function seedBatchTranslationResult(text, entries, target) {
+    const lines=String(text).trim().split(/\r?\n/).filter(line=>line.trim());
+    const rows=lines.map(line=>line.trim().match(seedLineLabel));
+    if(rows.length!==entries.length || rows.some((row,index)=>!row || Number(row[1]||row[2]||row[3])!==index+1)){
+      return entries.map(()=>null);
+    }
+    return entries.map((entry,index)=>usableTranslation(entry.text,rows[index][4],target)?rows[index][4].trim():null);
+  }
+  function translationJobs(cues, index, radius = 12, context = {}, playbackRate = 1, lookahead = 12, playhead = cues[index]?.start) {
     if (index < 0) return [];
     const span = Math.min(30, Math.max(3, Number(radius) || 12));
-    const horizon = cues[index]?.start + 60 * Math.min(2, Math.max(1, Number(playbackRate) || 1));
-    return cues.slice(index, index + 12).filter((cue, step) => step < 2 || cue.start <= horizon).map((cue, step) => {
+    const rate = Math.min(2, Math.max(1, Number(playbackRate) || 1));
+    const horizon = cues[index]?.start + 60 * rate;
+    const urgentUntil = playhead + 2 * rate;
+    return cues.slice(index, index + lookahead).filter((cue, step) => step < 2 || cue.start <= horizon).map((cue, step) => {
       const position = index + step;
-      return { id: `${cue.start}\u0000${cue.original}`, text: cue.original, translation: cue.translation, context: { ...context,
+      return { id: `${cue.start}\u0000${cue.original}`, position, priority:step===0 || cue.start<=urgentUntil, text: cue.original, translation: cue.translation, context: { ...context,
         before: cues.slice(Math.max(0, position - span), position).map(row => row.original),
         after: cues.slice(position + 1, position + span + 1).map(row => row.original) } };
     });
@@ -7027,12 +7084,12 @@ const ZY_ONBOARDING_ARTWORK="data:image/webp;base64,UklGRvzlBwBXRUJQVlA4WAoAAAAw
     if(target==='en') return han===0 && (latin.length>=2 || latinChars>=3);
     return false;
   }
-  function createTranslator(request, notify = () => {}, concurrency = 1, timing = {}) {
+  function createTranslator(request, notify = () => {}, concurrency = 1, timing = {}, seedLimit = () => null) {
     const cache = new Map(), failed = new Set();
     const pending = new Map(), limit = Math.min(2, Math.max(1, Number(concurrency) || 1));
     let enabled = false, epoch = 0, queue = [], source = 'en', target = 'zh', workers = 0;
     const now = timing.now || Date.now, setTimer = timing.setTimer || setTimeout, clearTimer = timing.clearTimer || clearTimeout;
-    let retryTimer = null, retryUntil = 0, retries = 0, wanted = [];
+    let retryTimer = null, retryUntil = 0, retries = 0, wanted = [], seedFallback = false;
     const key = entry => JSON.stringify([source, target, typeof entry === 'string' ? entry : entry.id]);
     const get = entry => cache.get(key(entry)) || '';
     const needed = entry => !get(entry) && !failed.has(key(entry)) && !pending.has(key(entry));
@@ -7050,10 +7107,24 @@ const ZY_ONBOARDING_ARTWORK="data:image/webp;base64,UklGRvzlBwBXRUJQVlA4WAoAAAAw
         return;
       }
       queue = queue.filter(needed);
-      const entry = queue.shift();
+      const entry = queue[0];
       if (!entry) return;
-      const entries=[entry];let chars=(typeof entry==='string'?entry:entry.text).length;
-      if(request.batch && typeof entry!=='string')while(entries.length<6 && queue.length && typeof queue[0]!=='string' && chars+queue[0].text.length<=2400){const next=queue.shift();entries.push(next);chars+=next.text.length;}
+      const cap=seedLimit();
+      const useSeed=cap!==null && typeof entry!=='string';
+      let size=1;
+      if (request.batch && typeof entry!=='string') {
+        if (useSeed) {
+          size=seedFallback && cap>1 ? (entry.priority||entry.position==null?1:0) : seedBatchSize(queue,cap);
+        } else {
+          let chars=entry.text.length;
+          while(size<6 && size<queue.length && typeof queue[size]!=='string' && chars+queue[size].text.length<=2400){
+            chars+=queue[size++].text.length;
+          }
+        }
+      }
+      if (!size) return;
+      const entries=queue.splice(0,size);
+      const seedBatch=useSeed && size>1;
       const token = epoch, keys = entries.map(key);
       let handle;
       workers++;
@@ -7064,14 +7135,20 @@ const ZY_ONBOARDING_ARTWORK="data:image/webp;base64,UklGRvzlBwBXRUJQVlA4WAoAAAAw
         const response = await handle.promise;
         if (epoch !== token || !enabled) return;
         const results=entries.length>1?response:[response];
-        entries.forEach((item,index)=>{const result=results?.[index];if(typeof result==='string' && result.trim())cache.set(keys[index],result);else failed.add(keys[index]);});
+        entries.forEach((item,index)=>{
+          const result=results?.[index];
+          if(typeof result==='string' && result.trim()) cache.set(keys[index],result);
+          else if(seedBatch) seedFallback=true;
+          else failed.add(keys[index]);
+        });
         if(failed.size)partial();
         else if(retries)notify('翻译已恢复');
         retries = 0; retryUntil = 0;
       } catch (error) {
         if (epoch !== token) return;
         if(error.code==='translation_output_invalid') {
-          keys.forEach(cacheKey=>failed.add(cacheKey));partial();
+          if(seedBatch) seedFallback=true;
+          else {keys.forEach(cacheKey=>failed.add(cacheKey));partial();}
         } else if(error.safeToRetry && retries < 5) {
           const delay = Math.max(Number(error.retryAfterMs) || 5000, Math.min(30000, 5000 * 2 ** retries));
           retries++; retryUntil = now() + delay;
@@ -7082,7 +7159,11 @@ const ZY_ONBOARDING_ARTWORK="data:image/webp;base64,UklGRvzlBwBXRUJQVlA4WAoAAAAw
           notify((error.message || '翻译失败，已暂停') + (error.safeToRetry ? ' 自动重试已达上限，请稍后点击重试翻译。' : ''), {state:'paused', code:error.code});
         }
       } finally {
-        if(epoch===token){workers--;keys.forEach(cacheKey=>{if(pending.get(cacheKey)===handle)pending.delete(cacheKey);});if(enabled)pump();}
+        if(epoch===token){
+          workers--;keys.forEach(cacheKey=>{if(pending.get(cacheKey)===handle)pending.delete(cacheKey);});
+          if(seedBatch && seedFallback) queue=wanted.filter(needed);
+          if(enabled)pump();
+        }
       }
     }
     return {
@@ -7090,7 +7171,7 @@ const ZY_ONBOARDING_ARTWORK="data:image/webp;base64,UklGRvzlBwBXRUJQVlA4WAoAAAAw
       get enabled() { return enabled; },
       start(from, to) { stop(); failed.clear(); source = from; target = to; enabled = true; notify('翻译已开启'); },
       stop,
-      reset() { stop(); cache.clear(); failed.clear(); },
+      reset() { stop(); cache.clear(); failed.clear(); seedFallback=false; },
       schedule(entries) {
         if (!enabled) return;
         wanted = [...new Map(entries.filter(Boolean).map(entry => [key(entry), entry])).values()]
@@ -7221,7 +7302,7 @@ const ZY_ONBOARDING_ARTWORK="data:image/webp;base64,UklGRvzlBwBXRUJQVlA4WAoAAAAw
       maxHeight: below ? Math.max(24, band - 48) : rect.height * 0.55 };
   }
   if (typeof module !== 'undefined' && module.exports) {
-    module.exports = { parseTime, timeline, activeCue, stamp, srt, translationBody, contextualTranslationBody, batchTranslationBody, batchTranslationResult, usableTranslation, translationJobs, translationResult, createTranslator, subtitleTime, syncAnchorsValid, addSyncAnchor, syncOffsetAt, syncedSubtitleTime, syncedVideoTime, createSyncSchedule, captionLayout, wavBytes, matchSpeech, speechResult, recognizeStandard, courseIdentity, slideTime, slideAt, pptPlaybackTime, pptOffsetForPage, isTargetLanguage, downloadVideo, downloadInChunks };
+    module.exports = { parseTime, timeline, activeCue, stamp, srt, translationBody, contextualTranslationBody, batchTranslationBody, batchTranslationResult, seedBatchTranslationBody, seedBatchTranslationResult, usableTranslation, translationJobs, translationResult, createTranslator, subtitleTime, syncAnchorsValid, addSyncAnchor, syncOffsetAt, syncedSubtitleTime, syncedVideoTime, createSyncSchedule, captionLayout, wavBytes, matchSpeech, speechResult, recognizeStandard, courseIdentity, slideTime, slideAt, pptPlaybackTime, pptOffsetForPage, isTargetLanguage, downloadVideo, downloadInChunks };
     return;
   }
   ZYAppearance.configure(GM_getValue,GM_setValue);
@@ -8553,58 +8634,74 @@ const ZY_ONBOARDING_ARTWORK="data:image/webp;base64,UklGRvzlBwBXRUJQVlA4WAoAAAAw
   const translationRequest = ZYTranslationRequest.create(options => gateway.transport(options), translationResult);
   function arkRequest(text, source, target, context = {}) {
     let waited=false;
+    const body = $('translation-profile')?.value === 'context'
+      ? contextualTranslationBody(text, source, target, context)
+      : translationBody(text, source, target);
     const handle=translationRequest({
       method:'POST', url:ARK_URL, anonymous:true,
       cacheScope:gateway.credential() || apiKey,
       cacheResult:result=>usableTranslation(text,result,target),
-      cacheKey:JSON.stringify([courseIdentity(location.hash),source,target,text,$('translation-profile')?.value,context.course,context.subject,context.glossary,context.before,context.after]),
+      cacheKey:JSON.stringify([courseIdentity(location.hash),body]),
       onWait:()=>{waited=true;$('translation-status').textContent='上一条翻译仍在处理，正在等待回复。';},
       headers:{Authorization:`Bearer ${apiKey}`, 'Content-Type':'application/json'},
-      data:JSON.stringify($('translation-profile')?.value === 'economy' ? translationBody(text, source, target) : contextualTranslationBody(text, source, target, context))
+      data:JSON.stringify(body)
     });
     return {abort:handle.abort,promise:handle.promise.then(result=>{if(!usableTranslation(text,result,target))throw Object.assign(new Error('未返回有效译文'),{code:'translation_output_invalid'});if(waited && translationRetry.hidden)$('translation-status').textContent='翻译已恢复';return result;})};
   }
   arkRequest.batch = (entries,source,target) => {
     let waited=false;
-    const context=$('translation-profile')?.value==='economy'?{}:entries[0].context;
-    const body=batchTranslationBody(entries,source,target,context);
+    const seed=$('translation-profile')?.value!=='context';
+    const body=seed?seedBatchTranslationBody(entries,source,target):batchTranslationBody(entries,source,target,entries[0].context);
+    if(seed && gateway.configured())body.seed_batch=true;
+    const parse=seed?seedBatchTranslationResult:batchTranslationResult;
     const handle=translationRequest({
       method:'POST',url:ARK_URL,anonymous:true,
       onWait:()=>{waited=true;$('translation-status').textContent='上一批翻译仍在处理，正在等待回复。';},
       cacheScope:gateway.credential() || apiKey,
-      cacheResult:result=>batchTranslationResult(result,entries,target).every(Boolean),
+      cacheResult:result=>parse(result,entries,target).every(Boolean),
       cacheKey:JSON.stringify([courseIdentity(location.hash),source,target,body]),
       headers:{Authorization:`Bearer ${apiKey}`,'Content-Type':'application/json'},data:JSON.stringify(body)
     });
-    return {abort:handle.abort,promise:handle.promise.then(text=>{const results=batchTranslationResult(text,entries,target);if(waited && translationRetry.hidden)$('translation-status').textContent='翻译已恢复';return results;})};
+    return {abort:handle.abort,promise:handle.promise.then(text=>{const results=parse(text,entries,target);if(waited && translationRetry.hidden)$('translation-status').textContent='翻译已恢复';return results;})};
   };
   const translationRetry = document.createElement('button');
   translationRetry.id='translation-retry'; translationRetry.type='button'; translationRetry.textContent='重试翻译'; translationRetry.hidden=true;
   translationRetry.style.cssText='grid-column:1 / -1;justify-self:start;padding:4px 10px;font-size:12px';
   $('translation-status').after(translationRetry);
+  const seedLimit=()=> $('translation-profile').value==='context' ? null
+    : Math.floor(value('translation-batch-size',12,1,MAX_SEED_BATCH));
   const translator = createTranslator(arkRequest, (message, state) => {
     $('translation-status').textContent = message;
     translationRetry.hidden = !['paused','partial'].includes(state?.state) || $('mode').value !== 'both';
-  }, 1);
+  }, 1, {}, seedLimit);
   translationRetry.onclick = () => {
     if(gateway.configured()?!gateway.requireFeature('translation'):!apiKey)return;
     translator.start(...$('direction').value.split('-'));
   };
   function loadTranslationPreferences() {
-    for (const [id, fallback] of [['translation-profile', 'context'], ['translation-context-size', 12], ['translation-domain', ''], ['translation-glossary', '']]) {
+    for (const [id, fallback] of [['translation-profile', 'economy'], ['translation-batch-size', 12], ['translation-context-size', 12], ['translation-domain', ''], ['translation-glossary', '']]) {
       const element = $(id); if (!element) continue;
       const storage = id === 'translation-domain' || id === 'translation-glossary' ? id + ':' + courseIdentity(location.hash) : id;
       element.value = GM_getValue(storage, fallback);
     }
+    $('translation-context-fields').hidden = $('translation-profile').value !== 'context';
+    $('translation-seed-fields').hidden = $('translation-profile').value === 'context';
   }
   loadTranslationPreferences();
+  $('translation-batch-size').addEventListener('change',()=>{
+    const cap=Math.floor(value('translation-batch-size',12,1,MAX_SEED_BATCH));
+    $('translation-batch-size').value=cap;
+    GM_setValue('translation-batch-size',cap);
+  });
   for (const id of ['translation-profile', 'translation-context-size', 'translation-domain', 'translation-glossary']) {
     $(id)?.addEventListener('change', () => {
       const element = $(id), storage = id === 'translation-domain' || id === 'translation-glossary' ? id + ':' + courseIdentity(location.hash) : id;
       if (id === 'translation-context-size') element.value = value(id, 12, 3, 30);
       GM_setValue(storage, element.value);
+      $('translation-context-fields').hidden = $('translation-profile').value !== 'context';
+      $('translation-seed-fields').hidden = $('translation-profile').value === 'context';
       const active = translator.enabled; translator.reset();
-      if (active) { translator.start(...$('direction').value.split('-')); $('translation-status').textContent = '翻译方案已更新 · 后续使用新的上下文与术语表'; }
+      if (active) { translator.start(...$('direction').value.split('-')); $('translation-status').textContent = '翻译方案已更新'; }
     });
   }
   function stopTranslation(message = '已停止翻译，已完成的译文仍可对照查看') {
@@ -8897,7 +8994,7 @@ const ZY_ONBOARDING_ARTWORK="data:image/webp;base64,UklGRvzlBwBXRUJQVlA4WAoAAAAw
       translator.schedule(translationJobs(cues, index, $('translation-context-size') ? value('translation-context-size', 12, 3, 30) : 12, {
         course: document.title, subject: $('translation-domain')?.value || '', glossary: $('translation-glossary')?.value || '',
         translations: cues.slice(Math.max(0, index - 6), index).flatMap(row => { const translated = translator.get({id: `${row.start}\u0000${row.original}`}); return translated ? [row.original + ' → ' + translated] : []; })
-      }, selected.video.playbackRate));
+      }, selected.video.playbackRate, Math.max(12,(seedLimit()??0)+1), time));
     }
     const showOriginal = $('mode').value !== 'translation';
     const showTranslation = $('mode').value !== 'original';

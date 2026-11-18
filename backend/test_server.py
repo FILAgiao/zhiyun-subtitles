@@ -13,6 +13,7 @@ class Tests(unittest.TestCase):
         self.token=self.gateway.handle('POST','/v1/auth/login',self.headers,{'email':'a@example.test','password':'long-test-password'},'local')[2]['token']
         self.headers['Authorization']='Bearer '+self.token
         self.body={'model':'doubao-seed-translation-250915','input':[{'role':'user','content':[{'type':'input_text','text':'hello','translation_options':{'source_language':'en','target_language':'zh'}}]}]}
+        self.question={'input':[{'role':'user','content':'hello'}]}
     def upstream(self,url,headers,body):
         self.events.append((url,headers,body))
         if url.endswith('/responses'):
@@ -150,10 +151,61 @@ class Tests(unittest.TestCase):
     def test_quota_atomic_under_concurrency(self):
         self.gateway.add_user('a@example.test','long-test-password','zhiyun-subtitles',1,20)
         def invoke(_):
-            try: return self.call('/v1/ark/responses',self.body)[0]
+            try: return self.call('/v1/ark/responses',self.question)[0]
             except Fault as e: return e.status
         with concurrent.futures.ThreadPoolExecutor(2) as pool: results=list(pool.map(invoke,range(2)))
         self.assertEqual(sorted(results),[200,429]); self.assertEqual(len(self.events),1)
+    def test_seed_translation_has_independent_character_quota_and_cost(self):
+        app='zhiyun-subtitles'
+        self.gateway.add_user('a@example.test','long-test-password',app,1,20,translation_chars=5)
+        def translate(_):
+            try:
+                return self.call('/v1/ark/responses', self.body)[0]
+            except Fault as error:
+                return error.status
+        with concurrent.futures.ThreadPoolExecutor(2) as pool:
+            self.assertEqual(sorted(pool.map(translate, range(2))), [200,429])
+        usage = self.gateway.usage(1,app)
+        self.assertEqual((0,1,5,5), tuple(usage[key] for key in ('requests','translation_requests','translation_chars','translation_limit')))
+        model = self.gateway.operations_overview(usage['month'])['models'][0]
+        self.assertEqual(model['translation_chars'], 5)
+        self.assertEqual((model['input_tokens'], model['output_tokens']), (7,3))
+        self.assertTrue(model['token_estimate']['complete'])
+        self.call('/v1/ark/responses', self.question)
+        self.fails(429,lambda:self.call('/v1/ark/responses',self.question))
+        self.gateway.add_user('a@example.test','long-test-password',app,1,20,translation_chars=10)
+        body = {**self.body,'input':[{'role':'user','content':[{'type':'input_text','text':'hello','translation_options':{'target_language':'ja'}}]}]}
+        self.call('/v1/ark/responses', body)
+        self.assertEqual(self.events[-1][2]['input'][0]['content'][0]['translation_options'], {'target_language':'ja'})
+        self.assertEqual(self.gateway.usage(1, app)['requests'], 1)
+        with self.gateway.db() as db:
+            db.execute('UPDATE grants SET requests=0,translation_limit=NULL WHERE user=1')
+        self.assertFalse(self.gateway.permissions(1,app)['translation'])
+        self.fails(429,lambda:self.call('/v1/ark/responses',self.body))
+        self.gateway.add_user('a@example.test','long-test-password',app,0,20,translation_chars=15)
+        self.assertTrue(self.gateway.permissions(1,app)['translation'])
+        self.assertFalse(self.gateway.permissions(1,app)['learning'])
+        self.assertTrue(self.gateway.membership(1,app)['active'])
+        self.call('/v1/ark/responses', self.body)
+    def test_seed_batch_counts_only_source_text_and_keeps_one_provider_text(self):
+        app = 'zhiyun-subtitles'
+        self.gateway.add_user('a@example.test','long-test-password',app,1,20,translation_chars=11)
+        body = {**self.body, 'seed_batch': True, 'input': [
+            {'role':'user','content': [{'type':'input_text','text':'[01] hello\n[02] world!',
+                                      'translation_options':{'target_language':'zh'}}]}
+        ]}
+        self.call('/v1/ark/responses', body)
+        self.assertEqual(self.events[-1][2]['input'], body['input'])
+        self.assertNotIn('seed_batch', self.events[-1][2])
+        usage = self.gateway.usage(1, app)
+        self.assertEqual((usage['translation_chars'],usage['translation_requests'],usage['requests']), (11,1,0))
+        with self.assertRaises(Fault) as caught:
+            self.call('/v1/ark/responses', self.body)
+        self.assertEqual(caught.exception.code,'translation_quota_exhausted')
+        body['input'][0]['content'][0]['text'] = '[01] hello\n[03] world!'
+        self.fails(400,lambda: self.call('/v1/ark/responses',body))
+        self.assertEqual(len(self.events),1)
+
     def test_limit_codes_separate_quota_concurrency_and_rate(self):
         for _ in range(2): self.gateway.reserve(1,'zhiyun-subtitles','ark')
         with self.assertRaises(Fault) as ctx: self.gateway.reserve(1,'zhiyun-subtitles','ark')
@@ -183,7 +235,7 @@ class Tests(unittest.TestCase):
     def test_uncertain_upstream_remains_charged(self):
         self.gateway.upstream=lambda *args: (_ for _ in ()).throw(Fault(502,'timeout'))
         self.fails(502,lambda:self.call('/v1/ark/responses',self.body))
-        u=self.gateway.usage(1,'zhiyun-subtitles'); self.assertEqual(u['requests'],1); self.assertEqual(u['uncertain'],1)
+        u=self.gateway.usage(1,'zhiyun-subtitles'); self.assertEqual(u['translation_chars'],5); self.assertEqual(u['uncertain'],1)
     def wav_body(self,seconds=1):
         out=io.BytesIO()
         with wave.open(out,'wb') as wav:
@@ -240,13 +292,13 @@ class Tests(unittest.TestCase):
         self.gateway.add_user('owner@example.test','long-admin-password','zhiyun-subtitles',admin=True,username='owner')
         token=self.call('/v1/auth/login',{'email':'owner','password':'long-admin-password'},headers={'X-App-Id':'zhiyun-subtitles','X-Client-Type':'admin-web'})[2]['token']
         headers={**self.headers,'Authorization':'Bearer '+token}
-        created=self.call('/v1/admin/users',{'email':'new@example.test','username':'新同学','password':'abc12345','plan':'pro','request_limit':1,'audio_limit':0,'is_admin':True},headers)[2]
+        created=self.call('/v1/admin/users',{'email':'new@example.test','username':'新同学','password':'abc12345','plan':'pro','request_limit':1,'audio_limit':0,'translation_limit':5,'is_admin':True},headers)[2]
         new_token=self.call('/v1/auth/login',{'email':'新同学','password':'abc12345'})[2]['token']
         new_headers={**self.headers,'Authorization':'Bearer '+new_token}
         self.assertFalse(self.call('/v1/me',headers=new_headers,method='GET')[2]['is_admin'])
         self.call('/v1/ark/responses',self.body,new_headers)
         self.fails(429,lambda:self.call('/v1/ark/responses',self.body,new_headers))
-        self.call('/v1/admin/grants',{'user_id':created['user_id'],'request_limit':2,'audio_limit':0},headers)
+        self.call('/v1/admin/grants',{'user_id':created['user_id'],'request_limit':2,'audio_limit':0,'translation_limit':10},headers)
         self.call('/v1/ark/responses',self.body,new_headers)
         data=self.call('/v1/admin/overview',headers=headers,method='GET')[2]
         self.assertEqual(data['totals']['total_tokens'],20)
@@ -286,7 +338,7 @@ class Tests(unittest.TestCase):
             yield {'type':'response.output_text.delta','delta':' answer'}
             yield {'type':'response.completed','response':{'status':'completed','output':[{'type':'message','content':[{'type':'output_text','text':'partial answer'}]}],'usage':{'total_tokens':10}}};done.set()
         self.gateway.upstream_stream=upstream
-        created=self.call('/v1/learning/jobs/create',{**self.body,'stream':True});self.assertEqual(created[0],202);key=created[2]['id']
+        created=self.call('/v1/learning/jobs/create',{**self.question,'stream':True});self.assertEqual(created[0],202);key=created[2]['id']
         try:
             self.assertTrue(ready.wait(5));snapshot=self.call('/v1/learning/jobs/poll',{'id':key})[2]
             self.assertEqual(snapshot['text'],'partial');self.assertEqual(snapshot['state'],'generating')
@@ -307,7 +359,7 @@ class Tests(unittest.TestCase):
                 entered.set();release.wait(5);yield {'type':'response.output_text.delta','delta':'should not appear'}
             finally:finished.set()
         self.gateway.upstream_stream=upstream
-        key=self.call('/v1/learning/jobs/create',self.body)[2]['id'];self.assertTrue(entered.wait(5))
+        key=self.call('/v1/learning/jobs/create',self.question)[2]['id'];self.assertTrue(entered.wait(5))
         try:
             self.fails(401,lambda:self.call('/v1/learning/jobs/poll',{'id':key},{'X-App-Id':'zhiyun-subtitles'}))
             self.gateway.add_user('b@example.test','long-test-password','zhiyun-subtitles')
@@ -317,7 +369,7 @@ class Tests(unittest.TestCase):
         finally:release.set();finished.wait(5)
         self.assertEqual(self.call('/v1/learning/jobs/poll',{'id':key})[2]['text'],'')
         self.gateway.upstream_stream=lambda *args:iter([])
-        key=self.call('/v1/learning/jobs/create',self.body)[2]['id']
+        key=self.call('/v1/learning/jobs/create',self.question)[2]['id']
         for _ in range(100):
             result=self.call('/v1/learning/jobs/poll',{'id':key})[2]
             if result['state']=='error':break
@@ -331,14 +383,14 @@ class Tests(unittest.TestCase):
             yield {'type':'response.completed','response':{'status':'completed','output':[{'type':'message','content':[{'type':'output_text','text':'answer'}]}],'usage':{'total_tokens':10}}}
         self.gateway.upstream_stream=upstream
         events=[]
-        self.gateway.handle('POST','/v1/ark/responses',self.headers,{**self.body,'stream':True},'local',events.append)
+        self.gateway.handle('POST','/v1/ark/responses',self.headers,{**self.question,'stream':True},'local',events.append)
         self.assertEqual([e['type'] for e in events],['response.in_progress','response.output_text.delta','response.completed'])
         self.assertEqual(self.gateway.usage(1,'zhiyun-subtitles')['total_tokens'],10)
 
     def test_stream_failure_preserves_uncertain_usage(self):
         self.gateway.upstream_stream=lambda *args:iter([{'type':'response.output_text.delta','delta':'partial'}])
         events=[]
-        self.fails(502,lambda:self.gateway.handle('POST','/v1/ark/responses',self.headers,{**self.body,'stream':True},'local',events.append))
+        self.fails(502,lambda:self.gateway.handle('POST','/v1/ark/responses',self.headers,{**self.question,'stream':True},'local',events.append))
         self.assertEqual(self.gateway.usage(1,'zhiyun-subtitles')['uncertain'],1)
         self.assertEqual(events[-1]['delta'],'partial')
 
@@ -351,7 +403,7 @@ class Tests(unittest.TestCase):
         self.gateway.upstream_stream=upstream
         server=make_server(self.gateway,port=0);thread=threading.Thread(target=server.serve_forever,daemon=True);thread.start()
         try:
-            req=urllib.request.Request('http://127.0.0.1:'+str(server.server_port)+'/v1/ark/responses',json.dumps({**self.body,'stream':True}).encode(),{**self.headers,'Content-Type':'application/json'})
+            req=urllib.request.Request('http://127.0.0.1:'+str(server.server_port)+'/v1/ark/responses',json.dumps({**self.question,'stream':True}).encode(),{**self.headers,'Content-Type':'application/json'})
             with urllib.request.urlopen(req,timeout=5) as response:
                 self.assertIn('text/event-stream',response.headers['Content-Type'])
                 self.assertEqual(response.headers['X-Accel-Buffering'],'no')

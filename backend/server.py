@@ -4,6 +4,8 @@ from contextlib import contextmanager
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from http.client import HTTPException
 ARK='https://ark.cn-beijing.volces.com/api/v3/responses'
+SEED_TRANSLATION = 'doubao-seed-translation-250915'
+TRANSLATION_LANGUAGES = frozenset(('en', 'zh', 'ja', 'ko', 'fr', 'de', 'es'))
 SPEECH='https://openspeech.bytedance.com/api/v3/auc/bigmodel/'
 SCHEMA='''
 PRAGMA journal_mode=WAL;
@@ -17,14 +19,14 @@ CREATE TABLE IF NOT EXISTS learning_job_receipts(id TEXT PRIMARY KEY,user INTEGE
 CREATE TABLE IF NOT EXISTS attempts(key TEXT PRIMARY KEY,start INTEGER,count INTEGER);
 '''
 try:
-    from .admin_api import AdminMixin, Fault, GRANT_FIELDS, PASSWORD_REQUIREMENTS, migrate, valid_new_password
+    from .admin_api import AdminMixin, Fault, GRANT_FIELDS, PASSWORD_REQUIREMENTS, migrate, translation_limit, valid_new_password
     from .prompt_api import PromptMixin, migrate_prompts
     from .study_api import StudyMixin, migrate_study
     from .operations_api import OperationsMixin, migrate_operations
     from .analytics_api import AnalyticsMixin, migrate_analytics
     from .speech_stream import SpeechStreams
 except ImportError:
-    from admin_api import AdminMixin, Fault, GRANT_FIELDS, PASSWORD_REQUIREMENTS, migrate, valid_new_password
+    from admin_api import AdminMixin, Fault, GRANT_FIELDS, PASSWORD_REQUIREMENTS, migrate, translation_limit, valid_new_password
     from prompt_api import PromptMixin, migrate_prompts
     from study_api import StudyMixin, migrate_study
     from operations_api import OperationsMixin, migrate_operations
@@ -217,7 +219,7 @@ class Gateway(AdminMixin, PromptMixin, StudyMixin, OperationsMixin, AnalyticsMix
                                  ('activity_sessions','hash'),('activity_client_metadata','hash'),
                                  ('learning_job_receipts','id'),('speech_stream_receipts','id')):
                 db.execute('SELECT '+column+' FROM '+table+' LIMIT 1').fetchone()
-    def add_user(self,email,password,app,requests=1000,audio=3600,username=None,admin=False,permissions=None,plan=None,*,create_only=False):
+    def add_user(self,email,password,app,requests=1000,audio=3600,username=None,admin=False,permissions=None,plan=None,*,translation_chars=None,create_only=False):
         if not 7<=len(password)<=256: raise ValueError('密码为 7–256 个字符')
         email=email.strip().lower()
         salt=secrets.token_hex(16)
@@ -228,6 +230,8 @@ class Gateway(AdminMixin, PromptMixin, StudyMixin, OperationsMixin, AnalyticsMix
                 row=db.execute('SELECT id,username,is_admin FROM users WHERE email=?',(email,)).fetchone()
             user=row['id'] if row else db.execute('INSERT INTO users(email,salt,password) VALUES(?,?,?)',(email,salt,password_hash(password,salt))).lastrowid
             db.execute('INSERT INTO grants(user,app,requests,audio) VALUES(?,?,?,?) ON CONFLICT(user,app) DO UPDATE SET requests=excluded.requests,audio=excluded.audio',(user,app,requests,audio))
+            if translation_chars is not None:
+                db.execute('UPDATE grants SET translation_limit=? WHERE user=? AND app=?',(translation_chars,user,app))
             db.execute('UPDATE users SET username=?,is_admin=? WHERE id=?',(username or (row['username'] if row else email),1 if admin else row['is_admin'] if row else 0,user))
             if permissions is not None:
                 grant = {'plan': 'legacy', 'template_applied': False, **permissions}
@@ -262,23 +266,40 @@ class Gateway(AdminMixin, PromptMixin, StudyMixin, OperationsMixin, AnalyticsMix
         self.touch_activity(digest(token),*self.client_metadata(headers or {}))
         return result
     def usage(self,user,app):
+        period = month()
         with self.db() as db:
-            totals=dict(db.execute("SELECT COUNT(*) AS requests,COALESCE(SUM(total_tokens),0) AS total_tokens,COALESCE(SUM(input_tokens),0) AS input_tokens,COALESCE(SUM(output_tokens),0) AS output_tokens,COALESCE(SUM(web_search),0) AS web_search,COALESCE(SUM(seconds),0) AS audio_seconds,COALESCE(SUM(CASE WHEN state IN ('reserved','unknown') THEN 1 ELSE 0 END),0) AS uncertain FROM calls WHERE user=? AND app=? AND month=?",(user,app,month())).fetchone())
-            limits=dict(db.execute('SELECT requests AS request_limit,audio AS audio_limit FROM grants WHERE user=? AND app=?',(user,app)).fetchone())
-            credit=self.monthly_credits(db,user,app)
-            limits['request_limit']+=credit['requests'];limits['audio_limit']+=credit['audio']
-        return {'month':month(),**totals,**limits}
-    def reserve(self,user,app,kind,seconds=0,feature=None):
+            totals=dict(db.execute("""SELECT
+              COUNT(CASE WHEN translation_chars=0 THEN 1 END) AS requests,
+              COUNT(CASE WHEN translation_chars>0 THEN 1 END) AS translation_requests,
+              COALESCE(SUM(translation_chars),0) AS translation_chars,
+              COALESCE(SUM(total_tokens),0) AS total_tokens,
+              COALESCE(SUM(input_tokens),0) AS input_tokens,
+              COALESCE(SUM(output_tokens),0) AS output_tokens,
+              COALESCE(SUM(web_search),0) AS web_search,
+              COALESCE(SUM(seconds),0) AS audio_seconds,
+              COUNT(CASE WHEN state IN ('reserved','unknown') THEN 1 END) AS uncertain
+              FROM calls WHERE user=? AND app=? AND month=?""",(user,app,period)).fetchone())
+            grant=db.execute('SELECT * FROM grants WHERE user=? AND app=?',(user,app)).fetchone()
+            credit=self.monthly_credits(db,user,app,period)
+        return {'month':period,**totals,'request_limit':grant['requests']+credit['requests'],
+                'audio_limit':grant['audio']+credit['audio'],'translation_limit':translation_limit(grant)}
+    def reserve(self,user,app,kind,seconds=0,feature=None,*,translation_chars=0):
         call=str(uuid.uuid4())
+        period = month()
         with self.db() as db:
             db.execute('BEGIN IMMEDIATE')
             limits=self.check_grant(db,user,app,feature)
-            used=db.execute('SELECT COUNT(*),COALESCE(SUM(seconds),0) FROM calls WHERE user=? AND app=? AND month=?',(user,app,month())).fetchone()
-            credit=self.monthly_credits(db,user,app)
-            if used[0]>=limits['requests']+credit['requests'] or used[1]+seconds>limits['audio']+credit['audio']: raise Fault(429,'本月额度已用完','quota_exhausted')
+            used=db.execute('SELECT COUNT(CASE WHEN translation_chars=0 THEN 1 END),COALESCE(SUM(seconds),0),COALESCE(SUM(translation_chars),0) FROM calls WHERE user=? AND app=? AND month=?',(user,app,period)).fetchone()
+            if translation_chars:
+                if used[2]+translation_chars>translation_limit(limits):
+                    raise Fault(429,'本月专用字幕翻译字符额度不足','translation_quota_exhausted')
+            else:
+                credit=self.monthly_credits(db,user,app,period)
+                if used[0]>=limits['requests']+credit['requests'] or used[1]+seconds>limits['audio']+credit['audio']:
+                    raise Fault(429,'本月额度已用完','quota_exhausted')
             active=db.execute("SELECT COUNT(*) FROM calls WHERE user=? AND state='reserved' AND created>?",(user,int(time.time())-180)).fetchone()[0]
             if active>=2: raise Fault(429,'请等待当前请求完成','concurrency_limit',5)
-            db.execute('INSERT INTO calls(id,user,app,month,kind,state,seconds,created) VALUES(?,?,?,?,?,?,?,?)',(call,user,app,month(),kind,'reserved',seconds,int(time.time())))
+            db.execute('INSERT INTO calls(id,user,app,month,kind,state,seconds,created,translation_chars) VALUES(?,?,?,?,?,?,?,?,?)',(call,user,app,period,kind,'reserved',seconds,int(time.time()),translation_chars))
         return call
     def state(self,call,state,usage=None):
         usage=usage or {}
@@ -442,6 +463,7 @@ class Gateway(AdminMixin, PromptMixin, StudyMixin, OperationsMixin, AnalyticsMix
         if body.get('model') not in models: raise Fault(400,'模型未开通')
         inputs=body.get('input')
         if not isinstance(inputs,list) or not 1<=len(inputs)<=12: raise Fault(400,'输入格式无效')
+        seed_translation = body['model'] == SEED_TRANSLATION
         text_size,images=0,0
         for item in inputs:
             if not isinstance(item,dict) or item.get('role') not in ('system','user','assistant') or set(item)-{'role','content'}: raise Fault(400,'消息格式无效')
@@ -454,7 +476,7 @@ class Gateway(AdminMixin, PromptMixin, StudyMixin, OperationsMixin, AnalyticsMix
                     text_size+=len(part['text'])
                     if 'translation_options' in part:
                         options=part['translation_options']
-                        if not isinstance(options,dict) or set(options)-{'source_language','target_language'} or any(v not in ('en','zh') for v in options.values()): raise Fault(400,'翻译语言无效')
+                        if not isinstance(options,dict) or set(options)-{'source_language','target_language'} or any(not isinstance(v,str) or v not in TRANSLATION_LANGUAGES for v in options.values()): raise Fault(400,'翻译语言无效')
                 elif part.get('type')=='input_image' and not set(part)-{'type','image_url'}:
                     image=part.get('image_url','')
                     if not isinstance(image,str) or len(image)>2200000 or not image.startswith(('data:image/png;base64,','data:image/jpeg;base64,','data:image/webp;base64,')): raise Fault(400,'仅接受大小受限的内嵌图片')
@@ -463,6 +485,21 @@ class Gateway(AdminMixin, PromptMixin, StudyMixin, OperationsMixin, AnalyticsMix
                     images+=1
                 else: raise Fault(400,'不支持此输入类型')
         if text_size>32000 or images>3: raise Fault(400,'输入超出限制')
+        if seed_translation:
+            content = inputs[0]['content']
+            if (len(inputs)!=1 or inputs[0]['role']!='user' or not isinstance(content,list)
+                or len(content)!=1 or content[0].get('type')!='input_text'
+                or not content[0].get('translation_options', {}).get('target_language')
+                or not content[0]['text'].strip() or text_size>1000):
+                raise Fault(400,'专用翻译每次接收一段不超过 1000 字符的字幕文本，并需要目标语言')
+            if body.get('tools') or 'reasoning' in body or body.get('stream'):
+                raise Fault(400,'专用字幕翻译仅支持普通文本请求')
+            if body.get('seed_batch') is True:
+                numbered = content[0]['text'].split('\n')
+                if not 2 <= len(numbered) <= 24 or any(not line.startswith(f'[{index:02d}] ') or not line[5:].strip()
+                                                       for index,line in enumerate(numbered,1)):
+                    raise Fault(400,'批量字幕的编号或条数无效')
+                text_size = sum(len(line[5:]) for line in numbered)
         output=body.get('max_output_tokens',2200)
         if type(output) is not int or not 1<=output<=4096: raise Fault(400,'输出超出限制')
         streaming=body.get('stream') is True and stream_sink is not None
@@ -474,7 +511,7 @@ class Gateway(AdminMixin, PromptMixin, StudyMixin, OperationsMixin, AnalyticsMix
             if not isinstance(reasoning,dict) or set(reasoning)!={'effort'} or reasoning['effort'] not in ('minimal','low','medium','high'): raise Fault(400,'思考参数无效')
             payload['reasoning']=reasoning
         # The dedicated translation model rejects store, including store:false.
-        if body['model']!='doubao-seed-translation-250915': payload['store']=False
+        if not seed_translation: payload['store']=False
         notice=''
         if body.get('tools'):
             if body['tools']!=[{'type':'web_search','max_keyword':3}]: raise Fault(400,'不支持此工具')
@@ -489,9 +526,10 @@ class Gateway(AdminMixin, PromptMixin, StudyMixin, OperationsMixin, AnalyticsMix
                     if content.get('type')=='output_text':
                         content['text']=notice+content.get('text','');result['warnings']=[notice.strip()];return result
             return result
-        feature='translation' if body['model']=='doubao-seed-translation-250915' else 'learning'
+        feature='translation' if seed_translation else 'learning'
         if any(isinstance(i.get('content'),str) and '字幕译者' in i['content'] for i in inputs): feature='translation_context'
-        call=self.reserve(user,app,'ark',feature='translation' if body['model']=='doubao-seed-translation-250915' else 'learning')
+        call=self.reserve(user,app,'ark',feature='translation' if seed_translation else 'learning',
+                          translation_chars=text_size if seed_translation else 0)
         self.record_call_meta(call,body['model'],feature,images)
         try:
             if streaming:

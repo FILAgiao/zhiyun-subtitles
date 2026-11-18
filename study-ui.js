@@ -65,14 +65,33 @@ function mount({shadow,mascot}){
  for(const id of ['cache-progressive','cache-auto'])$('settings-storage').append($(id).closest('label'));
  for(const id of ['cache-folder','cache-default-folder','cache-location'])$('settings-storage').append($(id));
  
- $('settings-translation').insertAdjacentHTML('beforeend','<div class="section"><label>翻译方案<select id="translation-profile"><option value="context">术语增强 · 结合上下文</option><option value="economy">逐句省流</option></select></label><label>前后各参考句数<input id="translation-context-size" type="number" min="3" max="30" value="12"></label><label for="translation-domain">课程背景</label><textarea id="translation-domain" placeholder="例如：计算机体系结构，保持寄存器与指令集术语一致"></textarea><label for="translation-glossary">术语表 · 每行 原词 = 译法</label><textarea id="translation-glossary" placeholder="register = 寄存器"></textarea></div>');
+ $('settings-translation').insertAdjacentHTML('beforeend',`
+   <div class="section">
+     <label>翻译方案<select id="translation-profile" aria-describedby="translation-seed-note translation-context-note">
+       <option value="economy">默认字幕翻译 · 豆包</option>
+       <option value="context">逐句翻译 · 术语增强</option>
+     </select></label>
+     <p id="translation-seed-note"><strong>默认字幕翻译</strong>使用豆包 Seed Translation。新版服务按原文字符单独计量。</p>
+     <p id="translation-context-note"><strong>术语增强</strong>使用大模型，参考课程术语和前后文。会消耗与 AI 问答共用的调用额度。</p>
+     <div id="translation-seed-fields">
+       <label>每批最多字幕条数<input id="translation-batch-size" type="number" min="1" max="24" step="1" value="12"></label>
+       <p>优先翻译当前字幕。设为 1 条时逐条发送。</p>
+     </div>
+     <div id="translation-context-fields" hidden>
+       <label>前后各参考句数<input id="translation-context-size" type="number" min="3" max="30" value="12"></label>
+       <label for="translation-domain">课程背景</label>
+       <textarea id="translation-domain" placeholder="例如：计算机体系结构，保持寄存器与指令集术语一致"></textarea>
+       <label for="translation-glossary">术语表 · 每行 原词 = 译法</label>
+       <textarea id="translation-glossary" placeholder="register = 寄存器"></textarea>
+     </div>
+   </div>`);
  const syncBox=document.createElement('details');syncBox.id='study-sync';syncBox.innerHTML='<summary aria-label="打开手动时间微调"><span>手动时间微调</span><span class="sync-manual-access">免登录可以使用</span></summary>';syncBox.append(syncSection);shadow.append(syncBox);for(const details of syncSection.querySelectorAll('details'))details.open=true;
  $('settings-sync').insertAdjacentHTML('beforeend','<label>定时自动校准<input id="auto-sync" type="checkbox"></label><label>播放多久后复查<select id="sync-interval"><option value="120">2 分钟</option><option value="300" selected>5 分钟</option><option value="600">10 分钟</option></select></label><p id="sync-status" role="status"></p><p>手动微调立即停用自动校准，重新勾选才恢复。优先流式识别，可靠匹配后立即结束；每次最多听取 20 秒课程音轨，按实际使用时长计费。</p>');
  // Keep the existing controls and listeners; only their visual home changes.
  const layoutSettings=$('settings-layout-panel');
  for(const id of ['reset-ppt','slides-status','edit-layout','layout-editor'])layoutSettings.append($(id));
  $('settings-about').insertAdjacentHTML('beforeend','<p><strong>浙大上课爽 · v0.20.18</strong></p><p>网课不硬扛，浙大上课爽！</p><p>个人学习工具，非浙江大学官方产品。</p><div class="social-accounts"><p><strong>侃侃你的（浙大上岸版） · 抖音</strong>抖音号：42249371667</p><p><strong>侃侃你的（浙大上岸版） · 小红书</strong>小红书号：156626670</p></div>');
- for(const p of prefs.querySelectorAll('p'))if(p.textContent.includes('翻译仅发送'))p.textContent='增强翻译参考前后字幕与术语表；语音校准仅采集视频音轨，不使用麦克风。导出前请加载完整字幕。';
+ for(const p of prefs.querySelectorAll('p'))if(p.textContent.includes('翻译仅发送'))p.textContent='平台已有译文优先使用。导出前请加载完整字幕。';
  // A small daily workspace: captions, one primary action, and contextual tools.
  $('settings-translation').prepend($('translation-ready'));
  const modeLabel=$('mode').closest('label'),enabled=$('enabled'),status=$('translation-status');

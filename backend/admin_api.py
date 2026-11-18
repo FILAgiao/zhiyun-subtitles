@@ -8,10 +8,13 @@ PLANS = ('free', 'trial', 'pro', 'ultra')
 FEATURES = ('learning', 'translation', 'speech')
 GRANT_FIELDS = ('enabled', *FEATURES, 'expires', 'plan', 'template_applied')
 BEIJING = timezone(timedelta(hours=8))
+DEFAULT_TRANSLATION_LIMIT = 1_000_000
+MAX_TRANSLATION_LIMIT = 100_000_000
 
 def default_plan_template(plan):
     advanced = plan != 'free'
     return {'request_limit': 1000 if advanced else 0, 'audio_limit': 3600 if advanced else 0,
+            'translation_limit': DEFAULT_TRANSLATION_LIMIT if advanced else 0,
             **dict.fromkeys(FEATURES, advanced)}
 
 def months_from_now(months, *, started_at=None):
@@ -26,6 +29,18 @@ def grant_allows_feature(grant, feature):
     if grant['template_applied'] or grant['plan'] == 'legacy':
         return bool(grant[feature])
     return grant['plan'] != 'free'
+
+def translation_limit(grant):
+    if not grant_allows_feature(grant, 'translation'):
+        return 0
+    if grant['translation_limit'] is not None:
+        return grant['translation_limit']
+    if grant['plan'] == 'legacy' and not grant['requests']:
+        return 0
+    return DEFAULT_TRANSLATION_LIMIT
+
+def valid_translation_limit(value):
+    return type(value) is int and 0 <= value <= MAX_TRANSLATION_LIMIT
 
 def valid_new_password(password):
     return isinstance(password, str) and re.fullmatch(r'[A-Za-z0-9]{7,256}', password) is not None
@@ -47,6 +62,8 @@ def migrate(db):
         'admin_actions': {'details': "TEXT NOT NULL DEFAULT '{}'"},
         'calls': {'model': "TEXT NOT NULL DEFAULT ''", 'feature': "TEXT NOT NULL DEFAULT ''", 'image_count': 'INTEGER NOT NULL DEFAULT 0', 'finished': 'INTEGER'},
     }
+    columns['grants']['translation_limit'] = 'INTEGER'
+    columns['calls']['translation_chars'] = 'INTEGER NOT NULL DEFAULT 0'
     for table, fields in columns.items():
         existing={row[1] for row in db.execute('PRAGMA table_info('+table+')')}
         for column,definition in fields.items():
@@ -62,6 +79,8 @@ CREATE TABLE IF NOT EXISTS plan_templates(plan TEXT PRIMARY KEY,request_limit IN
 INSERT OR IGNORE INTO plan_templates(plan,request_limit,audio_limit,learning,translation,speech)
 SELECT plan,request_limit,audio_limit,plan<>'free',plan<>'free',plan<>'free' FROM registration_plan WHERE id=1;
 ''')
+    if 'translation_limit' not in {row[1] for row in db.execute('PRAGMA table_info(plan_templates)')}:
+        db.execute('ALTER TABLE plan_templates ADD COLUMN translation_limit INTEGER')
 
 class AdminMixin:
     def open_activity(self,hashed,user,app,client,expires,client_version='',client_channel='unknown'):
@@ -95,7 +114,10 @@ class AdminMixin:
             registration_plan = self.registration_plan(db, templates)
             people=[dict(r) for r in db.execute('SELECT id,username,email,is_admin,enabled FROM users ORDER BY id DESC LIMIT 200')]
             for person in people:
-                grants=[dict(r) for r in db.execute('SELECT app,requests AS request_limit,audio AS audio_limit,enabled,learning,translation,speech,expires,plan FROM grants WHERE user=?',(person['id'],))]
+                grants=[dict(r) for r in db.execute('SELECT app,requests,requests AS request_limit,audio AS audio_limit,enabled,learning,translation,speech,expires,plan,template_applied,translation_limit FROM grants WHERE user=?',(person['id'],))]
+                for grant in grants:
+                    grant['translation_limit'] = translation_limit(grant)
+                    grant.pop('requests')
                 person['grants']=[{**grant,'usage':self.usage(person['id'],grant['app'])} for grant in grants]
             total=dict(db.execute('SELECT COUNT(*) AS requests,COALESCE(SUM(total_tokens),0) AS total_tokens,COALESCE(SUM(input_tokens),0) AS input_tokens,COALESCE(SUM(output_tokens),0) AS output_tokens,COALESCE(SUM(seconds),0) AS audio_seconds,COALESCE(SUM(image_count),0) AS images,COALESCE(SUM(web_search),0) AS web_search FROM calls WHERE month=?',(period,)).fetchone())
         with self.db() as db:
@@ -108,6 +130,7 @@ class AdminMixin:
         for row in db.execute('SELECT * FROM plan_templates'):
             if row['plan'] in templates:
                 templates[row['plan']] = {'request_limit': row['request_limit'], 'audio_limit': row['audio_limit'],
+                                          'translation_limit': row['translation_limit'] if row['translation_limit'] is not None else DEFAULT_TRANSLATION_LIMIT if row['translation'] else 0,
                                           **{key: bool(row[key]) for key in FEATURES}}
         return templates
 
@@ -117,10 +140,11 @@ class AdminMixin:
         return {'plan': plan, **{key: templates[plan][key] for key in ('request_limit', 'audio_limit')}}
 
     def write_plan_template(self, db, plan, template):
-        values = (template['request_limit'], template['audio_limit'], *(template[key] for key in FEATURES))
-        db.execute('''INSERT INTO plan_templates VALUES(?,?,?,?,?,?) ON CONFLICT(plan) DO UPDATE SET
+        values = (template['request_limit'], template['audio_limit'], *(template[key] for key in FEATURES), template['translation_limit'])
+        db.execute('''INSERT INTO plan_templates(plan,request_limit,audio_limit,learning,translation,speech,translation_limit)
+          VALUES(?,?,?,?,?,?,?) ON CONFLICT(plan) DO UPDATE SET
           request_limit=excluded.request_limit,audio_limit=excluded.audio_limit,
-          learning=excluded.learning,translation=excluded.translation,speech=excluded.speech''', (plan, *values))
+          learning=excluded.learning,translation=excluded.translation,speech=excluded.speech,translation_limit=excluded.translation_limit''', (plan, *values))
         db.execute('UPDATE registration_plan SET request_limit=?,audio_limit=? WHERE id=1 AND plan=?',
                    (*values[:2], plan))
 
@@ -132,10 +156,13 @@ class AdminMixin:
         features = {key: body.get(key) for key in FEATURES}
         if any(type(value) is not bool for value in features.values()):
             raise Fault(400, '权限参数无效')
-        template = {'request_limit': requests, 'audio_limit': audio, **features}
         with self.db() as db:
             db.execute('BEGIN IMMEDIATE')
             templates = self.plan_templates(db)
+            chars = body.get('translation_limit', templates[plan]['translation_limit'])
+            if not valid_translation_limit(chars):
+                raise Fault(400, '字幕翻译字符额度无效')
+            template = {'request_limit': requests, 'audio_limit': audio, 'translation_limit': chars, **features}
             if templates[plan] != template:
                 self.write_plan_template(db, plan, template)
                 db.execute('INSERT INTO admin_actions(actor,target,app,action,created,details) VALUES(?,NULL,?,?,?,?)',
@@ -189,7 +216,7 @@ class AdminMixin:
             db.execute('INSERT INTO admin_actions(actor,target,app,action,created,details) VALUES(?,?,?,?,?,?)',
                        (actor['id'],target,app,action,int(time.time()),
                         json.dumps({**{key: options[key] for key in GRANT_FIELDS if key != 'template_applied'},
-                                    'request_limit':requests,'audio_limit':audio})))
+                                    'request_limit':requests,'audio_limit':audio,'translation_limit':chars})))
 
         if create:
             email=body.get('email','');password=body.get('password','');name=body.get('username','')
@@ -198,9 +225,9 @@ class AdminMixin:
             if not valid_new_password(password):
                 raise Fault(400,PASSWORD_REQUIREMENTS,'invalid_password')
             with self.db() as db:
-                options, requests, audio = self.resolve_grant(db, body, create=True)
+                options, requests, audio, chars = self.resolve_grant(db, body, create=True)
             try:
-                target=self.add_user(email,password,app,requests,audio,username=name.strip(),permissions=options,create_only=True)
+                target=self.add_user(email,password,app,requests,audio,username=name.strip(),permissions=options,translation_chars=chars,create_only=True)
             except sqlite3.IntegrityError:
                 raise Fault(409,'邮箱或用户名已存在') from None
             with self.db() as db:
@@ -214,14 +241,14 @@ class AdminMixin:
                 if not db.execute('SELECT 1 FROM users WHERE id=?',(target,)).fetchone():
                     raise Fault(404,'用户不存在')
                 previous = db.execute('SELECT * FROM grants WHERE user=? AND app=?', (target, app)).fetchone()
-                options, requests, audio = self.resolve_grant(db, body, previous=previous)
+                options, requests, audio, chars = self.resolve_grant(db, body, previous=previous)
                 if target == actor['id'] and (not options['enabled'] or options['expires'] is not None):
                     raise Fault(400,'不能停用或限制自己的管理账号有效期')
-                db.execute('''INSERT INTO grants(user,app,requests,audio,enabled,learning,translation,speech,expires,plan,template_applied)
-                   VALUES(?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(user,app) DO UPDATE SET requests=excluded.requests,
+                db.execute('''INSERT INTO grants(user,app,requests,audio,enabled,learning,translation,speech,expires,plan,template_applied,translation_limit)
+                   VALUES(?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(user,app) DO UPDATE SET requests=excluded.requests,
                    audio=excluded.audio,enabled=excluded.enabled,learning=excluded.learning,translation=excluded.translation,
-                   speech=excluded.speech,expires=excluded.expires,plan=excluded.plan,template_applied=excluded.template_applied''',
-                   (target, app, requests, audio, *(options[key] for key in GRANT_FIELDS)))
+                   speech=excluded.speech,expires=excluded.expires,plan=excluded.plan,template_applied=excluded.template_applied,translation_limit=excluded.translation_limit''',
+                   (target, app, requests, audio, *(options[key] for key in GRANT_FIELDS), chars))
                 audit(db, target, 'set_quota')
         return 200, {}, {'ok':True, 'user_id':target, 'expires':options['expires']}
 
@@ -232,19 +259,23 @@ class AdminMixin:
         grant = {**snapshot, 'expires': previous['expires'] if previous else None, 'plan': default_plan, **body}
         plan = grant['plan']
         use_template = body.get('use_template', 'plan' in body and plan in PLANS
-                                and 'request_limit' not in body and 'audio_limit' not in body)
+                                and 'request_limit' not in body and 'audio_limit' not in body and 'translation_limit' not in body)
         if type(use_template) is not bool or (use_template and plan not in PLANS):
             raise Fault(400, '请选择有效套餐')
         if use_template:
             template = self.plan_templates(db)[plan]
             requests, audio = template['request_limit'], template['audio_limit']
+            chars = template['translation_limit']
         else:
             template = snapshot if previous and previous['plan'] == plan and previous['template_applied'] else None
             defaults = (previous['requests'], previous['audio']) if previous else (0, 0) if plan == 'free' else (1000, 3600)
             requests, audio = body.get('request_limit', defaults[0]), body.get('audio_limit', defaults[1])
+            chars = body.get('translation_limit', previous['translation_limit'] if previous else None)
+            if 'translation_limit' in body and not valid_translation_limit(chars):
+                raise Fault(400, '字幕翻译字符额度无效')
         if not valid_grant_limits(requests, audio):
             raise Fault(400, '额度参数无效')
-        return self.grant_options(grant, template=template), requests, audio
+        return self.grant_options(grant, template=template), requests, audio, chars
 
     def grant_options(self,body,*,template=None):
         options={}
@@ -302,8 +333,10 @@ class AdminMixin:
     def permissions(self,user,app):
         with self.db() as db:
             grant=self.check_grant(db,user,app)
-        active=(grant['expires'] is None or grant['expires']>int(time.time())) and (grant['plan']!='legacy' or grant['requests']>0)
+        valid = grant['expires'] is None or grant['expires']>int(time.time())
+        active = valid and (grant['plan']!='legacy' or grant['requests']>0)
         result={key:active and grant_allows_feature(grant, key) for key in FEATURES}
+        result['translation'] = result['translation'] or (valid and translation_limit(grant)>0)
         return result | {'learning_records':result['learning'],'card_export':result['learning'],'expires':grant['expires']}
 
     def membership(self,user,app):
@@ -312,6 +345,6 @@ class AdminMixin:
             expired=grant['expires'] is not None and grant['expires']<=int(time.time())
         plan = grant['plan']
         advanced = any(grant_allows_feature(grant, key) for key in FEATURES)
-        active = not expired and (plan in ('trial', 'pro', 'ultra') or advanced and (plan == 'free' or grant['requests'] > 0))
+        active = not expired and (plan in ('trial', 'pro', 'ultra') or advanced and (plan == 'free' or grant['requests'] > 0 or translation_limit(grant)>0))
         state = 'expired' if expired else 'trial' if active and plan == 'trial' else 'paid' if active and plan != 'free' else 'free'
         return {'plan':plan,'active':active,'state':state,'expires':grant['expires']}

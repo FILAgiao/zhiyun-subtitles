@@ -1,6 +1,6 @@
 const {test}=require('node:test');
 const assert=require('node:assert/strict');
-const {batchTranslationBody,batchTranslationResult,usableTranslation,translationJobs,createTranslator}=require('./zhiyun-subtitles.user.js');
+const {batchTranslationBody,batchTranslationResult,seedBatchTranslationBody,seedBatchTranslationResult,usableTranslation,translationJobs,createTranslator}=require('./zhiyun-subtitles.user.js');
 const flush=()=>new Promise(resolve=>setImmediate(resolve));
 const jobs=Array.from({length:20},(_,i)=>({id:String(i),text:'English sentence '+i,context:{course:'Architecture',before:[],after:[]}}));
 function requests(){const calls=[];function make(entries){let resolve,reject;const promise=new Promise((yes,no)=>{resolve=yes;reject=no});const c={entries,resolve,reject,aborted:false};calls.push(c);return {promise,abort(){c.aborted=true}};}const request=(text)=>make([{text}]);request.batch=entries=>make(entries);return {request,calls};}
@@ -47,4 +47,49 @@ test('existing valid school translation and short mixed Chinese consume no paid 
 test('batch body size is bounded and explicit Chinese to English remains supported',async()=>{
  const d=requests(),t=createTranslator(d.request);t.start('zh','en');t.schedule(jobs.slice(0,4).map((j,i)=>({...j,text:'中文'.repeat(650)+i})));
  assert.equal(d.calls[0].entries.length,1);d.calls[0].resolve('English output');await flush();assert.equal(d.calls[1].entries.length,1);t.stop();
+});
+test('Seed Translation sends one indexed text and rejects unmatched, reordered or merged lines',()=>{
+ const entries=jobs.slice(0,2);
+ const body=seedBatchTranslationBody(entries,'auto','zh');
+ assert.equal(body.model,'doubao-seed-translation-250915');
+ assert.equal(Object.hasOwn(body,'seed_batch'),false);
+ assert.deepEqual(body.input[0].content,[{type:'input_text',text:'[01] English sentence 0\n[02] English sentence 1',translation_options:{target_language:'zh'}}]);
+ const parse=text=>seedBatchTranslationResult(text,entries,'zh');
+ assert.deepEqual(parse('［01］第一条译文\n[02] 第二条译文'),['第一条译文','第二条译文']);
+ assert.deepEqual(parse('[01] 第一条译文\n[02] English sentence 1'),['第一条译文',null]);
+ for(const text of ['没有分行的译文','[02] 第二条译文\n[01] 第一条译文','[01] 一条译文\n[01] 另一条译文']){
+  assert.deepEqual(parse(text),[null,null]);
+ }
+});
+test('Seed prefetch sends current cue immediately, batches 12 following and falls back on demand',async()=>{
+ const d=requests(),t=createTranslator(d.request,()=>{},1,{},()=>12);
+ const cues=Array.from({length:20},(_,index)=>({start:index*3,original:jobs[index].text}));
+ t.start('auto','zh');
+ t.schedule(translationJobs(cues,0,12,{},1,13));
+ assert.deepEqual(d.calls.map(c=>c.entries.length),[1]);
+ d.calls[0].resolve('当前字幕译文');await flush();
+ assert.deepEqual(d.calls.map(c=>c.entries.length),[1,12]);
+ d.calls[1].resolve(Array(12).fill(null));await flush();
+ assert.equal(d.calls.length,2,'a mismatched prefetch does not immediately resubmit all of its text');
+ t.schedule(translationJobs(cues,1,12,{},1,13));
+ assert.deepEqual(d.calls.map(c=>c.entries.length),[1,12,1]);
+ assert.equal(d.calls[2].entries[0].text,cues[1].original);
+ t.stop();
+});
+test('Seed prefetch respects configured counts and UTF-8 request size',async()=>{
+ const cues=Array.from({length:25},(_,index)=>({start:index?index+2:0,original:'Explain step '+index}));
+ for(const cap of [1,5,24]){
+  const d=requests(),t=createTranslator(d.request,()=>{},1,{},()=>cap);
+  t.start('en','zh');t.schedule(translationJobs(cues,0,12,{},1,25));
+  d.calls[0].resolve('单条');await flush();
+  assert.equal(d.calls[1].entries.length,cap);
+  t.stop();
+ }
+ const d=requests(),t=createTranslator(d.request,()=>{},1,{},()=>24);
+ t.start('zh','en');t.schedule(translationJobs(cues.map(cue=>({...cue,original:'专业字幕句子'.repeat(20)+cue.original})),0,12,{},1,25));
+ d.calls[0].resolve('One translation');await flush();
+ const sent=d.calls[1].entries;
+ assert.ok(sent.length>=2 && sent.length<24);
+ assert.ok(Buffer.byteLength(seedBatchTranslationBody(sent,'zh','en').input[0].content[0].text)<=900);
+ t.stop();
 });

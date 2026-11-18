@@ -9,7 +9,7 @@ const escape=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt
 const markup=rows=>rows.map(row=>'<div class="trans-item"><div class="item-title">'+stamp(row.start)+'</div><div class="trans-lan"><div>'+escape(row.text)+'</div>'+(row.school?'<div>'+escape(row.school)+'</div>':'')+'</div></div>').join('');
 const translatedText=(text,prefix='中文译文：')=>prefix+'第'+(text.match(/\d+/)?.[0]||'混合')+'条课堂译文';
 const rows=(count=24,step=5)=>Array.from({length:count},(_,i)=>({start:i*step,text:'The processor stores classroom example number '+i+' in memory.'}));
-function installTransport({native,plans}){
+function installTransport({native,plans,profile}){
  globalThis.translationFixture={calls:[],pending:{},plans};
  globalThis.fixtureRequest=async(url,options={})=>{
   const pathname=new URL(url).pathname,state=translationFixture;
@@ -17,17 +17,21 @@ function installTransport({native,plans}){
   if(pathname.endsWith('/prompts'))return{status:404,body:{error:'接口不存在'}};
   if(pathname.endsWith('/activity'))return{status:200,body:{}};
   if(!pathname.endsWith('/responses'))throw Error('Unexpected local fixture request: '+pathname);
-  const body=JSON.parse(options.body||options.data||'{}'),payload=JSON.parse(body.input[1].content[0].text),targets=payload.target_subtitles||[{id:'0',text:payload.target_subtitle}],ordinal=state.calls.length,plan=state.plans[ordinal]||{};
-  const call={ordinal,targets,payload,client:options.headers?.['X-Client-Type'],started:Date.now(),completed:null};state.calls.push(call);
+  const body=JSON.parse(options.body||options.data||'{}'),payload=body.input.length===1?{target_subtitle:body.input[0].content[0].text}:JSON.parse(body.input[1].content[0].text);
+  const seedBatch=body.seed_batch;
+  const targets=seedBatch?payload.target_subtitle.split('\n').map((line,index)=>({id:String(index),text:line.slice(5)})):payload.target_subtitles||[{id:'0',text:payload.target_subtitle}];
+  const ordinal=state.calls.length,plan=state.plans[ordinal]||{};
+  const call={ordinal,targets,payload,model:body.model,input:body.input,seedBatchFlag:body.seed_batch,client:options.headers?.['X-Client-Type'],started:Date.now(),completed:null};state.calls.push(call);
   if(plan.hold)await new Promise(resolve=>state.pending[ordinal]=()=>{delete state.pending[ordinal];resolve();});
   const results=targets.map((target,i)=>({id:target.id,text:plan.invalid==='empty'||plan.invalid==='mixed'&&i===1?'':plan.invalid==='echo'||plan.invalid==='mixed'&&i===0?target.text:(plan.prefix||'中文译文：')+'第'+(target.text.match(/\d+/)?.[0]||'混合')+'条课堂译文'}));
-  const text=payload.target_subtitles?JSON.stringify({translations:results}):results[0].text;
+  const text=seedBatch?(plan.invalid==='labels'?'粗略合并的译文':results.map((item,index)=>'['+String(index+1).padStart(2,'0')+'] '+item.text).join('\n')):payload.target_subtitles?JSON.stringify({translations:results}):results[0].text;
   call.completed=Date.now();
   return{status:plan.status||200,body:plan.status?{error:plan.error||'unrecognized provider limit'}:{status:'completed',output:[{type:'message',content:[{type:'output_text',text}]}]}};
  };
  if(native)globalThis.fetch=async(url,options)=>{const r=await fixtureRequest(url,options);return new Response(JSON.stringify(r.body),{status:r.status,headers:{'Content-Type':'application/json'}});};
  else{
   globalThis.fixtureValues={'cache-auto':false,'gateway-guide-no-remind-v2':true,'gateway-account-v1':{url:'https://47.77.182.216.sslip.io/gateway',token:'fixture-translation-token'}};
+  if(profile)fixtureValues['translation-profile']=profile;
   globalThis.GM_getValue=(key,fallback)=>fixtureValues[key]??fallback;globalThis.GM_setValue=(key,value)=>fixtureValues[key]=value;globalThis.GM_deleteValue=key=>delete fixtureValues[key];globalThis.GM_registerMenuCommand=()=>{};
   globalThis.GM_xmlhttpRequest=options=>{fixtureRequest(options.url,options).then(r=>options.onload?.({status:r.status,responseText:JSON.stringify(r.body),responseHeaders:'Content-Type: application/json'}));return{abort(){options.onabort?.();}};};
  }
@@ -43,13 +47,13 @@ function installClock(){
  const context=native?await chromium.launchPersistentContext(path.resolve('.test-media/translation-prefetch-'+Date.now()),{headless:true,executablePath,viewport:{width:1440,height:900},args:['--disable-extensions-except='+extension,'--load-extension='+extension]}):await(browser=await chromium.launch({headless:true,executablePath})).newContext({viewport:{width:1440,height:900}});
  try{
   if(native){worker=context.serviceWorkers()[0]||await context.waitForEvent('serviceworker');await worker.evaluate(()=>chrome.storage.local.set({'cache-auto':false,'gateway-guide-no-remind-v2':true,'display-preferences':{mode:'original'},'gateway-account-v1':{url:'https://47.77.182.216.sslip.io/gateway',token:'fixture-translation-token'}}));}
-  async function open(cues,plans=[]){
+  async function open(cues,plans=[],profile='context'){
    const page=await context.newPage(),errors=[],worlds=new Map();let session,world;
    page.setDefaultTimeout(10000);page.on('pageerror',e=>errors.push(e.message));
    await page.route('**/*',route=>route.request().isNavigationRequest()?route.fulfill({contentType:'text/html; charset=utf-8',body:'<title>Translation Fixture</title><style>body{margin:0;background:#eee4d9}video{width:850px;height:480px;background:#263d4c}#pane-voice{display:none}</style><video></video><div id="pane-voice">'+markup(cues)+'</div>'}):route.abort());
-   if(native){await worker.evaluate(({code,setup})=>(0,eval)('('+code+')')(setup),{code:installTransport.toString(),setup:{native,plans}});session=await context.newCDPSession(page);session.on('Runtime.executionContextCreated',e=>worlds.set(e.context.id,e.context));session.on('Runtime.executionContextDestroyed',e=>worlds.delete(e.executionContextId));session.on('Runtime.executionContextsCleared',()=>worlds.clear());await session.send('Runtime.enable');}
+   if(native){await worker.evaluate(value=>value?chrome.storage.local.set({'translation-profile':value}):chrome.storage.local.remove('translation-profile'),profile);await worker.evaluate(({code,setup})=>(0,eval)('('+code+')')(setup),{code:installTransport.toString(),setup:{native,plans,profile}});session=await context.newCDPSession(page);session.on('Runtime.executionContextCreated',e=>worlds.set(e.context.id,e.context));session.on('Runtime.executionContextDestroyed',e=>worlds.delete(e.executionContextId));session.on('Runtime.executionContextsCleared',()=>worlds.clear());await session.send('Runtime.enable');}
    await page.goto('https://interactivemeta.cmc.zju.edu.cn/#/replay?course_id=translation-fixture-'+(++scenario)+'&sub_id=1');
-   if(!native){await page.evaluate(installTransport,{native,plans});await page.evaluate(installClock);await page.addScriptTag({path:process.env.ZY_TEST_USERSCRIPT_PATH||'zhiyun-subtitles.user.js'});}
+   if(!native){await page.evaluate(installTransport,{native,plans,profile});await page.evaluate(installClock);await page.addScriptTag({path:process.env.ZY_TEST_USERSCRIPT_PATH||'zhiyun-subtitles.user.js'});}
    const ui=page.locator('#zy-subtitle-host');await ui.locator('#mode').waitFor();
    if(native){for(const[id,info]of worlds){if(info.auxData?.isDefault)continue;const r=await session.send('Runtime.evaluate',{contextId:id,expression:'typeof ZYClassroomMedia',returnByValue:true});if(r.result.value==='object'){world=id;break;}}assert.ok(world,'extension isolated world exists');await session.send('Runtime.evaluate',{contextId:world,expression:'('+installClock.toString()+')()',returnByValue:true});}
    const evaluate=(fn,arg)=>native?worker.evaluate(fn,arg):page.evaluate(fn,arg);
@@ -61,6 +65,61 @@ function installClock(){
    const release=ordinal=>evaluate(n=>{const fn=translationFixture.pending[n];if(!fn)throw Error('Missing held request '+n);fn();},ordinal);
    await page.waitForTimeout(650);await ui.locator('#mode').selectOption('original');
    return{page,ui,calls,clock,done,translated,release,until,evaluate,start:()=>ui.locator('#mode').selectOption('both'),close:async()=>{assert.deepEqual(errors,[]);await page.close();}};
+  }
+  {
+   const cues=rows(3);cues[0].school='平台译文';
+   const s=await open(cues,[],null);await s.start();await s.done(1);
+   await s.translated('平台译文');
+   const actual=await s.calls();assert.equal(actual.length,1);
+   for(const call of actual){assert.equal(call.model,'doubao-seed-translation-250915');assert.equal(call.input[0].content.length,1);assert.deepEqual(call.input[0].content[0].translation_options,{target_language:'zh'});}
+   assert.deepEqual(actual[0].targets.map(target=>target.text),cues.slice(1).map(cue=>cue.text));
+   evidence.push({case:'default Seed Translation and free school subtitles'});await s.close();
+  }
+  {
+   const cues=rows(16),s=await open(cues,[{},{hold:true}],null);
+   await s.start();
+   await s.translated(translatedText(cues[0].text));
+   await s.until(async()=>(await s.calls()).length===2,'background batch did not begin');
+   const held=await s.calls();
+   assert.deepEqual(held.map(call=>call.targets.length),[1,12]);
+   assert.equal(held[1].completed,null,'current subtitle appears while prefetch is waiting');
+   assert.equal(held[1].seedBatchFlag,true,'gateway request identifies numbered text for quota accounting');
+   await s.release(1);await s.done(2);
+   await s.clock(60);await s.translated(translatedText(cues[12].text));
+   evidence.push({case:'current cue first, twelve-segment prefetch'});
+   await s.close();
+  }
+  {
+   const cues=Array.from({length:25},(_,i)=>({start:i?i+2:0,text:'Explain step '+i}));
+   const s=await open(cues,[],null);
+   await s.ui.locator('#settings-open').click();await s.ui.locator('#settings-tab-translation').click();
+   const cap=s.ui.locator('#translation-batch-size');assert.equal(await cap.inputValue(),'12');
+   const profile=s.ui.locator('#translation-profile'),reference=s.ui.locator('#translation-context-size');
+   assert.equal(await profile.inputValue(),'economy');
+   assert.equal(await profile.locator('option[value="economy"]').textContent(),'默认字幕翻译 · 豆包');
+   assert.equal(await profile.locator('option[value="context"]').textContent(),'逐句翻译 · 术语增强');
+   const seedNote=s.ui.locator('#translation-seed-note'),contextNote=s.ui.locator('#translation-context-note');
+   assert.match(await seedNote.textContent(),/豆包 Seed Translation.*新版服务按原文字符单独计量/);
+   assert.match(await contextNote.textContent(),/大模型.*与 AI 问答共用的调用额度/);
+   assert.ok(await seedNote.isVisible() && await contextNote.isVisible(),'usage notes are shown before switching');
+   await reference.waitFor({state:'hidden'});
+   await profile.selectOption('context');await reference.waitFor();await cap.waitFor({state:'hidden'});
+   await profile.selectOption('economy');await cap.waitFor();await reference.waitFor({state:'hidden'});
+   await cap.fill('24');await cap.press('Tab');await s.ui.locator('#settings-close').click();
+   await s.until(()=>s.evaluate(async native=>native
+    ? (await chrome.storage.local.get('translation-batch-size'))['translation-batch-size']===24
+    : fixtureValues['translation-batch-size']===24,native),'Batch size was not persisted');
+   await s.start();await s.done(2);
+   assert.deepEqual((await s.calls()).map(call=>call.targets.length),[1,24]);
+   evidence.push({case:'user-configured 24-cue maximum'});await s.close();
+  }
+  {
+   const cues=rows(15),s=await open(cues,[{},{invalid:'labels'}],null);
+   await s.start();await s.done(2);await s.translated(translatedText(cues[0].text));
+   assert.equal((await s.calls()).length,2,'a malformed reply does not replay all the batch submissions');
+   await s.clock(5);await s.done(3);await s.translated(translatedText(cues[1].text));
+   assert.deepEqual((await s.calls())[2].targets.map(target=>target.text),[cues[1].text]);
+   evidence.push({case:'unmatched output only falls back on demand'});await s.close();
   }
   {
    const cues=rows();cues[2]={start:10,text:'这里令 x 等于 y',school:'Here we set x equal to y'};cues[3]={start:15,text:'我们调用 foo bar 处理输入',school:'We call foo bar to process the input'};cues[4]={start:20,text:'接下来解释 how the processor handles memory requests and schedules instructions'};

@@ -17,6 +17,8 @@ test('known legacy gateway limits are distinct and only rejected busy/rate reque
 });
 test('structured limit codes respect Retry-After; unidentified provider 429 never claims exhausted quota',()=>{
  const e=failure({status:429,responseText:JSON.stringify({error:'busy',error_code:'concurrency_limit'}),responseHeaders:'Retry-After: 12\r\n'});assert.equal(e.retryAfterMs,12000);assert.equal(e.safeToRetry,true);
+ const translation=failure({status:429,responseText:JSON.stringify({error_code:'translation_quota_exhausted'})});
+ assert.match(translation.message,/专用字幕翻译字符额度不足/);assert.equal(translation.safeToRetry,false);
  const unknown=failure({status:429,responseText:JSON.stringify({error:'private provider secret'})});assert.equal(unknown.safeToRetry,false);assert.equal(unknown.code,'unclassified_limit');assert.doesNotMatch(unknown.message,/额度|private|secret/);
 });
 test('stopping and reopening retains the server lease and submits once only after old completion',async()=>{

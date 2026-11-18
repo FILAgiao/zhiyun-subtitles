@@ -255,9 +255,9 @@ class StudyMixin(ClipsMixin):
                     settings = self.registration_plan(db, templates)
                     expires = months_from_now(1, started_at=now) if settings['plan'] == 'pro' else None
                     options = self.grant_options({**settings, 'expires': expires}, template=templates[settings['plan']])
-                    db.execute('INSERT INTO grants(user,app,requests,audio,enabled,learning,translation,speech,expires,plan,template_applied) VALUES(?,?,?,?,?,?,?,?,?,?,?)',
+                    db.execute('INSERT INTO grants(user,app,requests,audio,enabled,learning,translation,speech,expires,plan,template_applied,translation_limit) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)',
                                (user, STUDY_APP, settings['request_limit'], settings['audio_limit'],
-                                *(options[key] for key in GRANT_FIELDS)))
+                                *(options[key] for key in GRANT_FIELDS), templates[settings['plan']]['translation_limit']))
                     db.execute('INSERT INTO study_registrations(user,app,created) VALUES(?,?,?)',
                                (user, STUDY_APP, now))
         if failure:

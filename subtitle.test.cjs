@@ -284,7 +284,8 @@ test('foreign subtitles use automatic source detection rather than a fixed Engli
  const {contextualTranslationBody,translationBody}=require('./zhiyun-subtitles.user.js');
  for(const text of ['これは勾配降下法です。','Der Gradient zeigt nach oben.','La descente de gradient réduit la perte.']){
   const body=contextualTranslationBody(text,'auto','zh');assert.match(body.input[0].content,/自动识别目标字幕的语言/);assert.ok(body.input[1].content[0].text.includes(text));
-  const economy=translationBody(text,'auto','zh');assert.equal(economy.model,body.model);assert.match(economy.input[0].content,/翻译为 zh/);
+  const economy=translationBody(text,'auto','zh');assert.equal(economy.model,'doubao-seed-translation-250915');
+  assert.deepEqual(economy.input,[{role:'user',content:[{type:'input_text',text,translation_options:{target_language:'zh'}}]}]);
  }
  const {calls,request}=mockRequests();const translator=createTranslator(request);translator.start('auto','zh');translator.schedule(['已经是中文','これは勾配降下法です。']);assert.equal(calls.length,1);assert.equal(calls[0].text,'これは勾配降下法です。');translator.stop();
 });

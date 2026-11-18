@@ -145,7 +145,7 @@ class OperationsTests(unittest.TestCase):
         self.credit(owner, request_credit=1, audio_credit_seconds=2)
         self.gateway.reserve(1, 'zhiyun-subtitles', 'speech', 2, feature='speech')
         self.fails(429, lambda: self.gateway.reserve(1, 'zhiyun-subtitles', 'speech', 1, feature='speech'))
-        with patch('backend.operations_api.utc_month', return_value='2099-01'):
+        with patch('backend.server.month', return_value='2099-01'):
             self.assertEqual(self.gateway.usage(1, 'zhiyun-subtitles')['request_limit'], 0)
             self.fails(429, lambda: self.gateway.reserve(1, 'zhiyun-subtitles', 'ark', feature='learning'))
         self.call('/v1/admin/grants', {'user_id':1, 'plan':'free', 'request_limit':0, 'audio_limit':0}, owner)
