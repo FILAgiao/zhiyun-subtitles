@@ -236,10 +236,10 @@ class AnalyticsMixin:
             courses = [dict(r) for r in db.execute('SELECT user,day,course_id,title,seconds FROM analytics_courses WHERE app=? AND day>=? AND day<=?', (app, start, end))]
             calls = [dict(r) for r in db.execute('SELECT * FROM calls WHERE app=? AND created>=? AND created<?', (app, lo, hi))]
             session_start = db.execute('SELECT MIN(started) FROM activity_sessions WHERE app=?', (app,)).fetchone()[0]
-            logins = {r['day']: (r['sessions'], r['users']) for r in db.execute('''
-                SELECT date(started,'unixepoch','+8 hours') AS day,COUNT(*) AS sessions,COUNT(DISTINCT user) AS users
-                FROM activity_sessions WHERE app=? AND started>=? AND started<? GROUP BY day
-            ''', (app, lo, hi))}
+            login_rows = db.execute('''
+                SELECT date(started,'unixepoch','+8 hours') AS day,user,COUNT(*) AS sessions,MAX(started) AS last_login
+                FROM activity_sessions WHERE app=? AND started>=? AND started<? GROUP BY day,user
+            ''', (app, lo, hi)).fetchall()
             registration_start = db.execute('SELECT value FROM analytics_meta WHERE key=?', ('registrations_started_at:' + app,)).fetchone()
             registrations = dict(db.execute('''
                 SELECT date(created,'unixepoch','+8 hours') AS day,COUNT(*)
@@ -265,17 +265,31 @@ class AnalyticsMixin:
         summary = {key: sum(c[key] for c in calls) for key in ('input_tokens', 'output_tokens', 'total_tokens')}
         summary.update(requests=len(calls), uncertain=sum(c['state'] in ('unknown', 'reserved') for c in calls), registered_users=len(names))
         active = {r['user'] for r in days if r['active']}
+        completed_call_users = set()
         user_stats = {}
         def user_stat(user):
             if user not in user_stats:
-                user_stats[user] = {'user_id': user, 'username': names.get(user, '账号 ' + str(user)), 'last_seen': None, 'lessons': 0 if covered else None, 'effective_seconds': 0 if covered else None, 'watch_seconds': 0 if covered else None, 'total_tokens': 0, 'ai_uses': 0 if covered else None}
+                observed_value = 0 if covered else None
+                user_stats[user] = {'user_id': user, 'username': names.get(user, '账号 ' + str(user)),
+                                    'last_seen': None, 'lessons': observed_value, 'effective_seconds': observed_value,
+                                    'watch_seconds': observed_value, 'total_tokens': 0, 'ai_uses': observed_value,
+                                    'completed_ai_calls': 0}
             return user_stats[user]
         trend = {}
         for stamp in range(lo, hi, DAY):
             day = day_of(stamp)
             trend[day] = {'date': day, 'tokens': 0, 'input_tokens': 0, 'output_tokens': 0, 'requests': 0,
-                          'token_requests': 0, 'speech_uses': 0, 'users': set(), 'lessons': 0, 'effective_seconds': 0,
-                          'ai_uses': 0, 'ai_users': 0, 'screenshot_uses': 0, 'translation_uses': 0}
+                          'token_requests': 0, 'speech_uses': 0, 'speech_seconds': 0, 'users': set(), 'lessons': 0,
+                          'effective_seconds': 0, 'ai_uses': 0, 'ai_users': 0, 'screenshot_uses': 0,
+                          'subtitle_uses': 0, 'translation_uses': 0, 'completed_ai_calls': 0,
+                          'completed_ai_users': set(), 'completed_translation_calls': 0,
+                          'login_sessions': 0, 'login_users': 0}
+        for login in login_rows:
+            item = trend[login['day']]
+            item['login_sessions'] += login['sessions']
+            item['login_users'] += 1
+            user = user_stat(login['user'])
+            user['last_seen'] = max(user['last_seen'] or 0, login['last_login'])
         for row in days:
             item = user_stat(row['user'])
             item['effective_seconds'] += row['seconds']; item['watch_seconds'] += row['watch_seconds']
@@ -285,7 +299,9 @@ class AnalyticsMixin:
                 trend[row['day']]['users'].add(row['user'])
         daily_costs = defaultdict(TokenEstimate)
         for call in calls:
-            user_stat(call['user'])['total_tokens'] += call['total_tokens']
+            user = user_stat(call['user'])
+            user['total_tokens'] += call['total_tokens']
+            user['last_seen'] = max(user['last_seen'] or 0, call['created'])
             day = day_of(call['created'])
             item = trend[day]
             item['tokens'] += call['total_tokens']
@@ -293,15 +309,25 @@ class AnalyticsMixin:
             item['output_tokens'] += call['output_tokens']
             item['requests'] += 1
             item['token_requests'] += call['kind'] == 'ark'
-            item['speech_uses'] += call['kind'] == 'speech' and call['state'] == 'complete'
+            if call['state'] == 'complete':
+                completed_call_users.add(call['user'])
+                if call['kind'] == 'speech':
+                    item['speech_uses'] += 1
+                    item['speech_seconds'] += call['seconds']
+                elif call['kind'] == 'ark':
+                    if call['feature'] == 'learning':
+                        item['completed_ai_calls'] += 1
+                        item['completed_ai_users'].add(call['user'])
+                        user['completed_ai_calls'] += 1
+                    elif call['feature'] in ('translation', 'translation_context'):
+                        item['completed_translation_calls'] += 1
             daily_costs[day].add(call)
         feature_stats = []
         for feature in FEATURES:
             selected = [r for r in features if r['feature'] == feature]
             feature_stats.append({'feature': feature, 'users': len({r['user'] for r in selected}) if covered else None, 'uses': sum(r['uses'] for r in selected) if covered else None})
             for row in selected:
-                if feature != 'subtitle':
-                    trend[row['day']][feature + '_uses'] += row['uses']
+                trend[row['day']][feature + '_uses'] += row['uses']
                 if feature == 'ai':
                     # Each feature row represents one account on one Beijing date.
                     trend[row['day']]['ai_users'] += 1
@@ -324,6 +350,7 @@ class AnalyticsMixin:
         summary.update(active_users=len(active) if covered else None, learning_lessons=len(qualifying) if covered else None, unique_courses=len({course for _, course in qualifying}) if covered else None, effective_seconds=round(sum(r['seconds'] for r in days), 3) if covered else None, watch_seconds=round(sum(r['watch_seconds'] for r in days), 3) if covered else None, ai_uses=feature_stats[-1]['uses'])
         # A course_id is a recording/lesson ID, not a curriculum course ID.
         summary['unique_lessons'] = summary['unique_courses']
+        summary['completed_call_users'] = len(completed_call_users)
         total_cost = TokenEstimate()
         for day, item in trend.items():
             available = activity_day is not None and activity_day <= day <= today
@@ -334,10 +361,12 @@ class AnalyticsMixin:
             item['users'] = len(item['users']) if available else None
             item['lessons'] = item['lessons'] if available else None
             item['effective_seconds'] = round(item['effective_seconds'], 3) if available else None
+            item['completed_ai_users'] = len(item['completed_ai_users'])
             if not available:
-                for metric in ('ai_uses', 'ai_users', 'screenshot_uses', 'translation_uses'):
+                for metric in ('ai_uses', 'ai_users', 'screenshot_uses', 'subtitle_uses', 'translation_uses'):
                     item[metric] = None
-            item['login_sessions'], item['login_users'] = logins.get(day, (0, 0)) if session_day and session_day <= day <= today else (None, None)
+            if not session_day or not session_day <= day <= today:
+                item['login_sessions'] = item['login_users'] = None
             item['registrations'] = registrations.get(day, 0) if registration_day and registration_day <= day <= today else None
             estimate = daily_costs[day]
             total_cost.merge(estimate)
@@ -345,7 +374,8 @@ class AnalyticsMixin:
             item['api_cost_cny'] = price['known_amount_cny'] if day <= today and (price['complete'] or price['priced_calls']) else None
             item['unpriced_token_calls'] = price['unpriced_calls'] if day <= today else None
             if day > today:
-                for metric in ('tokens', 'input_tokens', 'output_tokens', 'requests', 'token_requests', 'speech_uses'):
+                for metric in ('tokens', 'input_tokens', 'output_tokens', 'requests', 'token_requests', 'speech_uses',
+                               'speech_seconds', 'completed_ai_calls', 'completed_ai_users', 'completed_translation_calls'):
                     item[metric] = None
         cohorts = defaultdict(list)
         for row in first:

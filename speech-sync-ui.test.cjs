@@ -131,7 +131,7 @@ function mockAudio({currentTime=22,streaming=false,startPaused=false,initialRate
    const s=await open([{}],{streaming:true,holdAccess:true});await s.pending('access');await s.start();await s.changeAccount();await s.release('access');await s.done();await s.page.waitForTimeout(100);assert.deepEqual(await s.calls(),[]);assert.equal(await s.offset(),'0');await s.close();
   }
   {
-   const s=await open([{}]);await s.start();await s.done();assert.equal(await s.offset(),'2');assert.match(await s.status(),/匹配成功.*时间差 \+2 秒/);await s.ui.locator('#sync-auto-indicator').waitFor({state:'hidden'});assert.equal(await s.ui.locator('#sync-complete').isHidden(),false);await oneSubmission(s);assert.equal((await s.attempts()).length,1);await s.close();
+   const s=await open([{}]);await s.start();await s.done();assert.equal(await s.offset(),'2');assert.match(await s.status(),/匹配成功.*时间差 \+2 秒/);await s.ui.locator('#sync-auto-indicator[data-state="waiting"]').waitFor({state:'attached'});assert.equal(await s.ui.locator('#sync-complete').isHidden(),false);await oneSubmission(s);assert.equal((await s.attempts()).length,1);await s.close();
   }
   {
    const s=await open(Array.from({length:4},()=>({text:unrelated})),{initialRate:1.5});

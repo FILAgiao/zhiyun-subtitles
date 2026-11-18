@@ -2,6 +2,8 @@
 (function(root,factory){const api=factory();if(typeof module==='object'&&module.exports)module.exports=api;else root.ZYUsageAnalytics=api;})(globalThis,function(){
 'use strict';
 const MAX_EVENTS=400,MAX_BATCH=100,MAX_AGE=7*86400,KEY='zy-usage-pending-v1';
+// Leave room for scheduling jitter in the separate 60-second heartbeat.
+const SEND_COOLDOWN_MS=55000,RETRY_INTERVAL_MS=60000;
 function opaque(value){return [2166136261,2246822507,3266489909,668265263].map(seed=>{for(const c of String(value))seed=Math.imul(seed^c.codePointAt(0),16777619);return (seed>>>0).toString(16).padStart(8,'0');}).join('');}
 function courseKey(raw){try{const ids=JSON.parse(raw);return Array.isArray(ids)&&ids.length===3&&ids[0]&&ids[1]&&ids.every(v=>v===null||typeof v==='string'&&/^[A-Za-z0-9_-]{1,100}$/.test(v))?opaque('zju-classroom:'+JSON.stringify(ids)):'';}catch{return '';}}
 function create({context=()=>null,send,storage=null,visible=()=>true,now=()=>Date.now(),monotonic=()=>typeof performance!=='undefined'?performance.now():Date.now(),schedule=setTimeout,cancel=clearTimeout,uuid=()=>globalThis.crypto?.randomUUID?.()||opaque(String(Math.random())+Date.now())}={}){
@@ -91,15 +93,15 @@ function create({context=()=>null,send,storage=null,visible=()=>true,now=()=>Dat
  }
  function suspend(){last=null;watching=false;finishSegment();cancel(interactionTimer);interactionTimer=null;interactionPrevious=null;interactionUntil=0;persist();}
  async function flush(){
-  if(!bind()){if(loading)await loading;else return false;}if(!bind()||disabled||inflight||stamp()<nextSend)return false;
+  if(!bind()){if(loading)await loading;else return false;}if(!bind()||disabled||inflight||monotonic()<nextSend)return false;
   finishSegment();queue=queue.filter(e=>(e.start??e.at)>=stamp()-MAX_AGE);persist();if(!queue.length)return false;
   const own=owner,batch=[];let bytes=20;for(const e of queue.slice(0,batchLimit)){const size=new TextEncoder().encode(JSON.stringify(e)).length+1;if(bytes+size>60000)break;batch.push(e);bytes+=size;}
   const ids=new Set(batch.map(e=>e.id));stats.requests++;
-  nextSend=stamp()+60;
+  nextSend=monotonic()+SEND_COOLDOWN_MS;
   const pending=Promise.resolve().then(()=>send({events:batch},own));inflight=pending;
   try{const result=await pending;if(owner!==own)return false;if(result?.ok!==true)throw Error('Unconfirmed analytics batch');const rejected=Array.isArray(result.rejected)?result.rejected.filter(e=>ids.has(e.id)).length:0;dropped+=rejected;stats.dropped+=rejected;queue=queue.filter(e=>!ids.has(e.id));failures=0;batchLimit=MAX_BATCH;changed();persist();return true;}
-  catch(error){if(owner===own){failures++;nextSend=stamp()+Math.min(3600,60*2**Math.min(failures,6));if([404,405,501].includes(error.status)){disabled=true;queue=[];changed();persist();}
-   else if([400,409,413].includes(error.status)){nextSend=stamp()+60;if(batch.length>1)batchLimit=Math.floor(batch.length/2);else{queue=queue.filter(e=>!ids.has(e.id));batchLimit=MAX_BATCH;dropped++;stats.dropped++;changed();persist();}}}return false;}
+  catch(error){if(owner===own){failures++;nextSend=monotonic()+Math.min(3600000,RETRY_INTERVAL_MS*2**Math.min(failures,6));if([404,405,501].includes(error.status)){disabled=true;queue=[];changed();persist();}
+   else if([400,409,413].includes(error.status)){nextSend=monotonic()+RETRY_INTERVAL_MS;if(batch.length>1)batchLimit=Math.floor(batch.length/2);else{queue=queue.filter(e=>!ids.has(e.id));batchLimit=MAX_BATCH;dropped++;stats.dropped++;changed();persist();}}}return false;}
   finally{if(inflight===pending)inflight=null;}
  }
  function capture(){const ready=bind();return ready||loading&&!disabled?owner:'';}

@@ -64,6 +64,47 @@ class AnalyticsTests(unittest.TestCase):
         self.assertIsNone(result['retention']['d1_rate'])
         self.assertIn('token_estimate', result['summary'])
 
+    def test_completed_call_users_are_distinct_and_do_not_fill_client_metrics(self):
+        day = day_of(time.time() - DAY)
+        start = day_start(day)
+        self.insert_call(created=start + 1)
+        self.insert_call(created=start + 5)
+        self.insert_call(created=start + 3, user=2, state='unknown')
+        self.insert_call(created=start + DAY, user=3)
+        self.insert_call(created=start + 4, user=4, app='other-app')
+        result = self.overview(day, day)
+        self.assertEqual(result['summary']['completed_call_users'], 1)
+        for key in ('active_users', 'learning_lessons', 'effective_seconds'):
+            self.assertIsNone(result['summary'][key])
+        self.assertEqual({r['user_id']: r['last_seen'] for r in result['users']}, {1: start + 5, 2: start + 3})
+        self.assertEqual(self.overview(shifted_day(day, -1), shifted_day(day, -1))['summary']['completed_call_users'], 0)
+
+    def test_daily_ledger_and_login_data_without_client_events(self):
+        day = day_of(time.time() - DAY)
+        start = day_start(day)
+        for offset in (1, 2):
+            self.insert_call(created=start + offset, feature='learning')
+        self.insert_call(created=start + 3, user=2, feature='translation')
+        self.insert_call(created=start + 4, user=2, feature='translation_context')
+        self.insert_call(created=start + 5, user=2, kind='speech', feature='alignment_stream', seconds=84)
+        self.insert_call(created=start + 6, user=3, state='unknown')
+        self.insert_call(created=start + 7, user=4, app='other-app')
+        with self.gateway.db() as db:
+            db.executemany('INSERT INTO activity_sessions VALUES(?,?,?,?,?,?,NULL,NULL)', [
+                ('login1', 3, APP, 'chrome-extension', start+8, start+8),
+                ('login2', 3, APP, 'admin-web', start+9, start+9),
+            ])
+        result = self.overview(day, day)
+        row = result['trend'][0]
+        self.assertEqual((row['completed_ai_calls'], row['completed_ai_users'], row['completed_translation_calls']), (2, 1, 2))
+        self.assertEqual((row['speech_uses'], row['speech_seconds'], row['login_sessions'], row['login_users']), (1, 84, 2, 1))
+        for metric in ('ai_uses', 'subtitle_uses', 'translation_uses', 'screenshot_uses', 'lessons', 'effective_seconds'):
+            self.assertIsNone(row[metric])
+        users = {item['user_id']: item for item in result['users']}
+        self.assertEqual(users[1]['completed_ai_calls'], 2)
+        self.assertEqual(users[3]['last_seen'], start+9)
+        self.assertIsNone(users[3]['effective_seconds'])
+
     def test_auth_app_scope_and_derived_session_restrictions(self):
         date = day_of(time.time())
         url = '/v1/admin/analytics?start=' + date + '&end=' + date
@@ -267,7 +308,7 @@ class AnalyticsTests(unittest.TestCase):
         today = shifted_day(yesterday, 1)
         at = day_start(yesterday) + 60
         self.ingest(self.event(at=at, feature='ai'), self.event(at=at, feature='ai'),
-                    self.event(at=at), self.event(at=at, feature='translation'))
+                    self.event(at=at), self.event(at=at, feature='translation'), self.event(at=at, feature='subtitle'))
         self.ingest(self.event(at=at, feature='ai'), user=2)
         self.insert_call(created=at)
         self.insert_call(created=at, model='unpriced')
@@ -276,7 +317,7 @@ class AnalyticsTests(unittest.TestCase):
         self.insert_call(created=day_start(today), model='unpriced')
         first, second = self.overview(yesterday, today)['trend']
         self.assertEqual([first[key] for key in ('requests', 'token_requests', 'speech_uses')], [4, 2, 1])
-        self.assertEqual([first[key] for key in ('ai_uses', 'ai_users', 'screenshot_uses', 'translation_uses')], [3, 2, 1, 1])
+        self.assertEqual([first[key] for key in ('ai_uses', 'ai_users', 'screenshot_uses', 'translation_uses', 'subtitle_uses')], [3, 2, 1, 1, 1])
         self.assertEqual(first['api_cost_cny'], '0.000014')
         self.assertEqual(first['unpriced_token_calls'], 1)
         self.assertIsNone(second['api_cost_cny'])

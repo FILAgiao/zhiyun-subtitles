@@ -394,6 +394,20 @@ class Tests(unittest.TestCase):
         self.assertEqual(self.gateway.usage(1,'zhiyun-subtitles')['uncertain'],1)
         self.assertEqual(events[-1]['delta'],'partial')
 
+    def test_client_disconnect_after_model_completion_keeps_confirmed_usage(self):
+        usage={'input_tokens':10,'output_tokens':5,'total_tokens':15}
+        self.gateway.upstream_stream=lambda *args:iter([
+            {'type':'response.completed','response':{'status':'completed','usage':usage}}])
+        def disconnect(event):
+            if event['type']=='response.completed':
+                raise BrokenPipeError()
+        with self.assertRaises(BrokenPipeError):
+            self.gateway.handle('POST','/v1/ark/responses',self.headers,
+                                {**self.question,'stream':True},'local',disconnect)
+        result=self.gateway.usage(1,'zhiyun-subtitles')
+        self.assertEqual(result['total_tokens'],15)
+        self.assertEqual(result['uncertain'],0)
+
     def test_http_stream_flushes_delta_before_model_completion(self):
         completed=threading.Event()
         def upstream(*args):

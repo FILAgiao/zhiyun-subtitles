@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         浙大上课爽
 // @namespace    zhiyunzimu.local
-// @version      0.20.105
+// @version      0.20.107
 // @description  网课不硬扛，浙大上课爽！智云课堂同步字幕、PPT 讲解与本机缓存。
 // @match        https://*/*
 // @match        http://*/*
@@ -332,7 +332,7 @@ function mount({shadow,mascot}){
      </div>
    </div>`);
  const syncBox=document.createElement('details');syncBox.id='study-sync';syncBox.innerHTML='<summary aria-label="打开手动时间微调"><span>手动时间微调</span><span class="sync-manual-access">免登录可以使用</span></summary>';syncBox.append(syncSection);shadow.append(syncBox);for(const details of syncSection.querySelectorAll('details'))details.open=true;
- $('settings-sync').insertAdjacentHTML('beforeend','<label>定时自动校准<input id="auto-sync" type="checkbox"></label><label>播放多久后复查<select id="sync-interval"><option value="120">2 分钟</option><option value="300" selected>5 分钟</option><option value="600">10 分钟</option></select></label><p id="sync-status" role="status"></p><p>手动微调立即停用自动校准，重新勾选才恢复。优先流式识别，可靠匹配后立即结束；每次最多听取 20 秒课程音轨，按实际使用时长计费。</p>');
+ $('settings-sync').insertAdjacentHTML('beforeend','<label>定时自动校准（每 20 分钟）<input id="auto-sync" type="checkbox"></label><p id="sync-status" role="status"></p><p>录播按播放进度累计计时。手动微调立即停用自动校准，重新勾选才恢复。优先流式识别，可靠匹配后立即结束；每次最多听取 20 秒课程音轨，按实际使用时长计费。</p>');
  // Keep the existing controls and listeners; only their visual home changes.
  const layoutSettings=$('settings-layout-panel');
  for(const id of ['reset-ppt','slides-status','edit-layout','layout-editor'])layoutSettings.append($(id));
@@ -2671,6 +2671,8 @@ return{failure,create};
 (function(root,factory){const api=factory();if(typeof module==='object'&&module.exports)module.exports=api;else root.ZYUsageAnalytics=api;})(globalThis,function(){
 'use strict';
 const MAX_EVENTS=400,MAX_BATCH=100,MAX_AGE=7*86400,KEY='zy-usage-pending-v1';
+// Leave room for scheduling jitter in the separate 60-second heartbeat.
+const SEND_COOLDOWN_MS=55000,RETRY_INTERVAL_MS=60000;
 function opaque(value){return [2166136261,2246822507,3266489909,668265263].map(seed=>{for(const c of String(value))seed=Math.imul(seed^c.codePointAt(0),16777619);return (seed>>>0).toString(16).padStart(8,'0');}).join('');}
 function courseKey(raw){try{const ids=JSON.parse(raw);return Array.isArray(ids)&&ids.length===3&&ids[0]&&ids[1]&&ids.every(v=>v===null||typeof v==='string'&&/^[A-Za-z0-9_-]{1,100}$/.test(v))?opaque('zju-classroom:'+JSON.stringify(ids)):'';}catch{return '';}}
 function create({context=()=>null,send,storage=null,visible=()=>true,now=()=>Date.now(),monotonic=()=>typeof performance!=='undefined'?performance.now():Date.now(),schedule=setTimeout,cancel=clearTimeout,uuid=()=>globalThis.crypto?.randomUUID?.()||opaque(String(Math.random())+Date.now())}={}){
@@ -2760,15 +2762,15 @@ function create({context=()=>null,send,storage=null,visible=()=>true,now=()=>Dat
  }
  function suspend(){last=null;watching=false;finishSegment();cancel(interactionTimer);interactionTimer=null;interactionPrevious=null;interactionUntil=0;persist();}
  async function flush(){
-  if(!bind()){if(loading)await loading;else return false;}if(!bind()||disabled||inflight||stamp()<nextSend)return false;
+  if(!bind()){if(loading)await loading;else return false;}if(!bind()||disabled||inflight||monotonic()<nextSend)return false;
   finishSegment();queue=queue.filter(e=>(e.start??e.at)>=stamp()-MAX_AGE);persist();if(!queue.length)return false;
   const own=owner,batch=[];let bytes=20;for(const e of queue.slice(0,batchLimit)){const size=new TextEncoder().encode(JSON.stringify(e)).length+1;if(bytes+size>60000)break;batch.push(e);bytes+=size;}
   const ids=new Set(batch.map(e=>e.id));stats.requests++;
-  nextSend=stamp()+60;
+  nextSend=monotonic()+SEND_COOLDOWN_MS;
   const pending=Promise.resolve().then(()=>send({events:batch},own));inflight=pending;
   try{const result=await pending;if(owner!==own)return false;if(result?.ok!==true)throw Error('Unconfirmed analytics batch');const rejected=Array.isArray(result.rejected)?result.rejected.filter(e=>ids.has(e.id)).length:0;dropped+=rejected;stats.dropped+=rejected;queue=queue.filter(e=>!ids.has(e.id));failures=0;batchLimit=MAX_BATCH;changed();persist();return true;}
-  catch(error){if(owner===own){failures++;nextSend=stamp()+Math.min(3600,60*2**Math.min(failures,6));if([404,405,501].includes(error.status)){disabled=true;queue=[];changed();persist();}
-   else if([400,409,413].includes(error.status)){nextSend=stamp()+60;if(batch.length>1)batchLimit=Math.floor(batch.length/2);else{queue=queue.filter(e=>!ids.has(e.id));batchLimit=MAX_BATCH;dropped++;stats.dropped++;changed();persist();}}}return false;}
+  catch(error){if(owner===own){failures++;nextSend=monotonic()+Math.min(3600000,RETRY_INTERVAL_MS*2**Math.min(failures,6));if([404,405,501].includes(error.status)){disabled=true;queue=[];changed();persist();}
+   else if([400,409,413].includes(error.status)){nextSend=monotonic()+RETRY_INTERVAL_MS;if(batch.length>1)batchLimit=Math.floor(batch.length/2);else{queue=queue.filter(e=>!ids.has(e.id));batchLimit=MAX_BATCH;dropped++;stats.dropped++;changed();persist();}}}return false;}
   finally{if(inflight===pending)inflight=null;}
  }
  function capture(){const ready=bind();return ready||loading&&!disabled?owner:'';}
@@ -2782,7 +2784,7 @@ return {create,opaque,courseKey,MAX_EVENTS,MAX_BATCH};
 (function(root,factory){const api=factory();if(typeof module==='object'&&module.exports)module.exports=api;else root.ZYGateway=api;})(globalThis,function(){
 'use strict';
 const DEFAULT_ORIGIN="https://47.77.182.216.sslip.io/gateway";
-const CLIENT_VERSION='0.20.105';
+const CLIENT_VERSION='0.20.107';
 function clientHeaders(){return {'X-Client-Version':CLIENT_VERSION,'X-Client-Channel':'userscript'};}
 const KEY='gateway-account-v1',APP='zhiyun-subtitles',CLIENT=globalThis.ZY_CLIENT_TYPE||'userscript';
 function baseURL(value){const u=new URL(String(value).trim());if(u.username||u.password||u.search||u.hash||!['/','/gateway','/gateway/'].includes(u.pathname)||(u.protocol!=='https:'&&!(u.protocol==='http:'&&['localhost','127.0.0.1'].includes(u.hostname))))throw Error('请填写 HTTPS 服务地址；本机调试可使用 http://127.0.0.1:8080');return u.origin+(u.pathname==='/'?'':'/gateway');}
@@ -7278,6 +7280,7 @@ const ZY_ONBOARDING_ARTWORK="data:image/webp;base64,UklGRvzlBwBXRUJQVlA4WAoAAAAw
     }
     return time + anchors.at(-1).offset;
   }
+  const SYNC_INTERVAL_SECONDS = 20 * 60;
   function createSyncSchedule() {
     let enabled = false, last = null, elapsed = 0;
     return {
@@ -7285,11 +7288,11 @@ const ZY_ONBOARDING_ARTWORK="data:image/webp;base64,UklGRvzlBwBXRUJQVlA4WAoAAAAw
       get elapsed() { return elapsed; },
       enable() { enabled = true; last = null; elapsed = 0; },
       stop() { enabled = false; last = null; elapsed = 0; },
-      advance(time, playing, interval, busy = false) {
+      advance(time, playing, busy = false) {
         if (!enabled) return false;
         const delta = last === null ? 0 : time - last; last = time;
         if (playing && !busy && delta > 0 && delta <= 3) elapsed += delta;
-        if (!playing || busy || elapsed < Math.max(120, interval || 300)) return false;
+        if (!playing || busy || elapsed < SYNC_INTERVAL_SECONDS) return false;
         elapsed = 0; return true;
       }
     };
@@ -8808,7 +8811,7 @@ const ZY_ONBOARDING_ARTWORK="data:image/webp;base64,UklGRvzlBwBXRUJQVlA4WAoAAAAw
     const timer=$('sync-auto-indicator');
     if(!timer)return;
     const busy=!!cancelAlignment,enabled=syncSchedule.enabled;
-    const remaining=Math.ceil(Math.max(0,value('sync-interval',300,120,600)-syncSchedule.elapsed)/60);
+    const remaining=Math.ceil(Math.max(0,SYNC_INTERVAL_SECONDS-syncSchedule.elapsed)/60);
     const live=ZYClassroomMedia.isLive(mainVideo),ready=mainVideo&&!mainVideo.paused&&!mainVideo.seeking&&mainVideo.readyState>=3&&!!cues.length;
     const signed=gateway.configured()?!!gateway.credential():!!GM_getValue('speech-credentials',null)?.apiKey;
     const verified=!gateway.configured()||!!gateway.study?.identity?.(),permitted=gateway.canUse('speech');
@@ -8821,7 +8824,7 @@ const ZY_ONBOARDING_ARTWORK="data:image/webp;base64,UklGRvzlBwBXRUJQVlA4WAoAAAAw
     timer.setAttribute('aria-label',detail);
   }
   function refreshSyncBadge(){refreshSyncTimer();const complete=$('sync-complete');if(!complete)return;complete.hidden=!syncAnchors.length;complete.title=syncManual?'已保存同步点 · 手动微调':'已匹配 · '+syncAnchors.length+' 个同步点';const saved=$('sync-saved');if(saved)saved.textContent=syncAnchors.length?'已同步 · '+stamp(syncAnchors.at(-1).videoTime).slice(0,8):'尚未匹配';const hint=$('offset-hint');hint.title=syncAnchors.map(p=>'播放 '+Math.round(p.videoTime)+' 秒：偏移 '+p.offset+' 秒').join('；');}
-  function saveSyncState() { GM_setValue(syncKey(), {anchors: syncAnchors, manual: syncManual, autoSync:!!$('auto-sync')?.checked});refreshSyncBadge(); }
+  function saveSyncState() { GM_setValue(syncKey(), {anchors: syncAnchors, manual: syncManual, autoSyncDisabled:!$('auto-sync').checked});refreshSyncBadge(); }
   function currentSubtitleTime(time) { return syncedSubtitleTime(time, value('offset', 0, -3600, 3600), syncAnchors); }
   function setSyncStatus(text) { if ($('sync-status')) $('sync-status').textContent = text; refreshSyncTimer(); }
   function updateOffset(save = true) {
@@ -8846,9 +8849,11 @@ const ZY_ONBOARDING_ARTWORK="data:image/webp;base64,UklGRvzlBwBXRUJQVlA4WAoAAAAw
     $('offset').value = GM_getValue(offsetKey(), GM_getValue('subtitle-offset:' + location.hash, 0));
     const saved = GM_getValue(syncKey(), {}); syncAnchors = syncAnchorsValid(saved?.anchors); syncManual = !!saved?.manual;
     syncSchedule.stop(); syncAutoPaused=false;
-    const enabled=!!saved?.autoSync&&!syncManual;if($('auto-sync'))$('auto-sync').checked=enabled;if(enabled)syncSchedule.enable();
+    // Older builds also stored autoSync=false when no choice had been made.
+    const enabled=!syncManual&&saved?.autoSyncDisabled!==true;
+    $('auto-sync').checked=enabled;if(enabled)syncSchedule.enable();
     refreshSyncBadge();updateOffset(false);
-    setSyncStatus(enabled?'定时校准已恢复 · 按实际播放时长计时，暂停不计时。':syncManual?'手动模式 · 定时校准保持关闭，需主动重新开启。':'定时校准未开启；已保存的同步点仍用于字幕；PPT 单独校准。');
+    setSyncStatus(enabled?'定时校准已开启 · 按播放进度累计计时，暂停不计时。':syncManual?'手动模式 · 定时校准保持关闭，需主动重新开启。':'定时校准已关闭，保留已有同步点。');
   }
   loadOffset();
   $('offset').addEventListener('input', () => manualOffset());
@@ -8859,14 +8864,9 @@ const ZY_ONBOARDING_ARTWORK="data:image/webp;base64,UklGRvzlBwBXRUJQVlA4WAoAAAAw
       manualOffset(id === 'reset-offset');
     });
   }
-  if ($('sync-interval')) {
-    $('sync-interval').value = String(GM_getValue('sync-interval', 300));
-    $('sync-interval').addEventListener('change', () => { GM_setValue('sync-interval', value('sync-interval', 300, 120, 600)); if (syncSchedule.enabled) syncSchedule.enable(); refreshSyncTimer(); });
-  }
   $('auto-sync')?.addEventListener('change', () => {
     syncAutoPaused=false;
     if (!$('auto-sync').checked) { syncSchedule.stop(); cancelAlignment?.(); saveSyncState(); setSyncStatus('定时校准已关闭，保留已有同步点。'); return; }
-    if (!(gateway.configured()?true:GM_getValue('speech-credentials', null)?.apiKey)) { $('auto-sync').checked = false; setSyncStatus('请先设置语音识别凭证，再开启定时校准。'); return; }
     syncManual = false; syncSchedule.enable(); saveSyncState();
     setSyncStatus('定时校准已开启 · 按实际播放时长计时，可能产生语音识别费用。');
   });
@@ -8876,10 +8876,11 @@ const ZY_ONBOARDING_ARTWORK="data:image/webp;base64,UklGRvzlBwBXRUJQVlA4WAoAAAAw
     if (syncAnchors.length && shadow.activeElement !== $('offset')) { $('offset').value = Math.round(syncOffsetAt(mainVideo.currentTime, 0, syncAnchors) * 100) / 100; updateOffset(false); }
     if (!syncSchedule.enabled) return;
     const playing = !ZYClassroomMedia.isLive(mainVideo) && !mainVideo.paused && !mainVideo.seeking && !mainVideo.ended && mainVideo.readyState >= 3 && !!cues.length && gateway.canUse('speech');
-    const interval = $('sync-interval') ? value('sync-interval', 300, 120, 600) : 300;
-    if(!gateway.canUse('speech')){syncSchedule.advance(mainVideo.currentTime,false,interval);setSyncStatus(gateway.configured()&&!gateway.credential()?'定时校准已记住 · 等待登录。':'定时校准已记住 · 等待可用的语音权限；尚未开始计时。');return;}
-    if (syncSchedule.advance(mainVideo.currentTime, playing, interval, !!cancelAlignment)) runAlignment(true);
-    else if (!cancelAlignment) setSyncStatus(`定时校准已开启 · 再播放约 ${Math.ceil(Math.max(0, interval - syncSchedule.elapsed) / 60)} 分钟后校准；手动微调即停止。`);
+    if (syncSchedule.advance(mainVideo.currentTime, playing, !!cancelAlignment)) runAlignment(true);
+    else if (!cancelAlignment) {
+      const status=$('sync-status'),detail=$('sync-auto-indicator').title;
+      if(status.textContent!==detail)status.textContent=detail;
+    }
   }
   let paddedVideo = null, originalPadding = null;
   function releaseVideo() {

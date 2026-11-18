@@ -118,6 +118,9 @@ class StreamTests(unittest.TestCase):
         upstream = session['socket']
         self.assertEqual(upstream.headers['X-Api-Key'], 'server-only-test-key')
         self.assertEqual(upstream.headers['X-Api-Resource-Id'], 'volc.seedasr.sauc.duration')
+        with self.gateway.db() as db:
+            saved = db.execute('SELECT model FROM calls WHERE id=?', (session['call'],)).fetchone()
+        self.assertEqual(saved['model'], upstream.headers['X-Api-Resource-Id'])
         initial = upstream.sent[0]
         size = struct.unpack_from('>I', initial, 4)[0]
         body = json.loads(gzip.decompress(initial[8:8 + size]))

@@ -531,6 +531,7 @@ class Gateway(AdminMixin, PromptMixin, StudyMixin, OperationsMixin, AnalyticsMix
         call=self.reserve(user,app,'ark',feature='translation' if seed_translation else 'learning',
                           translation_chars=text_size if seed_translation else 0)
         self.record_call_meta(call,body['model'],feature,images)
+        settled=False
         try:
             if streaming:
                 stream_sink({'type':'response.in_progress'})
@@ -543,6 +544,7 @@ class Gateway(AdminMixin, PromptMixin, StudyMixin, OperationsMixin, AnalyticsMix
                         if result.get('status') in ('failed','incomplete') or result.get('error'): raise Fault(502,'模型回答未完成，请缩短问题重试')
                         result=decorate(result)
                         self.state(call,'complete' if result.get('usage') else 'unknown',result.get('usage'))
+                        settled=True
                         stream_sink({'type':'response.completed','response':{k:result[k] for k in ('id','status','output','usage','warnings') if k in result}})
                         return 200,{},None
                     elif event.get('type') in ('error','response.failed','response.incomplete'):
@@ -553,7 +555,9 @@ class Gateway(AdminMixin, PromptMixin, StudyMixin, OperationsMixin, AnalyticsMix
             result=decorate(result)
             self.state(call,'complete' if result.get('usage') else 'unknown',result.get('usage'))
             return 200,{}, {k:result[k] for k in ('id','status','output','usage','warnings') if k in result}
-        except Exception: self.state(call,'unknown'); raise
+        except Exception:
+            if not settled:self.state(call,'unknown')
+            raise
     def speech(self,user,app,path,headers,body):
         with self.db() as db: db.execute('DELETE FROM jobs WHERE created<?',(int(time.time())-86400,))
         key=os.environ.get('SPEECH_API_KEY')

@@ -86,7 +86,7 @@ function mount({shadow,mascot}){
      </div>
    </div>`);
  const syncBox=document.createElement('details');syncBox.id='study-sync';syncBox.innerHTML='<summary aria-label="打开手动时间微调"><span>手动时间微调</span><span class="sync-manual-access">免登录可以使用</span></summary>';syncBox.append(syncSection);shadow.append(syncBox);for(const details of syncSection.querySelectorAll('details'))details.open=true;
- $('settings-sync').insertAdjacentHTML('beforeend','<label>定时自动校准<input id="auto-sync" type="checkbox"></label><label>播放多久后复查<select id="sync-interval"><option value="120">2 分钟</option><option value="300" selected>5 分钟</option><option value="600">10 分钟</option></select></label><p id="sync-status" role="status"></p><p>手动微调立即停用自动校准，重新勾选才恢复。优先流式识别，可靠匹配后立即结束；每次最多听取 20 秒课程音轨，按实际使用时长计费。</p>');
+ $('settings-sync').insertAdjacentHTML('beforeend','<label>定时自动校准（每 20 分钟）<input id="auto-sync" type="checkbox"></label><p id="sync-status" role="status"></p><p>录播按播放进度累计计时。手动微调立即停用自动校准，重新勾选才恢复。优先流式识别，可靠匹配后立即结束；每次最多听取 20 秒课程音轨，按实际使用时长计费。</p>');
  // Keep the existing controls and listeners; only their visual home changes.
  const layoutSettings=$('settings-layout-panel');
  for(const id of ['reset-ppt','slides-status','edit-layout','layout-editor'])layoutSettings.append($(id));

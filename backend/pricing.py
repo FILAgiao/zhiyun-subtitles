@@ -8,6 +8,17 @@ import os
 
 PRICE_SOURCE = 'https://docs.volcengine.com/docs/ark/model-pricing?lang=zh'
 CHECKED_AT = '2026-11-06'
+ASR_PRICE_SOURCE = 'https://docs.volcengine.com/docs/doubao-voice/billing-instructions?lang=zh'
+ASR_CHECKED_AT = '2026-11-18'
+LEGACY_STREAM_MODEL = 'volc.seedasr.sauc'
+DEFAULT_STREAM_RESOURCE = 'volc.seedasr.sauc.duration'
+ASR_CONCURRENT_RESOURCES = {'volc.seedasr.sauc.concurrent', 'volc.bigasr.sauc.concurrent'}
+ASR_PRICES = {
+    DEFAULT_STREAM_RESOURCE: {'title': '豆包流式语音识别 2.0（小时版）', 'per_hour': '1.00'},
+    'volc.bigasr.sauc.duration': {'title': '大模型流式语音识别 1.0（小时版）', 'per_hour': '4.50'},
+    'volc.seedasr.auc': {'title': '豆包录音文件识别 2.0（标准版）', 'per_hour': '0.80'},
+}
+ASR_NOTE = '按网关记录的音频时长和当前后付费公开价估算。中断调用已记录的音频也计入估算。旧流式记录按网关当时的默认 2.0 小时版估算。并发包月和资源包抵扣以供应商账单为准。'
 DEFAULT_MODEL = 'doubao-seed-2-1-lite-260915'
 PRICES = {
     DEFAULT_MODEL: {'title': 'Doubao Seed 2.1 Lite', 'input_per_million': '0.80', 'output_per_million': '2.70', 'cached_input_per_million': '0.16'},
@@ -20,7 +31,9 @@ def pricing_catalog():
     model = os.environ.get('ARK_LEARNING_MODEL', DEFAULT_MODEL)
     return {'checked_at': CHECKED_AT, 'source_url': PRICE_SOURCE, 'mode': 'standard_online',
             'default_model': model, 'currency': 'CNY', 'note': PRICE_NOTE,
-            'models': [{'model': key, **value} for key, value in PRICES.items()]}
+            'models': [{'model': key, **value} for key, value in PRICES.items()],
+            'asr': {'checked_at': ASR_CHECKED_AT, 'source_url': ASR_PRICE_SOURCE, 'note': ASR_NOTE,
+                    'models': [{'model': key, **value} for key, value in ASR_PRICES.items()]}}
 
 
 def money(value):
@@ -99,3 +112,44 @@ def summarize_token_cost(calls):
     for call in calls:
         total.add(call)
     return total.result()
+
+
+class ASREstimate:
+    def __init__(self):
+        self.amount = self.seconds = Decimal(0)
+        self.priced = self.unpriced = self.interrupted = self.no_audio = self.legacy = 0
+        self.reasons = defaultdict(int)
+
+    def add(self, call):
+        model = call['model']
+        legacy = model == LEGACY_STREAM_MODEL
+        resource = DEFAULT_STREAM_RESOURCE if legacy else model
+        rate = ASR_PRICES.get(resource)
+        seconds = call['seconds']
+        if type(seconds) not in (int, float) or not Decimal(str(seconds)).is_finite() or seconds < 0:
+            reason = 'missing_audio_duration'
+        elif resource in ASR_CONCURRENT_RESOURCES:
+            reason = 'concurrent_subscription'
+        elif rate is None:
+            reason = 'unknown_asr_resource'
+        elif not seconds and (not resource.endswith('.sauc.duration') or call['state'] == 'reserved'):
+            reason = 'missing_audio_duration'
+        else:
+            duration = Decimal(str(seconds))
+            self.amount += duration * Decimal(rate['per_hour']) / 3600
+            self.seconds += duration
+            self.no_audio += int(not seconds)
+            self.interrupted += int(seconds > 0 and call['state'] != 'complete')
+            self.priced += 1
+            self.legacy += int(legacy and seconds > 0)
+            return
+        self.unpriced += 1
+        self.reasons[reason] += 1
+
+    def result(self):
+        known = money(self.amount)
+        return {'amount_cny': known if not self.unpriced else None, 'known_amount_cny': known,
+                'priced_calls': self.priced, 'unpriced_calls': self.unpriced,
+                'complete': not self.unpriced, 'unknown_reasons': dict(self.reasons),
+                'estimated_seconds': float(self.seconds), 'no_audio_calls': self.no_audio,
+                'unsettled_duration_calls': self.interrupted, 'legacy_resource_calls': self.legacy}

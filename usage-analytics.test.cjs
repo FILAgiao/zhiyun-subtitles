@@ -32,6 +32,16 @@ test('2x playback counts elapsed wall seconds and skips a seek',async()=>{
  const f=fixture();f.sample(0,{rate:2});f.advance(1000);f.sample(2,{rate:2});f.advance(1000);f.sample(4,{rate:2});f.advance(1000);f.sample(100,{rate:2});await f.api.flush();
  assert.equal(f.sent[0].events.filter(e=>e.kind==='activity').reduce((n,e)=>n+e.end-e.start,0),2);
 });
+test('a slightly early heartbeat can upload after a server clock correction',async()=>{
+ const f=fixture();
+ f.api.feature('ai','first');
+ assert.equal(await f.api.flush(),true);
+ f.advance(10000); f.api.feature('ai','second');
+ assert.equal(await f.api.flush(),false);
+ f.advance(49400,{wall:48600});
+ assert.equal(await f.api.flush(),true);
+ assert.equal(f.sent.length,2);
+});
 test('technical retransmission retains event ids, batches and backoff',async()=>{
  const f=fixture();f.api.feature('ai','operation-one');f.api.feature('ai','operation-one');f.setReply(Error('offline'));await f.api.flush();await f.api.flush();assert.equal(f.sent.length,1);
  f.advance(120000);f.setReply({ok:true});await f.api.flush();assert.deepEqual(f.sent[0],f.sent[1]);assert.equal(f.api.inspect().queued,0);

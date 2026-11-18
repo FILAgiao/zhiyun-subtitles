@@ -11,58 +11,110 @@
 <div id="stats" class="stats"></div>
 <nav class="workspace-tabs" aria-label="后台页面"><button data-tab="analytics" id="analytics-tab" hidden>数据仪表盘</button><button data-tab="operations" id="operations-tab" hidden>额度与费用</button><button data-tab="users" id="users-tab" hidden>用户与额度</button><button data-tab="calls">调用日志</button><button data-tab="sessions">登录与活动</button><button data-tab="prompts" id="prompts-tab" hidden>官方提示词</button><button data-tab="actions" id="actions-tab" hidden>管理记录</button></nav>
 <section id="analytics-panel" class="tab-panel analytics" hidden aria-label="数据仪表盘">
-  <div class="analytics-toolbar"><div><span class="eyebrow">LEARNING ANALYTICS</span><h2>每一份投入，都看得见</h2><p>用量、学习与回访，在这里一览。</p></div><div class="analytics-controls"><div class="range-buttons" role="group" aria-label="统计时间范围"><button type="button" data-range="today" aria-pressed="false">今天</button><button type="button" data-range="7d" aria-pressed="true">近 7 天</button><button type="button" data-range="month" aria-pressed="false">本月</button><button type="button" data-range="custom" aria-pressed="false">自定义</button></div><button id="analytics-refresh" type="button" aria-label="刷新仪表盘">↻ 刷新</button></div></div>
+  <div class="analytics-toolbar"><div><h2>统计明细</h2></div><div class="analytics-controls"><div class="range-buttons" role="group" aria-label="统计时间范围"><button type="button" data-range="today" aria-pressed="false">今天</button><button type="button" data-range="7d" aria-pressed="true">近 7 天</button><button type="button" data-range="month" aria-pressed="false">本月</button><button type="button" data-range="custom" aria-pressed="false">自定义</button></div><button id="analytics-refresh" type="button" aria-label="刷新仪表盘">↻ 刷新</button></div></div>
   <form id="analytics-filter" class="analytics-date-filter" hidden><label>开始日期<input id="analytics-start" type="date" required></label><span aria-hidden="true">—</span><label>结束日期<input id="analytics-end" type="date" required></label><button type="submit" class="primary">应用日期</button></form>
   <div class="analytics-meta"><span id="analytics-range-label"></span><span id="analytics-updated">手动刷新 · 北京时间</span></div>
   <p id="analytics-status" class="analytics-status" role="status" aria-live="polite">正在获取统计数据…</p>
   <div id="analytics-content" hidden>
-    <p id="analytics-collection-status" class="analytics-collection-status" role="status" hidden></p>
     <div id="analytics-stats" class="analytics-stats"></div>
-    <div class="analytics-secondary"><span id="analytics-token-detail"></span><span id="analytics-request-detail"></span><span id="analytics-cost-detail"></span><span id="analytics-accounts"></span></div>
-    <section class="analytics-card analytics-daily" aria-labelledby="analytics-daily-title">
-      <div class="analytics-card-title"><div><h3 id="analytics-daily-title">账号与 Token 每日明细</h3><p>北京时间。历史账号数取当天结束时的总数，今天取当前值。</p></div></div>
-      <div class="table-wrap" tabindex="0" role="region" aria-labelledby="analytics-daily-title">
-        <table><thead><tr><th scope="col">日期</th><th scope="col">应用账号总数</th><th scope="col">Token 接口调用次数</th><th scope="col">Token 消耗量</th></tr></thead><tbody id="analytics-trend-rows"></tbody></table>
-      </div>
-      <p class="analytics-footnote">— 表示缺少历史数据。Token 接口调用次数计入已记录的方舟请求，包含待核对调用。</p>
-    </section>
-    <div class="analytics-grid analytics-daily-charts">
-      <section class="analytics-card">
-        <div class="analytics-card-title"><div><h3>AI 问答</h3><p>完整回答次数与当天去重人数</p></div></div>
-        <div id="analytics-ai-chart" class="analytics-chart"></div>
-      </section>
-      <section class="analytics-card">
-        <div class="analytics-card-title"><div><h3>截图与看课</h3><p>成功截图、观看课节与有效时长</p></div>
-          <label class="visually-labeled">查看指标<select id="analytics-study-metric"><option value="counts">截图与课节</option><option value="time">有效时长</option></select></label>
+    <div class="analytics-secondary"><span id="analytics-token-detail"></span><span id="analytics-cost-detail"></span></div>
+    <nav class="analytics-jump" aria-label="统计分区">
+      <a href="#analytics-accounts-title" data-family="accounts">账号与登录</a>
+      <a href="#analytics-token-title" data-family="usage">模型用量</a>
+      <a href="#analytics-fee-title" data-family="cost">参考费用</a>
+      <a href="#analytics-watch-title" data-family="study">学习活动</a>
+      <a href="#analytics-user-title" data-family="accounts">用户明细</a>
+    </nav>
+    <div class="analytics-tables">
+      <section class="analytics-card analytics-daily" data-family="accounts" aria-labelledby="analytics-accounts-title">
+        <div class="analytics-card-title"><div><h3 id="analytics-accounts-title">账号与登录</h3><p>账号总数按授权快照统计，今天显示当前值。登录账号按当天去重。</p></div></div>
+        <div class="table-wrap" tabindex="0" role="region" aria-labelledby="analytics-accounts-title">
+          <table><thead><tr><th scope="col">日期</th><th scope="col" data-field="account_total" data-missing="无快照">账号总数</th><th scope="col" data-field="login_users">登录账号</th><th scope="col" data-field="login_sessions">登录会话</th><th scope="col" data-field="registrations">自助注册</th></tr></thead><tbody id="analytics-account-rows"></tbody></table>
         </div>
-        <div id="analytics-study-chart" class="analytics-chart"></div>
+        <p id="analytics-registration-note" class="analytics-footnote"></p>
       </section>
-      <section class="analytics-card">
-        <div class="analytics-card-title"><div><h3>字幕校准与翻译</h3><p>成功的语音校准调用与实际展示的翻译</p></div></div>
-        <div id="analytics-language-chart" class="analytics-chart"></div>
+      <section class="analytics-card analytics-daily" data-family="usage" aria-labelledby="analytics-token-title">
+        <div class="analytics-card-title"><div><h3 id="analytics-token-title">Token 用量</h3><p>方舟调用数包含待核对请求。Token 数按已确认用量汇总。</p></div></div>
+        <div class="table-wrap" tabindex="0" role="region" aria-labelledby="analytics-token-title">
+          <table><thead><tr><th scope="col">日期</th><th scope="col" data-field="token_requests">方舟调用</th><th scope="col" data-field="input_tokens">输入</th><th scope="col" data-field="output_tokens">输出</th><th scope="col" data-field="tokens">总量</th></tr></thead><tbody id="analytics-token-rows"></tbody></table>
+        </div>
       </section>
-      <section class="analytics-card">
-        <div class="analytics-card-title"><div><h3>API 参考费用</h3><p>每日已计价 Token 费用（人民币）</p></div></div>
-        <div id="analytics-fee-chart" class="analytics-chart"></div>
-        <p id="analytics-fee-note" class="analytics-footnote"></p>
+      <section class="analytics-card analytics-daily" data-family="usage" aria-labelledby="analytics-ai-title">
+        <div class="analytics-card-title"><div><h3 id="analytics-ai-title">AI 问答</h3><p>模型调用取网关已完成记录。完整回答取扩展上报。</p></div></div>
+        <div class="table-wrap" tabindex="0" role="region" aria-labelledby="analytics-ai-title">
+          <table><thead><tr><th scope="col">日期</th><th scope="col" data-field="completed_ai_calls">完成调用</th><th scope="col" data-field="completed_ai_users">调用账号</th><th scope="col" data-field="ai_uses" data-source="learning">完整回答</th><th scope="col" data-field="ai_users" data-source="learning">回答账号</th></tr></thead><tbody id="analytics-ai-rows"></tbody></table>
+        </div>
       </section>
-    </div>
-    <div class="analytics-grid">
-    <section class="analytics-card analytics-trend">
-      <div class="analytics-card-title"><div><h3>更多用量趋势</h3><p>登录账号按当天去重。会话包含扩展衔接网页。</p></div>
-        <label class="visually-labeled">查看指标<select id="analytics-metric">
-          <optgroup label="模型用量"><option value="tokens">Token 总量</option><option value="input_tokens">输入 Token</option><option value="output_tokens">输出 Token</option><option value="token_requests">Token 接口调用次数</option><option value="requests">全部模型调用次数</option></optgroup>
+      <section class="analytics-card analytics-daily" data-family="usage" aria-labelledby="analytics-speech-title">
+        <div class="analytics-card-title"><div><h3 id="analytics-speech-title">语音校准</h3><p>网关已完成的语音识别调用和对应音频时长。</p></div></div>
+        <div class="table-wrap" tabindex="0" role="region" aria-labelledby="analytics-speech-title">
+          <table><thead><tr><th scope="col">日期</th><th scope="col" data-field="speech_uses">完成调用</th><th scope="col" data-field="speech_seconds" data-format="duration">音频时长</th></tr></thead><tbody id="analytics-speech-rows"></tbody></table>
+        </div>
+      </section>
+      <section class="analytics-card analytics-daily" data-family="usage" aria-labelledby="analytics-language-title">
+        <div class="analytics-card-title"><div><h3 id="analytics-language-title">字幕与翻译</h3><p>完成翻译调用包含预取。字幕和翻译展示按扩展会话首展计数。</p></div></div>
+        <div class="table-wrap" tabindex="0" role="region" aria-labelledby="analytics-language-title">
+          <table><thead><tr><th scope="col">日期</th><th scope="col" data-field="completed_translation_calls">完成翻译调用</th><th scope="col" data-field="subtitle_uses" data-source="learning">字幕展示</th><th scope="col" data-field="translation_uses" data-source="learning">翻译展示</th></tr></thead><tbody id="analytics-language-rows"></tbody></table>
+        </div>
+      </section>
+      <section class="analytics-card analytics-daily" data-family="cost" aria-labelledby="analytics-fee-title">
+        <div class="analytics-card-title"><div><h3 id="analytics-fee-title">API 参考费用</h3><p>按官方 Token 费率估算。语音参考费用见「额度与费用」。</p></div></div>
+        <div class="table-wrap" tabindex="0" role="region" aria-labelledby="analytics-fee-title">
+          <table><thead><tr><th scope="col">日期</th><th scope="col" data-field="api_cost_cny" data-format="fee">已计价金额（元）</th><th scope="col" data-field="unpriced_token_calls">待核对调用</th></tr></thead><tbody id="analytics-fee-rows"></tbody></table>
+        </div>
+      </section>
+      <section class="analytics-card analytics-daily" data-family="study" aria-labelledby="analytics-watch-title">
+        <div class="analytics-card-title"><div><h3 id="analytics-watch-title">观看课节与有效活动</h3><p>课节按用户和录像去重。有效时长合并同账号的重叠时段。</p></div></div>
+        <dl id="analytics-learning-summary" class="analytics-learning-summary"></dl>
+        <p id="analytics-collection-status" class="analytics-collection-status" role="status" hidden></p>
+        <div class="table-wrap" tabindex="0" role="region" aria-labelledby="analytics-watch-title">
+          <table><thead><tr><th scope="col">日期</th><th scope="col" data-field="users" data-source="learning">活跃账号</th><th scope="col" data-field="lessons" data-source="learning">观看课节</th><th scope="col" data-field="effective_seconds" data-source="learning" data-format="duration">有效时长</th></tr></thead><tbody id="analytics-watch-rows"></tbody></table>
+        </div>
+      </section>
+      <section class="analytics-card analytics-daily" data-family="study" aria-labelledby="analytics-screenshot-title">
+        <div class="analytics-card-title"><div><h3 id="analytics-screenshot-title">截图</h3><p>扩展成功展示截图时计一次。</p></div></div>
+        <div class="table-wrap" tabindex="0" role="region" aria-labelledby="analytics-screenshot-title">
+          <table><thead><tr><th scope="col">日期</th><th scope="col" data-field="screenshot_uses" data-source="learning">成功截图</th></tr></thead><tbody id="analytics-screenshot-rows"></tbody></table>
+        </div>
+      </section>
+      <section class="analytics-card" data-family="study" aria-labelledby="analytics-courses-title">
+        <div class="analytics-card-title"><div><h3 id="analytics-courses-title">热门课节</h3><p>按有效观看人数取前 5 个课节。</p></div></div>
+        <div class="table-wrap" tabindex="0" role="region" aria-labelledby="analytics-courses-title">
+          <table><thead><tr><th scope="col">课节</th><th scope="col">观看人数</th><th scope="col">观看时长</th></tr></thead><tbody id="analytics-courses"></tbody></table>
+        </div>
+      </section>
+      <section class="analytics-card" data-family="study" aria-labelledby="analytics-features-title">
+        <div class="analytics-card-title"><div><h3 id="analytics-features-title">扩展功能使用</h3><p>覆盖率为功能使用人数占同期活跃账号的比例。</p></div></div>
+        <div class="table-wrap" tabindex="0" role="region" aria-labelledby="analytics-features-title">
+          <table><thead><tr><th scope="col">功能</th><th scope="col">使用账号</th><th scope="col">成功次数</th><th scope="col">覆盖率</th></tr></thead><tbody id="analytics-features"></tbody></table>
+        </div>
+      </section>
+      <section class="analytics-card" data-family="study" aria-labelledby="analytics-retention-title">
+        <div class="analytics-card-title"><div><h3 id="analytics-retention-title">用户回访</h3><p>按首次观测日期统计。回访率使用已结束观察期的批次。</p></div></div>
+        <div id="analytics-retention" class="analytics-retention"></div>
+        <div class="table-wrap" tabindex="0" role="region" aria-labelledby="analytics-retention-title">
+          <table><thead><tr><th scope="col">首次观测日</th><th scope="col">人数</th><th scope="col">次日</th><th scope="col">7 日内</th><th scope="col">第 7 日</th></tr></thead><tbody id="analytics-cohorts"></tbody></table>
+        </div>
+      </section>
+      <section class="analytics-card analytics-user-card" data-family="accounts" aria-labelledby="analytics-user-title">
+        <div class="analytics-card-title"><div><h3 id="analytics-user-title">用户使用明细 <span id="analytics-user-count" class="small-badge"></span></h3><p>最近活动取所选日期内记录的登录、调用和扩展事件。</p></div>
+          <div class="analytics-user-controls"><label class="visually-labeled">搜索用户<input id="analytics-user-search" type="search" placeholder="搜索用户名" autocomplete="off"></label><label class="visually-labeled">用户排序<select id="analytics-user-sort"><option value="last_seen">最近活动</option><option value="lessons">观看课节最多</option><option value="effective_seconds">有效时长最多</option><option value="total_tokens">Token 最多</option><option value="completed_ai_calls">AI 调用最多</option><option value="ai_uses">完整回答最多</option></select></label></div>
+        </div>
+        <div class="table-wrap" tabindex="0" role="region" aria-labelledby="analytics-user-title">
+          <table><thead><tr><th scope="col">用户</th><th scope="col">最近活动</th><th scope="col">观看课节</th><th scope="col">有效时长</th><th scope="col">Token</th><th scope="col">AI 调用</th><th scope="col">完整回答</th></tr></thead><tbody id="analytics-users"></tbody></table>
+        </div>
+      </section>
+      <details id="analytics-trend" class="analytics-card analytics-trend">
+        <summary>查看趋势图</summary>
+        <div class="analytics-card-title"><label class="visually-labeled">查看指标<select id="analytics-metric">
+          <optgroup label="模型用量"><option value="tokens">Token 总量</option><option value="input_tokens">输入 Token</option><option value="output_tokens">输出 Token</option><option value="token_requests">方舟调用次数</option><option value="requests">全部模型调用次数</option><option value="completed_ai_calls">AI 完成调用</option><option value="completed_ai_users">AI 调用账号</option><option value="speech_uses">语音校准</option><option value="completed_translation_calls">翻译完成调用</option></optgroup>
           <optgroup label="账号"><option value="account_total">应用账号总数</option><option value="login_sessions">登录会话次数</option><option value="login_users">登录账号数</option><option value="registrations">自助注册人数</option></optgroup>
-          <optgroup label="学习活动"><option value="users">活跃账号</option><option value="lessons">观看课节</option><option value="effective_seconds">有效使用时长</option></optgroup>
-        </select></label>
-      </div>
-      <div id="analytics-chart" class="analytics-chart"></div>
-      <p id="analytics-registration-note" class="analytics-footnote"></p>
-    </section>
-    <section class="analytics-card"><div class="analytics-card-title"><div><h3>热门课节</h3><p>按观看人数排序</p></div><span class="small-badge">TOP 5</span></div><div id="analytics-courses" class="analytics-courses"></div></section></div>
-    <div class="analytics-grid analytics-lower"><section class="analytics-card"><div class="analytics-card-title"><div><h3>大家都在用什么</h3><p>成功使用 · 已排除预取和重试</p></div></div><div id="analytics-features" class="analytics-features"></div><p class="analytics-footnote">覆盖率 = 功能使用人数 / 同期活跃账号。不同功能人数不可相加。</p></section>
-    <section class="analytics-card"><div class="analytics-card-title"><div><h3>用户会回来吗</h3><p>首次观测用户 · 仅统计观察期结束的批次</p></div></div><div id="analytics-retention" class="analytics-retention"></div><details class="analytics-cohorts"><summary>查看首次使用日期明细</summary><div class="table-wrap"><table><thead><tr><th>首次观测日</th><th>人数</th><th>次日</th><th>7 日内</th><th>第 7 日</th></tr></thead><tbody id="analytics-cohorts"></tbody></table></div></details></section></div>
-    <section class="analytics-card analytics-user-card"><div class="analytics-card-title"><div><h3>用户使用概览 <span id="analytics-user-count" class="small-badge"></span></h3><p>一人一行，把使用情况串起来</p></div><div class="analytics-user-controls"><label class="visually-labeled">搜索用户<input id="analytics-user-search" type="search" placeholder="搜索用户名" autocomplete="off"></label><label class="visually-labeled">用户排序<select id="analytics-user-sort"><option value="last_seen">最近活动</option><option value="lessons">观看课节最多</option><option value="effective_seconds">有效时长最多</option><option value="total_tokens">Token 最多</option><option value="ai_uses">AI 问答最多</option></select></label></div></div><div class="table-wrap"><table><thead><tr><th>用户</th><th>最近活动</th><th>观看课节</th><th>有效时长</th><th>Token</th><th>AI 问答</th></tr></thead><tbody id="analytics-users"></tbody></table></div></section>
+          <optgroup label="学习活动"><option value="users">活跃账号</option><option value="lessons">观看课节</option><option value="effective_seconds">有效使用时长</option><option value="ai_uses">完整回答</option><option value="ai_users">完整回答账号</option><option value="screenshot_uses">成功截图</option><option value="subtitle_uses">字幕展示</option><option value="translation_uses">翻译展示</option></optgroup>
+          <optgroup label="参考费用"><option value="api_cost_cny">API 参考费用</option></optgroup>
+        </select></label></div>
+        <div id="analytics-chart" class="analytics-chart"></div>
+      </details>
+    </div>
     <aside class="analytics-coverage"><span class="coverage-icon" aria-hidden="true">i</span><div><strong id="analytics-coverage-title">关于这些数字</strong><p id="analytics-coverage-note"></p><details><summary>统计口径</summary><p>观看课节按用户 × 课堂录像去重，累计有效播放达到 60 秒计入；覆盖课节数另计。有效时长按账号合并重叠区间，暂停、后台静置不计，异常离开可能漏记末段。字幕和翻译按会话内首次实际展示计次，截图按成功展示、问答按完整回答计次。Token 来自服务端 usage，待核对请求可能仍产生费用。学习行为仅覆盖已登录且启用统计的新版扩展，不代表全站真实总量。</p></details></div></aside>
   </div>
 </section>
@@ -72,15 +124,15 @@
 <div id="operations-content" hidden>
 <div id="operations-stats" class="stats operations-stats"></div><p id="operations-cost-note" class="muted cost-note">费用依据已配置费率估算，不能代替供应商实际账单；未配置费用显示未知。</p><p id="operations-configured-cost" class="muted cost-note"></p>
 <section class="operations-block"><div class="block-heading"><h3>需要留意</h3><span class="muted">额度、有效期与账号状态</span></div><div id="operations-alerts" class="operations-alerts"></div></section>
-<section class="operations-block"><div class="block-heading"><h3>用户用量排行</h3><label class="sort-label">排序<select id="operations-sort"><option value="requests">调用次数 · 从高到低</option><option value="total_tokens">Token · 从高到低</option><option value="token_estimate">官方 Token 参考费 · 从高到低</option><option value="estimated_cost_cny">历史配置费用 · 从高到低</option><option value="audio_seconds">语音秒数 · 从高到低</option></select></label></div><div class="table-wrap"><table><thead><tr><th>用户 / 应用</th><th>套餐 / 状态</th><th>本月调用额度</th><th>Token / 语音 / 专用翻译</th><th>估算费用（元）</th><th>费率覆盖</th><th></th></tr></thead><tbody id="operations-users"></tbody></table></div></section>
-<section class="operations-block"><div class="block-heading"><h3>模型费用汇总</h3><span class="muted">按本月调用发生时的费率估算</span></div><div class="table-wrap"><table><thead><tr><th>模型</th><th>调用 / 待核对</th><th>输入 / 输出 Token</th><th>语音 / 联网</th><th>估算费用（元）</th><th>费率覆盖</th></tr></thead><tbody id="operations-models"></tbody></table></div></section>
+<section class="operations-block" data-family="usage"><div class="block-heading"><h3>用户用量排行</h3><label class="sort-label">排序<select id="operations-sort"><option value="requests">调用次数 · 从高到低</option><option value="total_tokens">Token · 从高到低</option><option value="official_estimate">官方参考费用 · 从高到低</option><option value="estimated_cost_cny">历史配置费用 · 从高到低</option><option value="audio_seconds">语音秒数 · 从高到低</option></select></label></div><div class="table-wrap"><table><thead><tr><th>用户 / 应用</th><th>套餐 / 状态</th><th>本月调用额度</th><th>Token / 语音 / 专用翻译</th><th>估算费用（元）</th><th>费率覆盖</th><th></th></tr></thead><tbody id="operations-users"></tbody></table></div></section>
+<section class="operations-block" data-family="cost"><div class="block-heading"><h3>模型费用汇总</h3><span class="muted">所选月份用量 × 当前官方费率</span></div><div class="table-wrap"><table><thead><tr><th>模型 / 语音资源</th><th>调用 / 状态</th><th>输入 / 输出 Token</th><th>语音 / 联网</th><th>估算费用（元）</th><th>费率覆盖</th></tr></thead><tbody id="operations-models"></tbody></table></div></section>
 <div class="operations-forms"><section class="card" id="manual-credit-card"><span class="eyebrow">人工开通 · 留下记录</span><h3>追加本月额度</h3><p class="muted">这里只记账和增加额度，不会发起支付。请先核实收款，再记录人工充值。赠送也可以留痕。</p><form id="manual-credit-form"><label>用户<select id="credit-user" required><option value="">选择账号</option></select></label><input id="credit-app" type="hidden" value="zhiyun-subtitles"><label>记录类型<select id="credit-kind"><option value="gift">赠送额度</option><option value="manual_payment">人工充值 · 已核实收款</option></select></label><div class="pair"><label>增加调用次数<input id="credit-requests" type="number" min="0" max="1000000" value="0" required></label><label>增加语音秒数<input id="credit-audio" type="number" min="0" max="36000000" value="0" required></label></div><label>实收金额（元，可留空）<input id="credit-amount" type="number" min="0" max="100000000" step="0.01" placeholder="不填则记为未填写"></label><label>备注<input id="credit-note" maxlength="500" placeholder="如体验赠送、人工转账凭据编号"></label><p class="form-hint" id="credit-month-note">追加额度仅本月有效，UTC 月末清零；基础套餐和下月额度不变。开启高级功能、修改套餐或有效期，请到“用户与额度”。</p><button class="primary" id="credit-submit">确认记录并追加</button><p id="credit-status" role="status" class="form-result"></p></form></section>
 <section class="card"><span class="eyebrow">模型成本</span><h3>官方参考费用</h3><div id="official-pricing" class="official-pricing"></div><details class="advanced-pricing"><summary>高级设置：手动配置成本费率</summary><p class="muted">可先留空。新费率只用于生效后发生的调用，不回填历史费用。费率为人民币，最终费用以供应商账单为准。</p><form id="cost-rate-form"><label>模型名称<input id="rate-model" required maxlength="200" placeholder="与调用记录中的模型名完全一致"></label><div class="pair"><label>输入 / 百万 Token（元）<input id="rate-input" type="number" min="0" step="any" placeholder="未配置"></label><label>输出 / 百万 Token（元）<input id="rate-output" type="number" min="0" step="any" placeholder="未配置"></label></div><div class="pair"><label>语音 / 分钟（元）<input id="rate-audio" type="number" min="0" step="any" placeholder="未配置"></label><label>联网 / 次（元）<input id="rate-search" type="number" min="0" step="any" placeholder="未配置"></label></div><label>生效时间（北京时间，留空立即生效）<input id="rate-effective" type="datetime-local"></label><button class="primary" id="rate-submit">保存新费率</button><p id="rate-status" role="status" class="form-result"></p></form></details></section></div>
-<section class="operations-block"><div class="block-heading"><h3>已配置的费率</h3><span class="muted">每次保存新记录，保留历史依据</span></div><div class="table-wrap"><table><thead><tr><th>模型 / 生效时间</th><th>输入 / 输出（元 / 百万 Token）</th><th>语音 / 联网</th></tr></thead><tbody id="operations-rates"></tbody></table></div></section>
+<section class="operations-block" data-family="cost"><div class="block-heading"><h3>已配置的费率</h3><span class="muted">每次保存新记录，保留历史依据</span></div><div class="table-wrap"><table><thead><tr><th>模型 / 生效时间</th><th>输入 / 输出（元 / 百万 Token）</th><th>语音 / 联网</th></tr></thead><tbody id="operations-rates"></tbody></table></div></section>
 <section class="operations-block"><div class="block-heading"><div><h3>账号申请与充值入口</h3><p class="muted">填写并启用后，用户才能看到对应渠道；二维码为空或开关关闭时显示“暂未开放”。</p></div></div><form id="access-settings-form"><div class="access-forms"><fieldset class="card access-channel"><legend>申请账号</legend><label class="check-label"><input id="registration-enabled" type="checkbox">启用申请账号渠道</label><label>二维码图片网址（HTTPS）<input id="registration-qr" type="url" placeholder="https://…" maxlength="2000"></label><label>联系方式<input id="registration-contact" maxlength="300" placeholder="选填，如微信号或联系邮箱"></label><label>申请说明<textarea id="registration-instructions" maxlength="2000" rows="3" placeholder="如联系后由管理员手动创建独立账号"></textarea></label><p id="registration-channel-status" class="channel-status">暂未开放</p></fieldset><fieldset class="card access-channel"><legend>充值渠道</legend><label class="check-label"><input id="recharge-enabled" type="checkbox">启用充值渠道</label><label>收款二维码图片网址（HTTPS）<input id="recharge-qr" type="url" placeholder="https://…" maxlength="2000"></label><label>联系方式<input id="recharge-contact" maxlength="300" placeholder="选填，用于核实付款和开通额度"></label><label>充值说明<textarea id="recharge-instructions" maxlength="2000" rows="3" placeholder="请说明人工核实到账、预计处理时间等"></textarea></label><p id="recharge-channel-status" class="channel-status">暂未开放</p></fieldset></div><p class="form-hint">只提供人工联系和付款指引，不会自动确认收款，也不会自动到账。请使用可公开访问的 HTTPS 图片。</p><button class="primary" id="access-submit">保存开放设置</button><p id="access-status" role="status" class="form-result"></p></form></section>
-<section class="operations-block"><div class="block-heading"><h3>人工充值与赠送记录</h3><span class="muted">收款记账与模型估算成本分别展示</span></div><div class="table-wrap"><table><thead><tr><th>时间 / 用户</th><th>类型 / 应用</th><th>增加额度</th><th>实收金额（元）</th><th>备注</th></tr></thead><tbody id="operations-credits"></tbody></table></div></section>
+<section class="operations-block" data-family="cost"><div class="block-heading"><h3>人工充值与赠送记录</h3><span class="muted">收款记账与模型估算成本分别展示</span></div><div class="table-wrap"><table><thead><tr><th>时间 / 用户</th><th>类型 / 应用</th><th>增加额度</th><th>实收金额（元）</th><th>备注</th></tr></thead><tbody id="operations-credits"></tbody></table></div></section>
 </div></section>
-<section id="users-panel" class="tab-panel" hidden><div class="section-title"><h2>用户与额度</h2><p>创建账号后，将用户名和密码单独发给用户，在浏览器扩展内登录。</p></div><label class="search-field">查找账号<input id="user-search" type="search" placeholder="输入用户名或邮箱"></label><div class="table-wrap"><table><thead><tr><th>用户名 / 邮箱</th><th>权限</th><th>APP</th><th>请求额度</th><th>Token</th><th>语音秒数</th><th></th></tr></thead><tbody id="users-body"></tbody></table></div>
+<section id="users-panel" class="tab-panel" data-family="accounts" hidden><div class="section-title"><h2>用户与额度</h2><p>创建账号后，将用户名和密码单独发给用户，在浏览器扩展内登录。</p></div><label class="search-field">查找账号<input id="user-search" type="search" placeholder="输入用户名或邮箱"></label><div class="table-wrap"><table><thead><tr><th>用户名 / 邮箱</th><th>权限</th><th>APP</th><th>请求额度</th><th>Token</th><th>语音秒数</th><th></th></tr></thead><tbody id="users-body"></tbody></table></div>
 <div class="forms" id="plan-settings" hidden>
   <section class="card">
     <h3>套餐配置</h3>
@@ -161,8 +213,8 @@
 </div></section>
 <section id="account-controls" class="card" hidden><span class="eyebrow">账号安全</span><h3>账号状态与密码</h3><p class="muted">在用户表格点“调整”选择账号。停用或重置密码后，原登录会立即失效。</p><form id="manage-account"><input id="manage-user" type="hidden"><label>用户<input id="manage-name" readonly></label><label>操作<select id="manage-action"><option value="disable">停用账号</option><option value="enable">恢复账号</option><option value="reset_password">重置密码</option></select></label><label id="reset-password-label" hidden>新密码（至少 7 位，仅英文字母或数字）<input id="reset-password" type="password" minlength="7" maxlength="256" pattern="[A-Za-z0-9]{7,256}" autocomplete="new-password"></label><button class="primary">执行账号操作</button></form></section>
 <section id="prompts-panel" class="tab-panel" hidden><h2>官方提示词</h2><p>登录用户自动获取已启用的官方讲解方式。个人提示词由用户在扩展中管理，管理员列表不展示个人内容。</p><p id="official-prompt-status" role="status"></p><button type="button" id="official-prompt-refresh">刷新官方提示词</button><div id="official-prompt-list"></div><form id="official-prompt-form" class="card"><h3>新增 / 编辑官方提示词</h3><input type="hidden" id="official-prompt-id"><input type="hidden" id="official-prompt-revision" value="0"><label>名称<input id="official-prompt-label" required maxlength="50"></label><label>内容<textarea id="official-prompt-text" required maxlength="1800" rows="10"></textarea></label><label><input id="official-prompt-enabled" type="checkbox" checked>启用（关闭后用户列表隐藏）</label><button type="submit" class="primary">保存官方提示词</button><button type="button" id="official-prompt-new">新建</button></form></section>
-<section id="actions-panel" class="tab-panel" hidden><h2>最近 100 次管理操作</h2><div class="table-wrap"><table><thead><tr><th>时间 / 管理员</th><th>用户 / 应用</th><th>操作</th><th>调整内容</th></tr></thead><tbody id="actions-body"></tbody></table></div></section>
-<section id="calls-panel" class="tab-panel"><div class="section-title"><h2>最近 100 次调用</h2><p>记录模型、图片数量、Token 和完成状态，不保存问题、截图或回答。</p></div><div class="table-wrap"><table><thead><tr><th>时间 / 用户</th><th>APP / 功能</th><th>模型</th><th>输入 / 输出 Token</th><th>图片 / 语音</th><th>状态</th></tr></thead><tbody id="calls-body"></tbody></table></div></section>
-<section id="sessions-panel" class="tab-panel" hidden><div class="section-title"><h2>登录与活动时段</h2><p>时间按北京时间显示。登录、最后活动和退出有记录；这不等同于完整上网历史。课堂可见且已登录时每分钟更新活动，不收集其他网页地址。</p></div><div class="table-wrap"><table><thead><tr><th>用户名</th><th>APP / 客户端</th><th>登录时间</th><th>最后活动</th><th>退出时间</th><th>状态</th></tr></thead><tbody id="sessions-body"></tbody></table></div></section>
+<section id="actions-panel" class="tab-panel" data-family="audit" hidden><h2>最近 100 次管理操作</h2><div class="table-wrap"><table><thead><tr><th>时间 / 管理员</th><th>用户 / 应用</th><th>操作</th><th>调整内容</th></tr></thead><tbody id="actions-body"></tbody></table></div></section>
+<section id="calls-panel" class="tab-panel" data-family="usage"><div class="section-title"><h2>最近 100 次调用</h2><p>记录模型、图片数量、Token 和完成状态，不保存问题、截图或回答。</p></div><div class="table-wrap"><table><thead><tr><th>时间 / 用户</th><th>APP / 功能</th><th>模型</th><th>输入 / 输出 Token</th><th>图片 / 语音</th><th>状态</th></tr></thead><tbody id="calls-body"></tbody></table></div></section>
+<section id="sessions-panel" class="tab-panel" data-family="accounts" hidden><div class="section-title"><h2>登录与活动时段</h2><p>时间按北京时间显示。登录、最后活动和退出有记录；这不等同于完整上网历史。课堂可见且已登录时每分钟更新活动，不收集其他网页地址。</p></div><div class="table-wrap"><table><thead><tr><th>用户名</th><th>APP / 客户端</th><th>登录时间</th><th>最后活动</th><th>退出时间</th><th>状态</th></tr></thead><tbody id="sessions-body"></tbody></table></div></section>
 <footer>Token 来自豆包官方 usage；仪表盘按北京时间统计，额度与费用按 UTC 月统计。专用字幕翻译按原文字符限额。模型输入和输出 Token 用于估算供应商费用。待核对请求可能仍产生供应商费用。</footer>
 </section></main></body></html>

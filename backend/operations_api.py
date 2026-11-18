@@ -3,7 +3,7 @@
 No supplier prices, payment processing or registration provisioning are implied.
 """
 from collections import defaultdict
-from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
+from decimal import Decimal, InvalidOperation
 from urllib.parse import parse_qs, urlsplit
 import hashlib
 import ipaddress
@@ -14,10 +14,10 @@ import time
 
 try:
     from .admin_api import Fault, translation_limit
-    from .pricing import TokenEstimate, pricing_catalog
+    from .pricing import ASREstimate, LEGACY_STREAM_MODEL, TokenEstimate, money, pricing_catalog
 except ImportError:
     from admin_api import Fault, translation_limit
-    from pricing import TokenEstimate, pricing_catalog
+    from pricing import ASREstimate, LEGACY_STREAM_MODEL, TokenEstimate, money, pricing_catalog
 
 COST_NOTE = '按配置的输入/输出/音频/工具单价估算，未含缓存折扣/阶梯与供应商优惠，实际以账单为准。实际账单尚未接入；图片已计入输入 Token，不重复计费。'
 RATE_FIELDS = ('input_per_million', 'output_per_million', 'audio_per_minute', 'web_search_per_call')
@@ -107,11 +107,15 @@ def text_value(value, label, limit):
 
 
 def empty_metrics():
-    return {**{key: 0 for key in METRICS}, '_known': Decimal(0), '_token_estimate': TokenEstimate(), 'priced_calls': 0, 'unpriced_calls': 0}
+    return {**dict.fromkeys(METRICS, 0), '_known': Decimal(0),
+            '_token_estimate': TokenEstimate(), '_asr_estimate': ASREstimate(),
+            'priced_calls': 0, 'unpriced_calls': 0}
 
 
 def add_call(target, call, cost):
     target['_token_estimate'].add(call)
+    if call['kind'] == 'speech':
+        target['_asr_estimate'].add(call)
     target['requests'] += 1
     target['translation_requests'] += int(call['translation_chars'] > 0)
     target['translation_chars'] += call['translation_chars']
@@ -128,9 +132,16 @@ def add_call(target, call, cost):
 
 
 def finish_metrics(value):
-    token_estimate = value.pop('_token_estimate').result()
-    known = format(value.pop('_known').quantize(Decimal('.000001'), rounding=ROUND_HALF_UP), 'f')
-    return {**value, 'token_estimate': token_estimate, 'known_cost_cny': known,
+    token = value.pop('_token_estimate')
+    asr = value.pop('_asr_estimate')
+    unpriced = token.unpriced + asr.unpriced
+    total = money(token.amount + asr.amount)
+    official = {'amount_cny': total if not unpriced else None, 'known_amount_cny': total,
+                'complete': not unpriced, 'priced_calls': token.priced + asr.priced,
+                'unpriced_calls': unpriced, 'unknown_reasons': {**token.reasons, **asr.reasons}}
+    known = money(value.pop('_known'))
+    return {**value, 'token_estimate': token.result(), 'asr_estimate': asr.result(),
+            'official_estimate': official, 'known_cost_cny': known,
             'estimated_cost_cny': known if value['unpriced_calls'] == 0 else None,
             'pricing_coverage': value['priced_calls'] / value['requests'] if value['requests'] else 1,
             'pricing_complete': value['unpriced_calls'] == 0, 'currency': 'CNY'}
@@ -139,7 +150,11 @@ def finish_metrics(value):
 def call_cost(call, rates):
     if call['state'] != 'complete' or not call['model']:
         return None
-    rate = next((rate for rate in reversed(rates.get(call['model'], [])) if rate['effective_from'] <= call['created']), None)
+    models = [call['model']]
+    if call['kind'] == 'speech' and call['feature'] == 'alignment_stream' and call['model'] != LEGACY_STREAM_MODEL:
+        models.append(LEGACY_STREAM_MODEL)
+    rate = next((rate for model in models for rate in reversed(rates.get(model, ()))
+                 if rate['effective_from'] <= call['created']), None)
     if rate is None:
         return None
     units = (Decimal(call['input_tokens'] or 0) / 1000000,
@@ -317,7 +332,7 @@ class OperationsMixin:
             if grant['request_ratio'] is not None and grant['request_ratio'] >= .8: alert('request_quota', '本月请求额度已使用 80% 以上')
             if grant['translation_limit'] and stats['translation_chars'] >= grant['translation_limit'] * .8: alert('translation_quota', '本月专用字幕翻译字符额度已使用 80% 以上')
             if grant['audio_ratio'] is not None and grant['audio_ratio'] >= .8: alert('audio_quota', '本月音频额度已使用 80% 以上')
-            if stats['uncertain']: alert('uncertain', '存在待核对的上游调用')
+            if stats['uncertain']: alert('uncertain', '有上游调用未确认完成')
         # Keep usage even if a grant was removed directly from a legacy database.
         for (user_id, app), stats in by_user.items():
             people.append({'user_id': user_id, 'username': '(历史账号)', 'email': '', 'app': app, 'plan': 'unknown', 'status': 'missing_grant', 'enabled': False, 'grant_enabled': False, 'expires': None, 'request_limit': None, 'audio_limit': None, 'request_ratio': None, 'audio_ratio': None, **finish_metrics(stats)})

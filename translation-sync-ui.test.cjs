@@ -31,7 +31,7 @@ const {chromium}=require(process.env.PLAYWRIGHT_MODULE||'playwright');
   });
   await page.addScriptTag({content:fs.readFileSync('zhiyun-subtitles.user.js','utf8').replace(/const DEFAULT_ORIGIN=[^;]+;/,'const DEFAULT_ORIGIN="";')});await page.waitForTimeout(650);
   const ui=page.locator('#zy-subtitle-host');
-  assert.equal(await ui.locator('#sync-auto-indicator').isHidden(),true);assert.equal(await ui.locator('#auto-sync').isChecked(),false);assert.equal(await ui.locator('#direction').inputValue(),'auto-zh');
+  assert.equal(await ui.locator('#sync-auto-indicator').isHidden(),false);assert.equal(await ui.locator('#auto-sync').isChecked(),true);assert.equal(await ui.locator('#direction').inputValue(),'auto-zh');
   await ui.locator('#mode').selectOption('both');
   assert.equal(await ui.locator('#translation-status').textContent(),'翻译已开启');
   await page.waitForTimeout(200);
@@ -46,8 +46,10 @@ const {chromium}=require(process.env.PLAYWRIGHT_MODULE||'playwright');
   assert.equal(await page.evaluate(()=>requests.filter(r=>r.url.includes('responses')).at(-1).body.model),'doubao-seed-translation-250915');
   const economical=await page.evaluate(()=>requests.filter(r=>r.url.includes('responses')).at(-1).body);assert.equal(economical.input.length,1);assert.deepEqual(economical.input[0].content[0].translation_options,{target_language:'zh'});
   await ui.locator('#settings-tab-sync').click();await ui.locator('#auto-sync').check();assert.equal(await ui.locator('#auto-sync').isChecked(),true);
-  assert.equal(await ui.locator('#sync-auto-indicator').evaluate(e=>e.hidden),false);assert.match(await ui.locator('#sync-auto-indicator').getAttribute('title'),/5 分钟/);
-  await ui.locator('#sync-interval').selectOption('120');assert.match(await ui.locator('#sync-auto-indicator').getAttribute('aria-label'),/2 分钟/);
+  await page.evaluate(()=>playing=true);
+  await page.waitForFunction(()=>document.querySelector('#zy-subtitle-host').shadowRoot.getElementById('sync-auto-indicator').title.includes('20 分钟'));
+  await page.evaluate(()=>playing=false);
+  assert.match(await ui.locator('#auto-sync').evaluate(e=>e.closest('label').textContent),/20 分钟/);
   await ui.locator('#auto-sync').uncheck();assert.equal(await ui.locator('#sync-auto-indicator').isHidden(),true);await ui.locator('#auto-sync').check();
 
   await ui.locator('#settings-close').click();assert.equal(await ui.locator('#sync-auto-indicator').isVisible(),true);await ui.locator('#panel').screenshot({path:'.test-media/sync-timer-preview.png'});await ui.locator('#sync-toggle').click();await page.waitForTimeout(100);assert.match(await ui.locator('#align-status').textContent(),/无法自动播放/);assert.equal(await page.evaluate(()=>requests.filter(r=>r.url.endsWith('submit')).length),0);await page.evaluate(()=>rejectPlay=false);await ui.locator('#sync-toggle').click();await page.waitForFunction(()=>!!window.releaseQuery);assert.equal(await page.evaluate(()=>playing),true);assert.equal(await page.evaluate(()=>playCalls),2);
@@ -58,14 +60,24 @@ const {chromium}=require(process.env.PLAYWRIGHT_MODULE||'playwright');
   assert.match(await ui.locator('#sync-status').textContent(),/手动模式/);
   assert.equal(await page.evaluate(()=>saved['subtitle-sync:'+JSON.stringify([null,null,null])].manual),true);
   await page.waitForTimeout(200);assert.equal(await ui.locator('#offset').inputValue(),'5');
-  // Drive the existing playback tick with a mock clock; the periodic error must remove the main-panel clock.
+  // Drive the existing playback tick to the exact 20-minute boundary.
   await ui.locator('#mode').selectOption('original');await ui.locator('#settings-open').click();await ui.locator('#settings-tab-sync').click();await ui.locator('#auto-sync').check();await ui.locator('#settings-close').click();
-  await page.evaluate(()=>{playing=true;document.querySelector('video').captureStream=()=>{throw Error('mock periodic audio failure');};const tick=intervalCallbacks.find(fn=>String(fn).includes('tick();updateEditHandles'));if(!tick)throw Error('Missing existing playback timer');for(let i=0;i<125;i++){videoTime=12+i;tick();}});
+  await page.evaluate(()=>{
+    playing=true;window.captureAttempts=0;
+    document.querySelector('video').captureStream=()=>{captureAttempts++;throw Error('mock periodic audio failure');};
+    const tick=intervalCallbacks.find(fn=>String(fn).includes('tick();updateEditHandles'));
+    if(!tick)throw Error('Missing existing playback timer');
+    for(let elapsed=0;elapsed<1200;elapsed++){videoTime=12+elapsed;tick();}
+  });
+  assert.equal(await page.evaluate(()=>captureAttempts),0,'no calibration before 20 minutes');
+  await page.evaluate(()=>videoTime=1212);
   await page.waitForFunction(()=>document.querySelector('#zy-subtitle-host').shadowRoot.getElementById('sync-status').textContent.includes('遇到错误'));
-  assert.equal(await ui.locator('#auto-sync').isChecked(),false);assert.equal(await ui.locator('#sync-auto-indicator').isHidden(),true);
-  // Route changes must clear the prior course's scheduled indicator.
-  await ui.locator('#settings-open').click();await ui.locator('#auto-sync').check();await ui.locator('#settings-close').click();assert.equal(await ui.locator('#sync-auto-indicator').isVisible(),true);
-  await page.evaluate(()=>location.hash='#/replay?course_id=next');await page.waitForFunction(()=>document.querySelector('#zy-subtitle-host').shadowRoot.getElementById('auto-sync').checked===false);assert.equal(await ui.locator('#sync-auto-indicator').isHidden(),true);
+  assert.equal(await page.evaluate(()=>captureAttempts),1);
+  assert.equal(await ui.locator('#auto-sync').isChecked(),true);
+  await ui.locator('#sync-auto-indicator[data-state="paused"]').waitFor({state:'visible'});
+  await page.evaluate(()=>location.hash='#/replay?course_id=next');
+  await ui.locator('#sync-auto-indicator[data-state="waiting"]').waitFor({state:'visible'});
+  assert.equal(await ui.locator('#auto-sync').isChecked(),true);
   assert.deepEqual(errors,[]);
   console.log('Translation context, timer visibility/interval/off/manual/error/course reset and late ASR takeover passed (mock services only).');
  } finally {await browser.close();}

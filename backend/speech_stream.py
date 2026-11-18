@@ -387,10 +387,9 @@ class SpeechStreams:
         except Exception as error:
             self._end(session, 'error', error)
 
-    def _open(self, session):
+    def _open(self, session, api_key, resource):
         upstream = None
         try:
-            api_key, resource = configuration()
             upstream = self.connector({'X-Api-Key': api_key, 'X-Api-Resource-Id': resource,
                                        'X-Api-Request-Id': session['id'], 'X-Api-Connect-Id': str(uuid.uuid4()), 'X-Api-Sequence': '-1'})
             with session['lock']:
@@ -468,7 +467,8 @@ class SpeechStreams:
                     return 200, {}, {'id': key, 'state': 'cancelled', 'revision': 0, 'result': {}}
                 raise Fault(409, '原流式语音会话已结束或服务已更新；不会重复提交，请手动开始新同步。', 'speech_stream_interrupted')
             if action == 'create' and not session:
-                if not self.configured():
+                api_key, resource = configuration()
+                if not api_key:
                     raise Fault(503, '尚未配置可用的流式语音服务。', 'speech_stream_unavailable')
                 if not self.available():
                     retry = max(1, int(self.unavailable_until - time.monotonic()) + 1)
@@ -479,7 +479,7 @@ class SpeechStreams:
                     raise Fault(429, '请等待当前语音同步完成。', 'concurrency_limit', 5)
                 self.gateway.throttle('speech-stream-create:' + str(user), 12)
                 call = self.gateway.reserve(user, app, 'speech', 0, feature='speech')
-                self.gateway.record_call_meta(call, 'volc.seedasr.sauc', 'alignment_stream', 0)
+                self.gateway.record_call_meta(call, resource, 'alignment_stream', 0)
                 session = {'id': key, 'user': user, 'app': app, 'call': call, 'created': now,
                            'state': 'connecting', 'revision': 0, 'result': {'text': '', 'utterances': []},
                            'bytes': 0, 'chunks': {}, 'next_sequence': 0, 'socket': None,
@@ -501,7 +501,7 @@ class SpeechStreams:
                 raise Fault(404, '未找到流式语音会话。')
         if action == 'create':
             if opening:
-                self._open(session)
+                self._open(session, api_key, resource)
             else:
                 # Bound waiting for this session only, never the whole registry.
                 session['ready'].wait(10)

@@ -58,25 +58,24 @@ test('anchors reject malformed and time reversing matches, support repeated cali
   assert.equal(addSyncAnchor(anchors,NaN,1),null);
   assert.deepEqual(addSyncAnchor(anchors,100.5,5),[{videoTime:100.5,offset:5},{videoTime:200,offset:0}]);
 });
-test('periodic calibration is opt in, ignores paused time and seeks, manual stop persists until enable',()=>{
+test('periodic calibration runs every 20 playback minutes and ignores paused time and seeks',()=>{
   const schedule=createSyncSchedule();
-  for(let time=0;time<400;time++) assert.equal(schedule.advance(time,true,120),false);
-  schedule.enable();assert.equal(schedule.advance(0,true,120),false);
-  for(let time=1;time<120;time++) assert.equal(schedule.advance(time,true,120),false);
-  assert.equal(schedule.advance(120,true,120),true);
-  assert.equal(schedule.advance(900,true,120),false);assert.equal(schedule.elapsed,0);
-  for(let time=901;time<1100;time++) assert.equal(schedule.advance(time,false,120),false);
+  schedule.enable();assert.equal(schedule.advance(0,true),false);
+  for(let time=1;time<2400;time++) assert.equal(schedule.advance(time,true),time===1200);
+  assert.equal(schedule.advance(2400,true),true);
+  assert.equal(schedule.advance(3500,true),false);assert.equal(schedule.elapsed,0);
+  for(let time=3501;time<=3600;time++) assert.equal(schedule.advance(time,false),false);
   assert.equal(schedule.elapsed,0);
-  schedule.stop();for(let time=1100;time<1400;time++) assert.equal(schedule.advance(time,true,120),false);
+  schedule.stop();for(let time=3601;time<=4801;time++) assert.equal(schedule.advance(time,true),false);
   assert.equal(schedule.enabled,false);schedule.enable();assert.equal(schedule.enabled,true);assert.equal(schedule.elapsed,0);
 });
 test('in flight calibration and buffering cannot immediately trigger a second paid job',()=>{
   const s=createSyncSchedule();s.enable();
-  for(let time=0;time<=119;time++) s.advance(time,true,120);
-  assert.equal(s.advance(120,true,120,true),false);
-  assert.equal(s.advance(121,false,120),false);
-  assert.equal(s.advance(122,true,120),true);
-  for(let time=123;time<=130;time++) assert.equal(s.advance(time,true,120,true),false);
+  for(let time=0;time<=1199;time++) s.advance(time,true);
+  assert.equal(s.advance(1200,true,true),false);
+  assert.equal(s.advance(1201,false),false);
+  assert.equal(s.advance(1202,true),true);
+  for(let time=1203;time<=1210;time++) assert.equal(s.advance(time,true,true),false);
   assert.equal(s.elapsed,0);
 });
 test('prefetch covers one minute, twelve cues and scales with playback speed',()=>{
