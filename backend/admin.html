@@ -11,108 +11,159 @@
 <div id="stats" class="stats"></div>
 <nav class="workspace-tabs" aria-label="后台页面"><button data-tab="analytics" id="analytics-tab" hidden>数据仪表盘</button><button data-tab="operations" id="operations-tab" hidden>额度与费用</button><button data-tab="users" id="users-tab" hidden>用户与额度</button><button data-tab="calls">调用日志</button><button data-tab="sessions">登录与活动</button><button data-tab="prompts" id="prompts-tab" hidden>官方提示词</button><button data-tab="actions" id="actions-tab" hidden>管理记录</button></nav>
 <section id="analytics-panel" class="tab-panel analytics" hidden aria-label="数据仪表盘">
-  <div class="analytics-toolbar"><div><h2>统计明细</h2></div><div class="analytics-controls"><div class="range-buttons" role="group" aria-label="统计时间范围"><button type="button" data-range="today" aria-pressed="false">今天</button><button type="button" data-range="7d" aria-pressed="true">近 7 天</button><button type="button" data-range="month" aria-pressed="false">本月</button><button type="button" data-range="custom" aria-pressed="false">自定义</button></div><button id="analytics-refresh" type="button" aria-label="刷新仪表盘">↻ 刷新</button></div></div>
+  <div class="analytics-toolbar"><div><h2>统计趋势</h2></div><div class="analytics-controls"><div class="range-buttons" role="group" aria-label="统计时间范围"><button type="button" data-range="today" aria-pressed="false">今天</button><button type="button" data-range="7d" aria-pressed="true">近 7 天</button><button type="button" data-range="month" aria-pressed="false">本月</button><button type="button" data-range="custom" aria-pressed="false">自定义</button></div><button id="analytics-refresh" type="button" aria-label="刷新仪表盘">↻ 刷新</button></div></div>
   <form id="analytics-filter" class="analytics-date-filter" hidden><label>开始日期<input id="analytics-start" type="date" required></label><span aria-hidden="true">—</span><label>结束日期<input id="analytics-end" type="date" required></label><button type="submit" class="primary">应用日期</button></form>
   <div class="analytics-meta"><span id="analytics-range-label"></span><span id="analytics-updated">手动刷新 · 北京时间</span></div>
   <p id="analytics-status" class="analytics-status" role="status" aria-live="polite">正在获取统计数据…</p>
   <div id="analytics-content" hidden>
     <div id="analytics-stats" class="analytics-stats"></div>
     <div class="analytics-secondary"><span id="analytics-token-detail"></span><span id="analytics-cost-detail"></span></div>
-    <nav class="analytics-jump" aria-label="统计分区">
-      <a href="#analytics-accounts-title" data-family="accounts">账号与登录</a>
-      <a href="#analytics-token-title" data-family="usage">模型用量</a>
-      <a href="#analytics-fee-title" data-family="cost">参考费用</a>
-      <a href="#analytics-watch-title" data-family="study">学习活动</a>
-      <a href="#analytics-user-title" data-family="accounts">用户明细</a>
-    </nav>
+    <p id="analytics-collection-status" class="analytics-collection-status" role="status" hidden></p>
     <div class="analytics-tables">
-      <section class="analytics-card analytics-daily" data-family="accounts" aria-labelledby="analytics-accounts-title">
-        <div class="analytics-card-title"><div><h3 id="analytics-accounts-title">账号与登录</h3><p>账号总数按授权快照统计，今天显示当前值。登录账号按当天去重。</p></div></div>
+      <div class="analytics-chart-grid">
+      <section data-chart-default="login_users" class="analytics-card analytics-chart-card analytics-daily" data-family="accounts" aria-labelledby="analytics-accounts-title">
+        <div class="analytics-chart-heading"><h3 id="analytics-accounts-title">账号与登录</h3><select data-chart-metric aria-label="账号与登录指标"></select></div>
+        <div class="analytics-chart" data-chart aria-labelledby="analytics-accounts-title"></div>
+        <details class="analytics-chart-details">
+          <summary>查看明细</summary>
+          <p class="analytics-footnote">账号总数按授权快照统计，今天显示当前值。登录账号按当天去重。</p>
         <div class="table-wrap" tabindex="0" role="region" aria-labelledby="analytics-accounts-title">
           <table><thead><tr><th scope="col">日期</th><th scope="col" data-field="account_total" data-missing="无快照">账号总数</th><th scope="col" data-field="login_users">登录账号</th><th scope="col" data-field="login_sessions">登录会话</th><th scope="col" data-field="registrations">自助注册</th></tr></thead><tbody id="analytics-account-rows"></tbody></table>
         </div>
         <p id="analytics-registration-note" class="analytics-footnote"></p>
+        </details>
       </section>
-      <section class="analytics-card analytics-daily" data-family="usage" aria-labelledby="analytics-token-title">
-        <div class="analytics-card-title"><div><h3 id="analytics-token-title">Token 用量</h3><p>方舟调用数包含待核对请求。Token 数按已确认用量汇总。</p></div></div>
+      <section data-chart-default="tokens" class="analytics-card analytics-chart-card analytics-daily" data-family="usage" aria-labelledby="analytics-token-title">
+        <div class="analytics-chart-heading"><h3 id="analytics-token-title">Token 用量</h3><select data-chart-metric aria-label="Token 用量指标"></select></div>
+        <div class="analytics-chart" data-chart aria-labelledby="analytics-token-title"></div>
+        <details class="analytics-chart-details">
+          <summary>查看明细</summary>
+          <p class="analytics-footnote">方舟调用数包含待核对请求。Token 数按已确认用量汇总。</p>
         <div class="table-wrap" tabindex="0" role="region" aria-labelledby="analytics-token-title">
-          <table><thead><tr><th scope="col">日期</th><th scope="col" data-field="token_requests">方舟调用</th><th scope="col" data-field="input_tokens">输入</th><th scope="col" data-field="output_tokens">输出</th><th scope="col" data-field="tokens">总量</th></tr></thead><tbody id="analytics-token-rows"></tbody></table>
+          <table><thead><tr><th scope="col">日期</th><th scope="col" data-field="input_tokens">输入</th><th scope="col" data-field="output_tokens">输出</th><th scope="col" data-field="tokens">总量</th></tr></thead><tbody id="analytics-token-rows"></tbody></table>
         </div>
+        </details>
       </section>
-      <section class="analytics-card analytics-daily" data-family="usage" aria-labelledby="analytics-ai-title">
-        <div class="analytics-card-title"><div><h3 id="analytics-ai-title">AI 问答</h3><p>模型调用取网关已完成记录。完整回答取扩展上报。</p></div></div>
+      <section data-chart-default="requests" class="analytics-card analytics-chart-card analytics-daily" data-family="usage" aria-labelledby="analytics-requests-title">
+        <div class="analytics-chart-heading"><h3 id="analytics-requests-title">模型调用</h3><select data-chart-metric aria-label="模型调用指标"></select></div>
+        <div class="analytics-chart" data-chart aria-labelledby="analytics-requests-title"></div>
+        <details class="analytics-chart-details">
+          <summary>查看明细</summary>
+          <p class="analytics-footnote">所有已登记的模型与语音调用，包含待核对记录。</p>
+        <div class="table-wrap" tabindex="0" role="region" aria-labelledby="analytics-requests-title">
+          <table><thead><tr><th scope="col">日期</th><th scope="col" data-field="requests">全部调用</th><th scope="col" data-field="token_requests">方舟调用</th></tr></thead><tbody id="analytics-request-rows"></tbody></table>
+        </div>
+        </details>
+      </section>
+      <section data-chart-default="completed_ai_calls" class="analytics-card analytics-chart-card analytics-daily" data-family="usage" aria-labelledby="analytics-ai-title">
+        <div class="analytics-chart-heading"><h3 id="analytics-ai-title">AI 问答</h3><select data-chart-metric aria-label="AI 问答指标"></select></div>
+        <div class="analytics-chart" data-chart aria-labelledby="analytics-ai-title"></div>
+        <details class="analytics-chart-details">
+          <summary>查看明细</summary>
+          <p class="analytics-footnote">模型调用取网关已完成记录。完整回答取扩展上报。</p>
         <div class="table-wrap" tabindex="0" role="region" aria-labelledby="analytics-ai-title">
           <table><thead><tr><th scope="col">日期</th><th scope="col" data-field="completed_ai_calls">完成调用</th><th scope="col" data-field="completed_ai_users">调用账号</th><th scope="col" data-field="ai_uses" data-source="learning">完整回答</th><th scope="col" data-field="ai_users" data-source="learning">回答账号</th></tr></thead><tbody id="analytics-ai-rows"></tbody></table>
         </div>
+        </details>
       </section>
-      <section class="analytics-card analytics-daily" data-family="usage" aria-labelledby="analytics-speech-title">
-        <div class="analytics-card-title"><div><h3 id="analytics-speech-title">语音校准</h3><p>网关已完成的语音识别调用和对应音频时长。</p></div></div>
+      <section data-chart-default="speech_uses" class="analytics-card analytics-chart-card analytics-daily" data-family="usage" aria-labelledby="analytics-speech-title">
+        <div class="analytics-chart-heading"><h3 id="analytics-speech-title">语音校准</h3><select data-chart-metric aria-label="语音校准指标"></select></div>
+        <div class="analytics-chart" data-chart aria-labelledby="analytics-speech-title"></div>
+        <details class="analytics-chart-details">
+          <summary>查看明细</summary>
+          <p class="analytics-footnote">网关已完成的语音识别调用和对应音频时长。</p>
         <div class="table-wrap" tabindex="0" role="region" aria-labelledby="analytics-speech-title">
           <table><thead><tr><th scope="col">日期</th><th scope="col" data-field="speech_uses">完成调用</th><th scope="col" data-field="speech_seconds" data-format="duration">音频时长</th></tr></thead><tbody id="analytics-speech-rows"></tbody></table>
         </div>
+        </details>
       </section>
-      <section class="analytics-card analytics-daily" data-family="usage" aria-labelledby="analytics-language-title">
-        <div class="analytics-card-title"><div><h3 id="analytics-language-title">字幕与翻译</h3><p>完成翻译调用包含预取。字幕和翻译展示按扩展会话首展计数。</p></div></div>
+      <section data-chart-default="completed_translation_calls" class="analytics-card analytics-chart-card analytics-daily" data-family="usage" aria-labelledby="analytics-language-title">
+        <div class="analytics-chart-heading"><h3 id="analytics-language-title">字幕与翻译</h3><select data-chart-metric aria-label="字幕与翻译指标"></select></div>
+        <div class="analytics-chart" data-chart aria-labelledby="analytics-language-title"></div>
+        <details class="analytics-chart-details">
+          <summary>查看明细</summary>
+          <p class="analytics-footnote">完成翻译调用包含预取。字幕和翻译展示按扩展会话首展计数。</p>
         <div class="table-wrap" tabindex="0" role="region" aria-labelledby="analytics-language-title">
           <table><thead><tr><th scope="col">日期</th><th scope="col" data-field="completed_translation_calls">完成翻译调用</th><th scope="col" data-field="subtitle_uses" data-source="learning">字幕展示</th><th scope="col" data-field="translation_uses" data-source="learning">翻译展示</th></tr></thead><tbody id="analytics-language-rows"></tbody></table>
         </div>
+        </details>
       </section>
-      <section class="analytics-card analytics-daily" data-family="cost" aria-labelledby="analytics-fee-title">
-        <div class="analytics-card-title"><div><h3 id="analytics-fee-title">API 参考费用</h3><p>按官方 Token 费率估算。语音参考费用见「额度与费用」。</p></div></div>
+      <section data-chart-default="api_cost_cny" class="analytics-card analytics-chart-card analytics-daily" data-family="cost" aria-labelledby="analytics-fee-title">
+        <div class="analytics-chart-heading"><h3 id="analytics-fee-title">API 参考费用</h3><select data-chart-metric aria-label="API 参考费用指标"></select></div>
+        <div class="analytics-chart" data-chart aria-labelledby="analytics-fee-title"></div>
+        <details class="analytics-chart-details">
+          <summary>查看明细</summary>
+          <p class="analytics-footnote">按官方 Token 费率估算。语音参考费用见「额度与费用」。</p>
         <div class="table-wrap" tabindex="0" role="region" aria-labelledby="analytics-fee-title">
           <table><thead><tr><th scope="col">日期</th><th scope="col" data-field="api_cost_cny" data-format="fee">已计价金额（元）</th><th scope="col" data-field="unpriced_token_calls">待核对调用</th></tr></thead><tbody id="analytics-fee-rows"></tbody></table>
         </div>
+        </details>
       </section>
-      <section class="analytics-card analytics-daily" data-family="study" aria-labelledby="analytics-watch-title">
-        <div class="analytics-card-title"><div><h3 id="analytics-watch-title">观看课节与有效活动</h3><p>课节按用户和录像去重。有效时长合并同账号的重叠时段。</p></div></div>
+      <section data-chart-default="lessons" class="analytics-card analytics-chart-card analytics-daily" data-family="study" aria-labelledby="analytics-watch-title">
+        <div class="analytics-chart-heading"><h3 id="analytics-watch-title">观看课节与有效活动</h3><select data-chart-metric aria-label="观看课节与有效活动指标"></select></div>
+        <div class="analytics-chart" data-chart aria-labelledby="analytics-watch-title"></div>
+        <details class="analytics-chart-details">
+          <summary>查看明细</summary>
+          <p class="analytics-footnote">课节按用户和录像去重。有效时长合并同账号的重叠时段。</p>
         <dl id="analytics-learning-summary" class="analytics-learning-summary"></dl>
-        <p id="analytics-collection-status" class="analytics-collection-status" role="status" hidden></p>
         <div class="table-wrap" tabindex="0" role="region" aria-labelledby="analytics-watch-title">
           <table><thead><tr><th scope="col">日期</th><th scope="col" data-field="users" data-source="learning">活跃账号</th><th scope="col" data-field="lessons" data-source="learning">观看课节</th><th scope="col" data-field="effective_seconds" data-source="learning" data-format="duration">有效时长</th></tr></thead><tbody id="analytics-watch-rows"></tbody></table>
         </div>
+        </details>
       </section>
-      <section class="analytics-card analytics-daily" data-family="study" aria-labelledby="analytics-screenshot-title">
-        <div class="analytics-card-title"><div><h3 id="analytics-screenshot-title">截图</h3><p>扩展成功展示截图时计一次。</p></div></div>
+      <section data-chart-default="screenshot_uses" class="analytics-card analytics-chart-card analytics-daily" data-family="study" aria-labelledby="analytics-screenshot-title">
+        <div class="analytics-chart-heading"><h3 id="analytics-screenshot-title">截图</h3></div>
+        <div class="analytics-chart" data-chart aria-labelledby="analytics-screenshot-title"></div>
+        <details class="analytics-chart-details">
+          <summary>查看明细</summary>
+          <p class="analytics-footnote">扩展成功展示截图时计一次。</p>
         <div class="table-wrap" tabindex="0" role="region" aria-labelledby="analytics-screenshot-title">
           <table><thead><tr><th scope="col">日期</th><th scope="col" data-field="screenshot_uses" data-source="learning">成功截图</th></tr></thead><tbody id="analytics-screenshot-rows"></tbody></table>
         </div>
+        </details>
       </section>
-      <section class="analytics-card" data-family="study" aria-labelledby="analytics-courses-title">
-        <div class="analytics-card-title"><div><h3 id="analytics-courses-title">热门课节</h3><p>按有效观看人数取前 5 个课节。</p></div></div>
+      <section class="analytics-card analytics-chart-card" data-family="study" aria-labelledby="analytics-courses-title">
+        <div class="analytics-chart-heading"><h3 id="analytics-courses-title">热门课节</h3></div>
+        <div class="analytics-chart analytics-ranking" id="analytics-course-chart" aria-labelledby="analytics-courses-title"></div>
+        <details class="analytics-chart-details">
+          <summary>查看明细</summary>
+          <p class="analytics-footnote">按有效观看人数取前 5 个课节。</p>
         <div class="table-wrap" tabindex="0" role="region" aria-labelledby="analytics-courses-title">
           <table><thead><tr><th scope="col">课节</th><th scope="col">观看人数</th><th scope="col">观看时长</th></tr></thead><tbody id="analytics-courses"></tbody></table>
         </div>
+        </details>
       </section>
-      <section class="analytics-card" data-family="study" aria-labelledby="analytics-features-title">
-        <div class="analytics-card-title"><div><h3 id="analytics-features-title">扩展功能使用</h3><p>覆盖率为功能使用人数占同期活跃账号的比例。</p></div></div>
+      <section class="analytics-card analytics-chart-card" data-family="study" aria-labelledby="analytics-features-title">
+        <div class="analytics-chart-heading"><h3 id="analytics-features-title">扩展功能使用</h3></div>
+        <div class="analytics-chart analytics-ranking" id="analytics-feature-chart" aria-labelledby="analytics-features-title"></div>
+        <details class="analytics-chart-details">
+          <summary>查看明细</summary>
+          <p class="analytics-footnote">覆盖率为功能使用人数占同期活跃账号的比例。</p>
         <div class="table-wrap" tabindex="0" role="region" aria-labelledby="analytics-features-title">
           <table><thead><tr><th scope="col">功能</th><th scope="col">使用账号</th><th scope="col">成功次数</th><th scope="col">覆盖率</th></tr></thead><tbody id="analytics-features"></tbody></table>
         </div>
+        </details>
       </section>
-      <section class="analytics-card" data-family="study" aria-labelledby="analytics-retention-title">
-        <div class="analytics-card-title"><div><h3 id="analytics-retention-title">用户回访</h3><p>按首次观测日期统计。回访率使用已结束观察期的批次。</p></div></div>
-        <div id="analytics-retention" class="analytics-retention"></div>
+      <section class="analytics-card analytics-chart-card" data-family="study" aria-labelledby="analytics-retention-title">
+        <div class="analytics-chart-heading"><h3 id="analytics-retention-title">用户回访</h3></div>
+        <div class="analytics-chart analytics-ranking" id="analytics-retention" aria-labelledby="analytics-retention-title"></div>
+        <details class="analytics-chart-details">
+          <summary>查看明细</summary>
+          <p class="analytics-footnote">按首次观测日期统计。回访率使用已结束观察期的批次。</p>
         <div class="table-wrap" tabindex="0" role="region" aria-labelledby="analytics-retention-title">
           <table><thead><tr><th scope="col">首次观测日</th><th scope="col">人数</th><th scope="col">次日</th><th scope="col">7 日内</th><th scope="col">第 7 日</th></tr></thead><tbody id="analytics-cohorts"></tbody></table>
         </div>
+        </details>
       </section>
-      <section class="analytics-card analytics-user-card" data-family="accounts" aria-labelledby="analytics-user-title">
-        <div class="analytics-card-title"><div><h3 id="analytics-user-title">用户使用明细 <span id="analytics-user-count" class="small-badge"></span></h3><p>最近活动取所选日期内记录的登录、调用和扩展事件。</p></div>
+      </div>
+      <details class="analytics-card analytics-user-card" data-family="accounts" aria-labelledby="analytics-user-title">
+        <summary id="analytics-user-title">用户使用明细 <span id="analytics-user-count" class="small-badge"></span></summary>
+        <div class="analytics-card-title"><p>最近活动取所选日期内记录的登录、调用和扩展事件。</p>
           <div class="analytics-user-controls"><label class="visually-labeled">搜索用户<input id="analytics-user-search" type="search" placeholder="搜索用户名" autocomplete="off"></label><label class="visually-labeled">用户排序<select id="analytics-user-sort"><option value="last_seen">最近活动</option><option value="lessons">观看课节最多</option><option value="effective_seconds">有效时长最多</option><option value="total_tokens">Token 最多</option><option value="completed_ai_calls">AI 调用最多</option><option value="ai_uses">完整回答最多</option></select></label></div>
         </div>
         <div class="table-wrap" tabindex="0" role="region" aria-labelledby="analytics-user-title">
           <table><thead><tr><th scope="col">用户</th><th scope="col">最近活动</th><th scope="col">观看课节</th><th scope="col">有效时长</th><th scope="col">Token</th><th scope="col">AI 调用</th><th scope="col">完整回答</th></tr></thead><tbody id="analytics-users"></tbody></table>
         </div>
-      </section>
-      <details id="analytics-trend" class="analytics-card analytics-trend">
-        <summary>查看趋势图</summary>
-        <div class="analytics-card-title"><label class="visually-labeled">查看指标<select id="analytics-metric">
-          <optgroup label="模型用量"><option value="tokens">Token 总量</option><option value="input_tokens">输入 Token</option><option value="output_tokens">输出 Token</option><option value="token_requests">方舟调用次数</option><option value="requests">全部模型调用次数</option><option value="completed_ai_calls">AI 完成调用</option><option value="completed_ai_users">AI 调用账号</option><option value="speech_uses">语音校准</option><option value="completed_translation_calls">翻译完成调用</option></optgroup>
-          <optgroup label="账号"><option value="account_total">应用账号总数</option><option value="login_sessions">登录会话次数</option><option value="login_users">登录账号数</option><option value="registrations">自助注册人数</option></optgroup>
-          <optgroup label="学习活动"><option value="users">活跃账号</option><option value="lessons">观看课节</option><option value="effective_seconds">有效使用时长</option><option value="ai_uses">完整回答</option><option value="ai_users">完整回答账号</option><option value="screenshot_uses">成功截图</option><option value="subtitle_uses">字幕展示</option><option value="translation_uses">翻译展示</option></optgroup>
-          <optgroup label="参考费用"><option value="api_cost_cny">API 参考费用</option></optgroup>
-        </select></label></div>
-        <div id="analytics-chart" class="analytics-chart"></div>
       </details>
     </div>
     <aside class="analytics-coverage"><span class="coverage-icon" aria-hidden="true">i</span><div><strong id="analytics-coverage-title">关于这些数字</strong><p id="analytics-coverage-note"></p><details><summary>统计口径</summary><p>观看课节按用户 × 课堂录像去重，累计有效播放达到 60 秒计入；覆盖课节数另计。有效时长按账号合并重叠区间，暂停、后台静置不计，异常离开可能漏记末段。字幕和翻译按会话内首次实际展示计次，截图按成功展示、问答按完整回答计次。Token 来自服务端 usage，待核对请求可能仍产生费用。学习行为仅覆盖已登录且启用统计的新版扩展，不代表全站真实总量。</p></details></div></aside>

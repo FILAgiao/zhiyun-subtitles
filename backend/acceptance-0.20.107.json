@@ -1,7 +1,7 @@
 {
   "version": "0.20.107",
-  "backup": "/opt/zhiyun-gateway/backend/.rollback-release-0.20.107-20261118T074901Z",
-  "database_backup": "/data/gateway-before-0.20.107-20261118T074901Z.sqlite3",
+  "backup": "/opt/zhiyun-gateway/backend/.rollback-release-0.20.107-20261118T101213Z",
+  "database_backup": "/data/gateway-before-0.20.107-20261118T101213Z.sqlite3",
   "changed": [
     "analytics_api.py",
     "pricing.py",
@@ -61,16 +61,16 @@
       "sha256": "6304518dae999efbedc497d42b962c32cab9754c3dbb30e428e019bb82d6b3ac"
     },
     "admin.html": {
-      "bytes": 34737,
-      "sha256": "c9ec5159cce04bd02fe8f2bf8508ca937123bf81ca77340fba2388f7bd8cba27"
+      "bytes": 37216,
+      "sha256": "064dd43baccdcf0c2c6f9a1347360bbdab5e1f37682b7a0f44032751d19163a4"
     },
     "admin.js": {
-      "bytes": 62619,
-      "sha256": "895871ffd4ccd45305e1e75b8101867153621e051ad568403cf8f4bb4963f3db"
+      "bytes": 64968,
+      "sha256": "a6af46c7199c716e9f4c82bfb5a78c6433f42fb9f8cf65511c14aebac1ac7ee7"
     },
     "admin.css": {
-      "bytes": 29224,
-      "sha256": "c434b10ff3d906b08524fe29320ae3edbc7d2813a61ed52f3000435dad035152"
+      "bytes": 31160,
+      "sha256": "6002a86656ebe64187109e4da75edcc34fa6be4e5a44aa9ece65b7bc2b772462"
     },
     "privacy.html": {
       "bytes": 7366,
@@ -122,7 +122,7 @@
     },
     "extension.zip": {
       "bytes": 2103553,
-      "sha256": "6f3aa1143a7c3857418ad44606771033e1f39b0dbe24e5cc8976bd96c8f16dea"
+      "sha256": "9ba3eb1d6c1bc348180e4dc930dea0dc29a15ce7127681aeac5cb656e63787e6"
     },
     "landing/brand-logo.png": {
       "bytes": 16647,

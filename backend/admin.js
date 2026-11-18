@@ -368,11 +368,11 @@ function clearAnalytics(){
  analyticsLoad++;analyticsData=null;
  for(const id of ['analytics-tab','analytics-panel','analytics-content'])$(id).hidden=true;
  $('analytics-refresh').disabled=false;$('analytics-status').textContent='';$('analytics-user-search').value='';
- for(const id of ['analytics-stats','analytics-chart','analytics-collection-status','analytics-retention',
+ for(const id of ['analytics-stats','analytics-collection-status',
   'analytics-coverage-title','analytics-coverage-note','analytics-token-detail','analytics-learning-summary',
   'analytics-cost-detail','analytics-registration-note',
   'analytics-updated','analytics-user-count','official-pricing'])$(id).replaceChildren();
- for(const node of document.querySelectorAll('.analytics-tables tbody,.analytics-tables caption'))node.replaceChildren();
+ for(const node of document.querySelectorAll('.analytics-tables tbody,.analytics-tables caption,.analytics-chart-grid .analytics-chart'))node.replaceChildren();
 }
 function setAnalyticsRange(value,load=true){analyticsRange=value;for(const button of document.querySelectorAll('[data-range]'))button.setAttribute('aria-pressed',String(button.dataset.range===value));$('analytics-filter').hidden=value!=='custom';if(value!=='custom'){const end=beijingDay();$('analytics-end').value=end;$('analytics-start').value=value==='today'?end:value==='month'?end.slice(0,8)+'01':beijingDay(-6);if(load)void loadAnalytics();}}
 function analyticsMessage(text,state='loading'){$('analytics-status').hidden=false;$('analytics-status').dataset.state=state;$('analytics-status').textContent=text;}
@@ -394,7 +394,7 @@ function renderAnalytics(){
  const collectionStatus=$('analytics-collection-status');
  collectionStatus.hidden=!c.partial&&!!c.started_at;
  collectionStatus.textContent=!c.started_at
-  ? '尚未收到客户端学习事件。请使用支持学习统计的扩展登录，在前台连续播放课节约两分钟，再刷新本页。'
+  ? '尚未收到客户端学习事件。课节、截图、有效时长和回访在扩展上报后显示。'
   : '学习行为从 '+date(c.started_at)+' 开始记录。所选日期中，采集开始后的事件才有统计。';
  $('analytics-stats').replaceChildren();
  addAnalyticsStat('应用账号总数',analyticsNum(s.registered_users),'当前有应用授权记录的账号','人','accounts');
@@ -423,7 +423,7 @@ function renderAnalytics(){
  $('analytics-registration-note').textContent=c.registrations_started_at?' 自助注册自 '+date(c.registrations_started_at)+' 起计数。':' 自助注册尚无可用统计。';
  renderAnalyticsDaily(data.trend||[],c);
  renderAnalyticsCourses(c);renderAnalyticsFeatures(c);renderAnalyticsRetention(c);renderAnalyticsUsers();
- if($('analytics-trend').open)renderAnalyticsChart();
+ renderAnalyticsCharts();
 }
 function learningValue(value,coverage,format=analyticsNum){
  return analyticsKnown(value)?format(value):coverage.started_at?'无历史数据':'待上报';
@@ -489,55 +489,94 @@ function analyticsSvg(tag,attrs={},text){
  return node;
 }
 const axisCount=new Intl.NumberFormat('zh-CN',{notation:'compact',maximumFractionDigits:1});
-function renderAnalyticsChart(){
- const container=$('analytics-chart'),select=$('analytics-metric'),rows=analyticsData?.trend||[];
- const key=select.value,label=select.selectedOptions[0].textContent;
- const fees=key==='api_cost_cny',duration=key==='effective_seconds';
+function chartEmpty(container,text){
+ container.replaceChildren(el('p',text,'analytics-chart-empty'));
+}
+function renderAnalyticsCharts(){
+ for(const card of dailyChartCards)renderAnalyticsChart(card);
+}
+function renderAnalyticsChart(card){
+ const container=card.querySelector('[data-chart]'),select=card.querySelector('[data-chart-metric]');
+ const key=select?.value||card.dataset.chartDefault;
+ const metric=card.querySelector('th[data-field="'+key+'"]');
+ const label=metric.textContent,rows=analyticsData?.trend||[];
+ const fees=metric.dataset.format==='fee',duration=metric.dataset.format==='duration';
  const format=fees?v=>feeFormat.format(v):duration?analyticsDuration:analyticsNum;
  const values=rows.map(row=>analyticsKnown(row[key])?Number(row[key]):null);
  const available=values.filter(value=>value!==null);
  container.replaceChildren();
  if(!available.length&&!(fees&&rows.some(row=>row.unpriced_token_calls>0))){
-  container.append(el('p','所选日期暂无可用数据','analytics-empty'));
+  const message=metric.dataset.source==='learning'?learningValue(null,analyticsData?.coverage||{}):'所选日期暂无数据';
+  chartEmpty(container,message);
   return;
  }
- const width=Math.max(262,container.clientWidth),height=180,left=fees?72:56,right=10,top=12,bottom=28;
+ const width=Math.max(245,container.clientWidth),height=156,left=fees?63:duration?64:48,right=8,top=12,bottom=26;
  const base=height-bottom,peak=Math.max(0,...available);
  const feeAxis=new Intl.NumberFormat('zh-CN',{style:'currency',currency:'CNY',
   maximumFractionDigits:peak>=.03?2:peak>=.003?3:6});
  const steps=fees||duration?3:Math.min(3,Math.max(peak,1));
  const max=fees||duration?(peak||1):Math.max(steps,Math.ceil(peak/steps)*steps);
- const dayWidth=(width-left-right)/rows.length,barWidth=Math.min(32,dayWidth*.74);
- const center=i=>left+dayWidth*(i+.5);
- const positionY=v=>base-v/max*(base-top);
- const svg=analyticsSvg('svg',{viewBox:'0 0 '+width+' '+height,role:'group','aria-label':label+'每日柱状图'});
+ const dayWidth=(width-left-right)/rows.length,barWidth=Math.min(25,dayWidth*.72);
+ const center=index=>left+dayWidth*(index+.5);
+ const positionY=value=>base-value/max*(base-top);
+ const title=card.querySelector('h3').textContent;
+ const svg=analyticsSvg('svg',{viewBox:'0 0 '+width+' '+height,role:'group','aria-label':title+' · '+label+'每日柱状图'});
  for(let step=0;step<=steps;step++){
   const value=max*step/steps,y=positionY(value);
   const tick=fees?feeAxis.format(value):duration?analyticsDuration(value):axisCount.format(value);
   svg.append(analyticsSvg('line',{x1:left,y1:y,x2:width-right,y2:y,class:'chart-grid'}),
-             analyticsSvg('text',{x:left-7,y:y+3,'text-anchor':'end',class:'chart-label'},tick));
+             analyticsSvg('text',{x:left-6,y:y+3,'text-anchor':'end',class:'chart-label'},tick));
  }
- const readout=el('p',undefined,'analytics-chart-value');
- const tickEvery=Math.max(1,Math.ceil(rows.length/Math.max(3,Math.floor(width/92))));
- rows.forEach((row,i)=>{
-  if(i===rows.length-1||i%tickEvery===0&&i<rows.length-tickEvery){
-   svg.append(analyticsSvg('text',{x:center(i),y:height-7,'text-anchor':'middle',class:'chart-label'},row.date.slice(5)));
+ const readout=el('p',undefined,'analytics-chart-value'),bars=[];
+ const tickEvery=Math.max(1,Math.ceil(rows.length/Math.max(2,Math.floor((width-left-right)/46))));
+ rows.forEach((row,index)=>{
+  const first=index===0&&rows.length>1,last=index===rows.length-1&&rows.length>1;
+  if(rows.length===1||first||last||index%tickEvery===0&&index<rows.length-tickEvery){
+   const x=first?left:last?width-right:center(index);
+   svg.append(analyticsSvg('text',{x,y:height-8,'text-anchor':first?'start':last?'end':'middle',class:'chart-label'},row.date.slice(5)));
   }
-  const missingFees=fees?Number(row.unpriced_token_calls)||0:0,value=values[i];
+  const missingFees=fees?Number(row.unpriced_token_calls)||0:0,value=values[index];
   if(value===null&&!missingFees)return;
   const barHeight=value===null?4:Math.max(1,base-positionY(value));
   const barClass='chart-bar'+(missingFees?(value===null?' chart-unknown':' chart-partial'):'');
-  const pointLabel=row.date+' · '+label+' '+(value===null?'待核对':format(value))+
+  const pointLabel=row.date+' · '+(value===null?'金额待定':label+' '+format(value))+
    (missingFees?' · '+analyticsNum(missingFees)+' 次待核对':'');
-  const bar=analyticsSvg('rect',{x:center(i)-barWidth/2+.5,y:base-barHeight,
-   width:Math.max(1,barWidth-1),height:barHeight,rx:Math.min(barWidth/4,3),class:barClass,tabindex:0,
+  const bar=analyticsSvg('rect',{x:center(index)-barWidth/2,y:base-barHeight,
+   width:barWidth,height:barHeight,rx:Math.min(barWidth/4,3),class:barClass,tabindex:-1,
    role:'img','aria-label':pointLabel});
   bar.append(analyticsSvg('title',{},pointLabel));
   const show=()=>{readout.textContent=pointLabel;};
   for(const event of ['pointerenter','focus','click'])bar.addEventListener(event,show);
-  svg.append(bar);show();
+  svg.append(bar);bars.push(bar);show();
+ });
+ bars.at(-1)?.setAttribute('tabindex','0');
+ svg.addEventListener('keydown',event=>{
+  const index=bars.indexOf(event.target);
+  const next={ArrowLeft:index-1,ArrowRight:index+1,Home:0,End:bars.length-1}[event.key];
+  if(index<0||next===undefined)return;
+  event.preventDefault();
+  const target=bars[Math.max(0,Math.min(bars.length-1,next))];
+  svg.querySelector('[tabindex="0"]')?.setAttribute('tabindex','-1');
+  target.setAttribute('tabindex','0');target.focus();
  });
  container.append(svg,readout);
+}
+function renderAnalyticsRanking(container,entries,emptyText,format,limit){
+ if(!entries.length){chartEmpty(container,emptyText);return;}
+ const list=el('ul',undefined,'analytics-ranking-list');
+ const max=limit??Math.max(1,...entries.map(entry=>entry.value));
+ for(const {label,value} of entries){
+  const item=el('li'),heading=el('div'),text=analyticsKnown(value)?format(value):'观察中';
+  const name=el('span',label);name.title=label;
+  heading.append(name,el('strong',text));item.append(heading);
+  if(analyticsKnown(value)){
+   const meter=el('meter');meter.min=0;meter.max=max;meter.value=value;
+   meter.setAttribute('aria-label',label);meter.setAttribute('aria-valuetext',text);
+   item.append(meter);
+  }
+  list.append(item);
+ }
+ container.replaceChildren(list);
 }
 function renderAnalyticsCourses(coverage){
  const body=$('analytics-courses');
@@ -548,10 +587,15 @@ function renderAnalyticsCourses(coverage){
   td(row,item.title||'未命名课节');td(row,analyticsNum(item.users));td(row,analyticsDuration(item.watch_seconds));
   body.append(row);
  }
- empty(body,3,analyticsKnown(analyticsData.summary?.learning_lessons)?'暂无达到 60 秒的有效观看':learningValue(null,coverage));
+ const missing=analyticsKnown(analyticsData.summary?.learning_lessons)?'暂无达到 60 秒的有效观看':learningValue(null,coverage);
+ empty(body,3,missing);
+ renderAnalyticsRanking($('analytics-course-chart'),items.map(item=>({
+  label:item.title||'未命名课节',value:item.users
+ })),missing,value=>analyticsNum(value)+' 人');
 }
 function renderAnalyticsFeatures(coverage){
  const body=$('analytics-features'),active=analyticsData.summary?.active_users,items=analyticsData.features||[];
+ const entries=[];
  body.replaceChildren();
  if(items.some(item=>analyticsKnown(item.uses))){
   for(const [key,label] of [['subtitle','字幕'],['translation','翻译'],['screenshot','截图'],['ai','AI 问答']]){
@@ -560,22 +604,23 @@ function renderAnalyticsFeatures(coverage){
    td(row,label);td(row,learningValue(item.users,coverage));td(row,learningValue(item.uses,coverage));
    td(row,rate===null?'无活跃样本':analyticsPercent(rate));
    body.append(row);
+   if(analyticsKnown(item.uses))entries.push({label,value:Number(item.uses)});
   }
  }
- empty(body,4,learningValue(null,coverage));
+ const missing=learningValue(null,coverage);
+ empty(body,4,missing);
+ renderAnalyticsRanking($('analytics-feature-chart'),entries,missing,value=>analyticsNum(value)+' 次');
 }
 function renderAnalyticsRetention(coverage){
- const data=analyticsData.retention||{},cohorts=data.cohorts||[],box=$('analytics-retention'),body=$('analytics-cohorts');
- box.replaceChildren();body.replaceChildren();
- if(cohorts.length){
-  for(const [key,label,eligible] of [['d1','次日回访','d1_eligible_users'],
-    ['within7','7 日内回访','d7_eligible_users'],['d7','第 7 日回访','d7_eligible_users']]){
-   const value=data[key+'_rate'],card=el('div',undefined,'retention-card'),known=analyticsKnown(value);
-   card.append(el('small',label),el('strong',known?analyticsPercent(value):'观察中',known?'':'pending'),
-     el('p','成熟样本 '+analyticsNum(data[eligible])+' 人'));
-   box.append(card);
-  }
- }
+ const data=analyticsData.retention||{},cohorts=data.cohorts||[],body=$('analytics-cohorts');
+ const missing=analyticsKnown(analyticsData.summary?.active_users)?'暂无首次使用记录':learningValue(null,coverage);
+ const entries=cohorts.length?[
+  {label:'次日回访',value:data.d1_rate},
+  {label:'7 日内回访',value:data.within7_rate},
+  {label:'第 7 日回访',value:data.d7_rate}
+ ]:[];
+ renderAnalyticsRanking($('analytics-retention'),entries,missing,analyticsPercent,1);
+ body.replaceChildren();
  for(const item of cohorts){
   const row=el('tr');
   td(row,item.date);td(row,analyticsNum(item.users));
@@ -585,7 +630,7 @@ function renderAnalyticsRetention(coverage){
   }
   body.append(row);
  }
- empty(body,5,analyticsKnown(analyticsData.summary?.active_users)?'暂无首次使用记录':learningValue(null,coverage));
+ empty(body,5,missing);
 }
 function renderAnalyticsUsers(){
  if(!analyticsData)return;
@@ -631,8 +676,29 @@ function renderOfficialPricing(data){
   box.append(el('p',asr.note),pricingSource(asr,'豆包语音官方定价'));
  }
 }
-let analyticsResize=0;window.addEventListener('resize',()=>{cancelAnimationFrame(analyticsResize);analyticsResize=requestAnimationFrame(()=>{if(admin&&analyticsData&&activeTab==='analytics'&&$('analytics-trend').open)renderAnalyticsChart();});});
-for(const button of document.querySelectorAll('[data-range]'))button.addEventListener('click',()=>setAnalyticsRange(button.dataset.range));$('analytics-filter').addEventListener('submit',e=>{e.preventDefault();void loadAnalytics();});$('analytics-refresh').addEventListener('click',()=>void loadAnalytics());$('analytics-metric').addEventListener('change',renderAnalyticsChart);$('analytics-trend').addEventListener('toggle',()=>{if(admin&&analyticsData&&$('analytics-trend').open)renderAnalyticsChart();});$('analytics-user-search').addEventListener('input',renderAnalyticsUsers);$('analytics-user-sort').addEventListener('change',renderAnalyticsUsers);setAnalyticsRange('7d',false);
+const dailyChartCards=[...document.querySelectorAll('.analytics-chart-grid [data-chart-default]')];
+for(const card of dailyChartCards){
+ const select=card.querySelector('[data-chart-metric]');
+ if(!select)continue;
+ for(const metric of card.querySelectorAll('th[data-field]')){
+  const option=el('option',metric.textContent);option.value=metric.dataset.field;select.append(option);
+ }
+ select.value=card.dataset.chartDefault;
+ select.addEventListener('change',()=>renderAnalyticsChart(card));
+}
+let analyticsResize=0;
+window.addEventListener('resize',()=>{
+ cancelAnimationFrame(analyticsResize);
+ analyticsResize=requestAnimationFrame(()=>{
+  if(admin&&analyticsData&&activeTab==='analytics')renderAnalyticsCharts();
+ });
+});
+for(const button of document.querySelectorAll('[data-range]'))button.addEventListener('click',()=>setAnalyticsRange(button.dataset.range));
+$('analytics-filter').addEventListener('submit',event=>{event.preventDefault();void loadAnalytics();});
+$('analytics-refresh').addEventListener('click',()=>void loadAnalytics());
+$('analytics-user-search').addEventListener('input',renderAnalyticsUsers);
+$('analytics-user-sort').addEventListener('change',renderAnalyticsUsers);
+setAnalyticsRange('7d',false);
 let restoreTimer,restoreDelay=1000,restoring=false;
 async function restoreLogin(){
  if(!token||restoring||busy||!$('dashboard').hidden||document.visibilityState==='hidden')return;
