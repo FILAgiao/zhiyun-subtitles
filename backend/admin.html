@@ -26,11 +26,32 @@
         <div class="analytics-chart" data-chart aria-labelledby="analytics-accounts-title"></div>
         <details class="analytics-chart-details">
           <summary>查看明细</summary>
-          <p class="analytics-footnote">账号总数按授权快照统计，今天显示当前值。登录账号按当天去重。</p>
+          <p class="analytics-footnote">登录账号按当天去重。</p>
         <div class="table-wrap" tabindex="0" role="region" aria-labelledby="analytics-accounts-title">
-          <table><thead><tr><th scope="col">日期</th><th scope="col" data-field="account_total" data-missing="无快照">账号总数</th><th scope="col" data-field="login_users">登录账号</th><th scope="col" data-field="login_sessions">登录会话</th><th scope="col" data-field="registrations">自助注册</th></tr></thead><tbody id="analytics-account-rows"></tbody></table>
+          <table><thead><tr><th scope="col">日期</th><th scope="col" data-field="login_users">登录账号</th><th scope="col" data-field="login_sessions">登录会话</th></tr></thead><tbody id="analytics-account-rows"></tbody></table>
         </div>
-        <p id="analytics-registration-note" class="analytics-footnote"></p>
+        </details>
+      </section>
+      <section data-chart-default="account_total" class="analytics-card analytics-chart-card analytics-daily" data-family="accounts" aria-labelledby="analytics-account-total-title">
+        <div class="analytics-chart-heading"><h3 id="analytics-account-total-title">账号总数</h3></div>
+        <div class="analytics-chart" data-chart aria-labelledby="analytics-account-total-title"></div>
+        <details class="analytics-chart-details">
+          <summary>查看明细</summary>
+          <p class="analytics-footnote">账号总数按授权快照统计，今天显示当前值。</p>
+          <div class="table-wrap" tabindex="0" role="region" aria-labelledby="analytics-account-total-title">
+            <table><thead><tr><th scope="col">日期</th><th scope="col" data-field="account_total" data-missing="无快照">账号总数</th></tr></thead><tbody id="analytics-account-total-rows"></tbody></table>
+          </div>
+        </details>
+      </section>
+      <section data-chart-default="registrations" class="analytics-card analytics-chart-card analytics-daily" data-family="accounts" aria-labelledby="analytics-registrations-title">
+        <div class="analytics-chart-heading"><h3 id="analytics-registrations-title">自助注册</h3></div>
+        <div class="analytics-chart" data-chart aria-labelledby="analytics-registrations-title"></div>
+        <details class="analytics-chart-details">
+          <summary>查看明细</summary>
+          <p id="analytics-registration-note" class="analytics-footnote"></p>
+          <div class="table-wrap" tabindex="0" role="region" aria-labelledby="analytics-registrations-title">
+            <table><thead><tr><th scope="col">日期</th><th scope="col" data-field="registrations">自助注册</th></tr></thead><tbody id="analytics-registrations-rows"></tbody></table>
+          </div>
         </details>
       </section>
       <section data-chart-default="tokens" class="analytics-card analytics-chart-card analytics-daily" data-family="usage" aria-labelledby="analytics-token-title">
@@ -174,8 +195,20 @@
 <p id="operations-status" class="operations-status" role="status" aria-live="polite">正在获取运营数据…</p>
 <div id="operations-content" hidden>
 <div id="operations-stats" class="stats operations-stats"></div><p id="operations-cost-note" class="muted cost-note">费用依据已配置费率估算，不能代替供应商实际账单；未配置费用显示未知。</p><p id="operations-configured-cost" class="muted cost-note"></p>
-<section class="operations-block"><div class="block-heading"><h3>需要留意</h3><span class="muted">额度、有效期与账号状态</span></div><div id="operations-alerts" class="operations-alerts"></div></section>
-<section class="operations-block" data-family="usage"><div class="block-heading"><h3>用户用量排行</h3><label class="sort-label">排序<select id="operations-sort"><option value="requests">调用次数 · 从高到低</option><option value="total_tokens">Token · 从高到低</option><option value="official_estimate">官方参考费用 · 从高到低</option><option value="estimated_cost_cny">历史配置费用 · 从高到低</option><option value="audio_seconds">语音秒数 · 从高到低</option></select></label></div><div class="table-wrap"><table><thead><tr><th>用户 / 应用</th><th>套餐 / 状态</th><th>本月调用额度</th><th>Token / 语音 / 专用翻译</th><th>估算费用（元）</th><th>费率覆盖</th><th></th></tr></thead><tbody id="operations-users"></tbody></table></div></section>
+<section id="operations-coverage" class="operations-coverage" aria-labelledby="operations-coverage-title" hidden>
+  <div class="operations-coverage-heading">
+    <h3 id="operations-coverage-title">费用覆盖</h3>
+    <span id="operations-coverage-total"></span>
+  </div>
+  <div id="operations-coverage-bar" class="operations-coverage-bar" aria-hidden="true"></div>
+  <ul id="operations-coverage-legend" class="operations-coverage-legend"></ul>
+  <details id="operations-reconciliation">
+    <summary id="operations-reconciliation-summary">查看核对明细</summary>
+    <div id="operations-reconciliation-body"></div>
+  </details>
+</section>
+<section id="operations-account-alerts" class="operations-block" hidden><div class="block-heading"><h3>需要留意</h3><span class="muted">额度、有效期与账号状态</span></div><div id="operations-alerts" class="operations-alerts"></div></section>
+<section class="operations-block" data-family="usage"><div class="block-heading"><h3>用户用量排行</h3><label class="sort-label">排序<select id="operations-sort"><option value="requests">调用次数 · 从高到低</option><option value="total_tokens">Token · 从高到低</option><option value="official_estimate">官方参考费用 · 从高到低</option><option value="estimated_cost_cny">历史配置费用 · 从高到低</option><option value="audio_seconds">语音秒数 · 从高到低</option><option value="translation_chars">专用翻译字符 · 从高到低</option></select></label></div><div class="table-wrap"><table><thead><tr><th>用户 / 应用</th><th>套餐 / 状态</th><th>本月调用额度</th><th scope="col">Token</th><th scope="col">语音（秒）</th><th scope="col">专用翻译（字符）</th><th>估算费用（元）</th><th>费率覆盖</th><th></th></tr></thead><tbody id="operations-users"></tbody></table></div></section>
 <section class="operations-block" data-family="cost"><div class="block-heading"><h3>模型费用汇总</h3><span class="muted">所选月份用量 × 当前官方费率</span></div><div class="table-wrap"><table><thead><tr><th>模型 / 语音资源</th><th>调用 / 状态</th><th>输入 / 输出 Token</th><th>语音 / 联网</th><th>估算费用（元）</th><th>费率覆盖</th></tr></thead><tbody id="operations-models"></tbody></table></div></section>
 <div class="operations-forms"><section class="card" id="manual-credit-card"><span class="eyebrow">人工开通 · 留下记录</span><h3>追加本月额度</h3><p class="muted">这里只记账和增加额度，不会发起支付。请先核实收款，再记录人工充值。赠送也可以留痕。</p><form id="manual-credit-form"><label>用户<select id="credit-user" required><option value="">选择账号</option></select></label><input id="credit-app" type="hidden" value="zhiyun-subtitles"><label>记录类型<select id="credit-kind"><option value="gift">赠送额度</option><option value="manual_payment">人工充值 · 已核实收款</option></select></label><div class="pair"><label>增加调用次数<input id="credit-requests" type="number" min="0" max="1000000" value="0" required></label><label>增加语音秒数<input id="credit-audio" type="number" min="0" max="36000000" value="0" required></label></div><label>实收金额（元，可留空）<input id="credit-amount" type="number" min="0" max="100000000" step="0.01" placeholder="不填则记为未填写"></label><label>备注<input id="credit-note" maxlength="500" placeholder="如体验赠送、人工转账凭据编号"></label><p class="form-hint" id="credit-month-note">追加额度仅本月有效，UTC 月末清零；基础套餐和下月额度不变。开启高级功能、修改套餐或有效期，请到“用户与额度”。</p><button class="primary" id="credit-submit">确认记录并追加</button><p id="credit-status" role="status" class="form-result"></p></form></section>
 <section class="card"><span class="eyebrow">模型成本</span><h3>官方参考费用</h3><div id="official-pricing" class="official-pricing"></div><details class="advanced-pricing"><summary>高级设置：手动配置成本费率</summary><p class="muted">可先留空。新费率只用于生效后发生的调用，不回填历史费用。费率为人民币，最终费用以供应商账单为准。</p><form id="cost-rate-form"><label>模型名称<input id="rate-model" required maxlength="200" placeholder="与调用记录中的模型名完全一致"></label><div class="pair"><label>输入 / 百万 Token（元）<input id="rate-input" type="number" min="0" step="any" placeholder="未配置"></label><label>输出 / 百万 Token（元）<input id="rate-output" type="number" min="0" step="any" placeholder="未配置"></label></div><div class="pair"><label>语音 / 分钟（元）<input id="rate-audio" type="number" min="0" step="any" placeholder="未配置"></label><label>联网 / 次（元）<input id="rate-search" type="number" min="0" step="any" placeholder="未配置"></label></div><label>生效时间（北京时间，留空立即生效）<input id="rate-effective" type="datetime-local"></label><button class="primary" id="rate-submit">保存新费率</button><p id="rate-status" role="status" class="form-result"></p></form></details></section></div>

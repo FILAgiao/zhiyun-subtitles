@@ -19,7 +19,7 @@ const assert=require('node:assert/strict'),{chromium}=require('playwright');
     o.onload({status,responseText:JSON.stringify(result)});
    },8);return{abort(){clearTimeout(timer);o.onabort?.();}};};
   });
-  await page.addScriptTag({path:'zhiyun-subtitles.user.js'});const ui=page.locator('#zy-subtitle-host');await ui.locator('#account-open').evaluate(n=>n.click());await ui.locator('#gateway-login-form').waitFor({state:'visible'});
+  await page.addScriptTag({path:'zhiyun-subtitles.user.js'});const ui=page.locator('#zy-subtitle-host');await ui.locator('#web-ask').click({force:true});await ui.locator('#gateway-login-form').waitFor({state:'visible'});
   assert.equal(await ui.locator('#gateway-quota-section').isVisible(),false,'quota should not compete with guest login');
   assert.equal(await ui.locator('#gateway-membership').isVisible(),false);
   await ui.locator('#gateway-email').fill('trial@example.test');await ui.locator('#gateway-password').fill('fixture-password');await ui.locator('#gateway-password-toggle').click();assert.equal(await ui.locator('#gateway-password').getAttribute('type'),'text');await ui.locator('#gateway-password-toggle').click();assert.equal(await ui.locator('#gateway-password').getAttribute('type'),'password');

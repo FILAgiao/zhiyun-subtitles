@@ -116,7 +116,7 @@ def summarize_token_cost(calls):
 
 class ASREstimate:
     def __init__(self):
-        self.amount = self.seconds = Decimal(0)
+        self.amount = self.seconds = self.unsettled_amount = Decimal(0)
         self.priced = self.unpriced = self.interrupted = self.no_audio = self.legacy = 0
         self.reasons = defaultdict(int)
 
@@ -136,10 +136,13 @@ class ASREstimate:
             reason = 'missing_audio_duration'
         else:
             duration = Decimal(str(seconds))
-            self.amount += duration * Decimal(rate['per_hour']) / 3600
+            amount = duration * Decimal(rate['per_hour']) / 3600
+            self.amount += amount
             self.seconds += duration
             self.no_audio += int(not seconds)
-            self.interrupted += int(seconds > 0 and call['state'] != 'complete')
+            if seconds > 0 and call['state'] != 'complete':
+                self.interrupted += 1
+                self.unsettled_amount += amount
             self.priced += 1
             self.legacy += int(legacy and seconds > 0)
             return
@@ -152,4 +155,5 @@ class ASREstimate:
                 'priced_calls': self.priced, 'unpriced_calls': self.unpriced,
                 'complete': not self.unpriced, 'unknown_reasons': dict(self.reasons),
                 'estimated_seconds': float(self.seconds), 'no_audio_calls': self.no_audio,
-                'unsettled_duration_calls': self.interrupted, 'legacy_resource_calls': self.legacy}
+                'unsettled_duration_calls': self.interrupted, 'unsettled_amount_cny': money(self.unsettled_amount),
+                'legacy_resource_calls': self.legacy}

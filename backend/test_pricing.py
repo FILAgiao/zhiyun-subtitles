@@ -26,6 +26,7 @@ class PricingTests(unittest.TestCase):
         self.assertEqual(result['estimated_seconds'], 539.6)
         self.assertEqual(result['no_audio_calls'], 1)
         self.assertEqual(result['unsettled_duration_calls'], 1)
+        self.assertEqual(result['unsettled_amount_cny'], '0.038778')
         self.assertEqual(result['legacy_resource_calls'], 2)
         self.assertEqual(result['unpriced_calls'], 0)
 
@@ -121,6 +122,7 @@ class IntegrationTests(unittest.TestCase):
         self.assertIsNone(official['amount_cny'])
         self.assertEqual(official['unknown_reasons'], {'unsettled': 1})
         self.assertEqual(result['summary']['uncertain'], 2)
+        self.assertEqual(result['summary']['asr_estimate']['unsettled_amount_cny'], '0.149889')
         person = next(row for row in result['users'] if row['user_id'] == user)
         self.assertEqual(person['official_estimate'], official)
         asr = next(row for row in result['models'] if row['model'] == 'volc.seedasr.sauc')

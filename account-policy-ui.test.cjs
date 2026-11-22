@@ -71,7 +71,7 @@ const {chromium}=require('playwright');
     assert.equal(await page.evaluate(()=>nativeCalls),plan==='guest'?0:1);
     assert.equal(await page.evaluate(()=>saved['ai-question-index-v1'].length),1,'denied access does not delete existing learning records');
     assert.equal(await ui.locator('#ai-questions').isVisible(),false);
-    if(plan==='guest'&&surface==='web'){await ui.locator('#account-open').evaluate(node=>node.click());await ui.locator('#settings-card').screenshot({path:'.test-media/account-login-unified.png'});}
+    if(plan==='guest'&&surface==='web'){await ui.locator('#web-ask').click({force:true});await ui.locator('#settings-card').screenshot({path:'.test-media/account-login-unified.png'});}
    }else{
     for(const id of [surface==='course'?'ai-open':'web-ask','transcript-open',...(surface==='course'?['sync-toggle']:[])])assert.equal(await ui.locator('#'+id).getAttribute('data-feature-blocked'),'false');
     await page.mouse.click(120,100,{button:'middle'});await ui.locator('#ai-crop').waitFor();assert.equal(await page.evaluate(()=>nativeCalls),1);
@@ -85,7 +85,8 @@ const {chromium}=require('playwright');
     await ui.locator('#ai-questions-back').click();await ui.locator('#ai-questions').waitFor();
     assert.ok(await page.evaluate(()=>saved['ai-question-index-v1'].length)>=2);
     // Changing a paid account to free closes paid workspaces and preserves saved records.
-    await ui.locator('#account-open').evaluate(node=>node.click());
+    if(surface==='web')await ui.locator('#web-settings-open').click();
+    else await ui.locator('#account-open').evaluate(node=>node.click());
     await page.evaluate(()=>{fixtureProfile.membership={plan:'free',state:'free',active:false};for(const key of Object.keys(fixtureProfile.permissions))fixtureProfile.permissions[key]=false;});
     await ui.locator('#gateway-usage').click();await page.waitForFunction(()=>document.getElementById('zy-subtitle-host').shadowRoot.getElementById('gateway-state').textContent.includes('未充值'));
     assert.equal(await ui.locator('#ai-learning').isVisible(),false);assert.equal(await ui.locator('#ai-questions').isVisible(),false);

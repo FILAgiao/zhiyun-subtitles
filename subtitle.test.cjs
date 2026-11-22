@@ -279,11 +279,10 @@ test('range cache cancellation between chunks stops before another request',asyn
  assert.equal(calls,1);
 });
 
-// Automatic source language works in both contextual and economical profiles.
+// Seed Translation can detect the source language.
 test('foreign subtitles use automatic source detection rather than a fixed English language',async()=>{
- const {contextualTranslationBody,translationBody}=require('./zhiyun-subtitles.user.js');
+ const {translationBody}=require('./zhiyun-subtitles.user.js');
  for(const text of ['これは勾配降下法です。','Der Gradient zeigt nach oben.','La descente de gradient réduit la perte.']){
-  const body=contextualTranslationBody(text,'auto','zh');assert.match(body.input[0].content,/自动识别目标字幕的语言/);assert.ok(body.input[1].content[0].text.includes(text));
   const economy=translationBody(text,'auto','zh');assert.equal(economy.model,'doubao-seed-translation-250915');
   assert.deepEqual(economy.input,[{role:'user',content:[{type:'input_text',text,translation_options:{target_language:'zh'}}]}]);
  }

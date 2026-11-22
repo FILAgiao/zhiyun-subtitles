@@ -1,40 +1,19 @@
 const {test}=require('node:test');
 const assert=require('node:assert/strict');
-const {contextualTranslationBody,translationJobs,createTranslator,syncAnchorsValid,addSyncAnchor,syncOffsetAt,syncedSubtitleTime,syncedVideoTime,createSyncSchedule,activeCue,slideAt,srt}=require('./zhiyun-subtitles.user.js');
+const {translationJobs,createTranslator,syncAnchorsValid,addSyncAnchor,syncOffsetAt,syncedSubtitleTime,syncedVideoTime,createSyncSchedule,activeCue,slideAt,srt}=require('./zhiyun-subtitles.user.js');
 const flush=()=>new Promise(resolve=>setImmediate(resolve));
-test('context translation carries neighboring lecture terminology but translates one target sentence',()=>{
-  const body=contextualTranslationBody('A register stores a word.','en','zh',{course:'Architecture',subject:'CPU',glossary:'register = 寄存器',before:['We discuss CPU registers.'],after:['It has 64 bits.'],translations:['word → 字']});
-  assert.equal(body.model,'doubao-seed-2-1-lite-260915');
-  assert.equal(body.stream,false);
-  assert.match(body.input[0].content,/仅输出目标字幕/);
-  const payload=JSON.parse(body.input[1].content[0].text);
-  assert.equal(payload.reference.terminology,'register = 寄存器');
-  assert.equal(payload.reference.preceding[0],'We discuss CPU registers.');
-  assert.equal(payload.target_subtitle,'A register stores a word.');
-  assert.equal(payload.reference.prior_translations[0],'word → 字');
-});
-test('context payload bounds user supplied references and subtitle windows',()=>{
-  const body=contextualTranslationBody('target','en','zh',{before:Array(100).fill('a'.repeat(1000)),after:Array(100).fill('b'),glossary:'x'.repeat(20000)});
-  const data=JSON.parse(body.input[1].content[0].text).reference;
-  assert.equal(data.preceding.length,30);assert.equal(data.preceding[0].length,600);assert.equal(data.terminology.length,4000);
-  const cues=Array.from({length:100},(_,index)=>({start:index,original:'sentence '+index}));
-  const jobs=translationJobs(cues,50,12);
-  assert.equal(jobs.length,12);assert.equal(jobs[0].context.before.length,12);assert.equal(jobs[0].context.after.length,12);
-  assert.equal(jobs[0].context.before.at(-1),'sentence 49');assert.equal(jobs[1].context.before.at(-1),'sentence 50');
-  assert.deepEqual(translationJobs(cues,-1),[]);
-});
-test('the same word in different lecture positions has isolated contextual cache entries',async()=>{
+test('the same word in different lecture positions has isolated subtitle cache entries',async()=>{
   const calls=[];
-  const translator=createTranslator((text,source,target,context)=>{let resolve;const promise=new Promise(yes=>resolve=yes);calls.push({text,context,resolve});return {promise,abort(){}};});
+  const translator=createTranslator((text)=>{let resolve;const promise=new Promise(yes=>resolve=yes);calls.push({text,resolve});return {promise,abort(){}};});
   const cues=[{start:10,original:'register'},{start:500,original:'register'}];
-  const jobs=translationJobs(cues,0,3,{subject:'CPU'});
+  const jobs=translationJobs(cues,0);
   translator.start('en','zh');translator.schedule(jobs);assert.equal(calls.length,1);
   calls[0].resolve('寄存器');await flush();assert.equal(calls.length,2);
   calls[1].resolve('登记');await flush();
   assert.equal(translator.get(jobs[0]),'寄存器');assert.equal(translator.get(jobs[1]),'登记');
   translator.schedule(jobs);assert.equal(calls.length,2);
 });
-test('contextual results are discarded on course reset and aborted jobs never leak',async()=>{
+test('translation results are discarded on course reset and aborted jobs never leak',async()=>{
   let finish,aborted=0;
   const t=createTranslator(()=>({promise:new Promise(resolve=>finish=resolve),abort(){aborted++;}}));
   const job=translationJobs([{start:1,original:'previous course'}],0)[0];
@@ -81,8 +60,8 @@ test('in flight calibration and buffering cannot immediately trigger a second pa
 test('prefetch covers one minute, twelve cues and scales with playback speed',()=>{
   const dense=Array.from({length:40},(_,i)=>({start:i*10,original:'sentence '+i}));
   assert.equal(translationJobs(dense,0).length,7);
-  assert.equal(translationJobs(dense,0,12,{},2).length,12);
-  assert.equal(translationJobs(dense,0,12,{},8).length,12);
+  assert.equal(translationJobs(dense,0,2).length,12);
+  assert.equal(translationJobs(dense,0,8).length,12);
   assert.equal(translationJobs(dense,0).at(-1).text,'sentence 6');
   const sparse=dense.map((cue,i)=>({...cue,start:i*100}));
   assert.equal(translationJobs(sparse,0).length,2);

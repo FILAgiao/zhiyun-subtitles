@@ -15,7 +15,7 @@ const fs=require('node:fs'),path=require('node:path'),assert=require('node:asser
    await chrome.storage.local.set({'gateway-account-v1':{url:'https://47.77.182.216.sslip.io/gateway',token:''},'gateway-guide-no-remind-v2':true,'cache-auto':false});
   });
   await context.route('https://public.example/**',r=>r.fulfill({contentType:'text/html',body:'<h1>Slow account connection fixture</h1>'}));
-  const page=await context.newPage(),errors=[];page.on('pageerror',e=>errors.push(e.message));await page.goto('https://public.example/');const ui=page.locator('#zy-subtitle-host');await ui.locator('#account-open').evaluate(n=>n.click());
+  const page=await context.newPage(),errors=[];page.on('pageerror',e=>errors.push(e.message));await page.goto('https://public.example/');const ui=page.locator('#zy-subtitle-host');await ui.locator('#web-ask').click({force:true});assert.equal(await ui.locator('#account-entry').count(),0);
   await ui.locator('#gateway-email').fill('fixture-account');await ui.locator('#gateway-password').fill('fixture-password');await ui.locator('#gateway-login').click();await page.waitForFunction(()=>document.getElementById('zy-subtitle-host').shadowRoot.getElementById('gateway-status').dataset.error==='true');
   assert.match(await ui.locator('#gateway-status').textContent(),/无法连接服务/);assert.equal(await ui.locator('#gateway-login').isEnabled(),true);
   await worker.evaluate(()=>globalThis.fixtureMode='slow');const start=Date.now();await ui.locator('#gateway-login').click();await page.waitForTimeout(15500);

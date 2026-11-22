@@ -23,7 +23,63 @@ function mountSettingsShell({shadow,tabs,onOpen=()=>{},onClose=()=>{}}){
  for(const b of $('settings-nav').children){b.onclick=()=>tab(b.dataset.settings);b.addEventListener('keydown',e=>{if(!['ArrowDown','ArrowUp','ArrowLeft','ArrowRight'].includes(e.key))return;e.preventDefault();const buttons=[...$('settings-nav').children],step=['ArrowDown','ArrowRight'].includes(e.key)?1:-1,next=buttons[(buttons.indexOf(b)+step+buttons.length)%buttons.length];tab(next.dataset.settings);next.focus();});}
  tab(tabs[0][0]);return{open,close,tab};
 }
-function mount({shadow,mascot}){
+function makeCompactLauncherDraggable(launcher, getValue, setValue) {
+ const doc=launcher.ownerDocument,win=doc.defaultView,positionKey='classroom-launcher-position-v1';
+ const saved=getValue(positionKey,null);
+ let position=Number.isFinite(saved?.x)&&Number.isFinite(saved?.y)?saved:null;
+ let drag=null,suppressClick=false;
+ launcher.title='按住拖动可移动课堂快捷入口';
+ function place(x,y) {
+  const box=launcher.getBoundingClientRect();
+  if(!box.width||!box.height)return null;
+  const left=Math.max(8,Math.min(x,win.innerWidth-box.width-8));
+  const top=Math.max(8,Math.min(y,win.innerHeight-box.height-8));
+  const scale=box.width/parseFloat(win.getComputedStyle(launcher).width)||1;
+  Object.assign(launcher.style,{left:left/scale+'px',top:top/scale+'px',right:'auto'});
+  return {x:left,y:top};
+ }
+ function restorePosition() {
+  if(position)place(position.x,position.y);
+ }
+ launcher.addEventListener('pointerdown',event=>{
+  if(event.button!==0||drag)return;
+  suppressClick=false;
+  const box=launcher.getBoundingClientRect();
+  drag={id:event.pointerId,x:event.clientX,y:event.clientY,left:box.left,top:box.top,moved:false};
+  // Keep capture on the original button so a short press still clicks it.
+  event.target.setPointerCapture(event.pointerId);
+ });
+ launcher.addEventListener('pointermove',event=>{
+  if(drag?.id!==event.pointerId)return;
+  const dx=event.clientX-drag.x,dy=event.clientY-drag.y;
+  if(!drag.moved&&Math.hypot(dx,dy)<5)return;
+  const moved=place(drag.left+dx,drag.top+dy);
+  if(!moved)return;
+  position=moved;
+  drag.moved=true;
+  launcher.dataset.dragging='true';
+  event.preventDefault();
+ });
+ function finishDrag(event) {
+  if(!drag||(event.pointerId!==undefined&&drag.id!==event.pointerId))return;
+  suppressClick=drag.moved;
+  drag=null;
+  delete launcher.dataset.dragging;
+  if(suppressClick)setValue(positionKey,position);
+ }
+ for(const event of ['pointerup','pointercancel','lostpointercapture'])launcher.addEventListener(event,finishDrag);
+ launcher.addEventListener('click',event=>{
+  if(!suppressClick||event.detail===0)return;
+  suppressClick=false;
+  event.preventDefault();
+  event.stopImmediatePropagation();
+ },true);
+ win.addEventListener('blur',finishDrag);
+ win.addEventListener('resize',restorePosition);
+ doc.addEventListener('fullscreenchange',restorePosition);
+ new win.ResizeObserver(restorePosition).observe(launcher);
+}
+function mount({shadow,mascot,getValue=(_key,fallback)=>fallback,setValue=()=>{}}){
  const $=id=>shadow.getElementById(id),style=document.createElement('style');
  style.textContent=`
  :host{color:#233954;font:14px/1.5 "Segoe UI","Microsoft YaHei",sans-serif;text-align:left;letter-spacing:normal}button{color:#214f81;border-color:#d8e4f0}button:hover{background:#edf4ff}button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible,summary:focus-visible{outline-color:#347acd}
@@ -67,23 +123,9 @@ function mount({shadow,mascot}){
  
  $('settings-translation').insertAdjacentHTML('beforeend',`
    <div class="section">
-     <label>翻译方案<select id="translation-profile" aria-describedby="translation-seed-note translation-context-note">
-       <option value="economy">默认字幕翻译 · 豆包</option>
-       <option value="context">逐句翻译 · 术语增强</option>
-     </select></label>
-     <p id="translation-seed-note"><strong>默认字幕翻译</strong>使用豆包 Seed Translation。新版服务按原文字符单独计量。</p>
-     <p id="translation-context-note"><strong>术语增强</strong>使用大模型，参考课程术语和前后文。会消耗与 AI 问答共用的调用额度。</p>
-     <div id="translation-seed-fields">
-       <label>每批最多字幕条数<input id="translation-batch-size" type="number" min="1" max="24" step="1" value="12"></label>
-       <p>优先翻译当前字幕。设为 1 条时逐条发送。</p>
-     </div>
-     <div id="translation-context-fields" hidden>
-       <label>前后各参考句数<input id="translation-context-size" type="number" min="3" max="30" value="12"></label>
-       <label for="translation-domain">课程背景</label>
-       <textarea id="translation-domain" placeholder="例如：计算机体系结构，保持寄存器与指令集术语一致"></textarea>
-       <label for="translation-glossary">术语表 · 每行 原词 = 译法</label>
-       <textarea id="translation-glossary" placeholder="register = 寄存器"></textarea>
-     </div>
+     <p id="translation-seed-note"><strong>豆包专用翻译</strong>使用豆包 Seed Translation，按原文字符单独计量。</p>
+     <label>每批最多字幕条数<input id="translation-batch-size" type="number" min="1" max="24" step="1" value="12"></label>
+     <p>优先翻译当前字幕。设为 1 条时逐条发送。</p>
    </div>`);
  const syncBox=document.createElement('details');syncBox.id='study-sync';syncBox.innerHTML='<summary aria-label="打开手动时间微调"><span>手动时间微调</span><span class="sync-manual-access">免登录可以使用</span></summary>';syncBox.append(syncSection);shadow.append(syncBox);for(const details of syncSection.querySelectorAll('details'))details.open=true;
  $('settings-sync').insertAdjacentHTML('beforeend','<label>定时自动校准（每 20 分钟）<input id="auto-sync" type="checkbox"></label><p id="sync-status" role="status"></p><p>录播按播放进度累计计时。手动微调立即停用自动校准，重新勾选才恢复。优先流式识别，可靠匹配后立即结束；每次最多听取 20 秒课程音轨，按实际使用时长计费。</p>');
@@ -121,8 +163,9 @@ function mount({shadow,mascot}){
  refreshSyncControl();
  const actionRow=document.createElement('div');actionRow.id='study-actions';actionRow.innerHTML='<button id="ai-open">✦ 讲解这页</button><button id="transcript-open">☷ 问题列表</button>';
  const compactLauncher=document.createElement('nav');compactLauncher.id='compact-launcher';compactLauncher.hidden=true;compactLauncher.setAttribute('aria-label','课堂快捷入口');$('compact').before(compactLauncher);compactLauncher.append($('compact'));compactLauncher.insertAdjacentHTML('beforeend','<button id="compact-explain" type="button" aria-label="讲解这页 PPT">✦ 讲解这页</button><button id="compact-history" type="button" aria-label="AI对话" title="AI对话" translate="no">AI对话</button>');
+ makeCompactLauncherDraggable(compactLauncher,getValue,setValue);
  $('compact-explain').onclick=()=>$('ai-open').click();
- style.textContent+=`#compact-launcher{z-index:40;pointer-events:auto;position:fixed;right:20px;left:auto;top:64px;display:flex;align-items:center;gap:2px;padding:4px;border:1px solid var(--zy-line,#dce5ef);border-radius:999px;background:var(--zy-card,#fff);box-shadow:0 5px 20px #18392b26;max-width:calc(100vw - 24px);font:600 14px/20px "Segoe UI","Microsoft YaHei",sans-serif}#compact-launcher[hidden]{display:none!important}#compact-launcher button{position:static;min-width:0;min-height:40px;top:auto;right:auto;margin:0;padding:7px 12px;border:0;border-radius:999px;background:transparent;color:var(--zy-text,#405970);box-shadow:none;white-space:nowrap;font:inherit}#compact-launcher #compact{font-size:14px;min-width:110px}#compact-launcher #compact-explain{background:var(--zy-soft,#edf4ff);color:var(--zy-accent,#215da1)}#compact-launcher #compact-history{width:auto;padding:7px 12px;font-size:14px}#sync-auto-indicator[data-busy=true]{animation:zy-sync-working 1.4s linear infinite}@keyframes zy-sync-working{to{transform:rotate(360deg)}}:host([data-ai-workspace]) #compact-launcher{display:none!important}@media(max-width:600px){#compact-launcher{right:12px}#compact-launcher button{padding:7px 10px}#compact-launcher #compact{min-width:100px}}@media(prefers-reduced-motion:reduce){#sync-auto-indicator{animation:none!important}}`;
+ style.textContent+=`#compact-launcher{z-index:40;pointer-events:auto;position:fixed;width:max-content;box-sizing:border-box;touch-action:none;user-select:none;cursor:grab;right:20px;left:auto;top:64px;display:flex;align-items:center;gap:2px;padding:4px;border:1px solid var(--zy-line,#dce5ef);border-radius:999px;background:var(--zy-card,#fff);box-shadow:0 5px 20px #18392b26;max-width:calc(100vw - 24px);font:600 14px/20px "Segoe UI","Microsoft YaHei",sans-serif}#compact-launcher[hidden]{display:none!important}#compact-launcher[data-dragging=true]{cursor:grabbing}#compact-launcher button{cursor:inherit;position:static;min-width:0;min-height:40px;top:auto;right:auto;margin:0;padding:7px 12px;border:0;border-radius:999px;background:transparent;color:var(--zy-text,#405970);box-shadow:none;white-space:nowrap;font:inherit}#compact-launcher #compact{font-size:14px;min-width:110px}#compact-launcher #compact-explain{background:var(--zy-soft,#edf4ff);color:var(--zy-accent,#215da1)}#compact-launcher #compact-history{width:auto;padding:7px 12px;font-size:14px}#sync-auto-indicator[data-busy=true]{animation:zy-sync-working 1.4s linear infinite}@keyframes zy-sync-working{to{transform:rotate(360deg)}}:host([data-ai-workspace]) #compact-launcher{display:none!important}@media(max-width:600px){#compact-launcher{right:12px}#compact-launcher button{padding:7px 10px}#compact-launcher #compact{min-width:100px}}@media(prefers-reduced-motion:reduce){#sync-auto-indicator{animation:none!important}}`;
  const syncParams=document.createElement('div');syncParams.id='sync-params';const stepper=document.createElement('div');stepper.id='sync-stepper';const offsetLabel=$('offset').closest('label');stepper.append($('earlier'),offsetLabel);const unit=document.createElement('span');unit.className='sync-unit';unit.textContent='秒';stepper.append(unit,$('later'));const syncSaved=document.createElement('span');syncSaved.id='sync-saved';syncSaved.textContent='尚未匹配';syncParams.append(syncSaved,stepper);
  $('auto-align').hidden=true;$('reset-offset').hidden=true;$('settings-sync').append($('reset-offset'));syncSection.prepend($('auto-align'));syncSection.append(syncParams);
  $('offset').title='微调时间，单位为秒';$('offset').setAttribute('aria-label','同步微调秒数');$('earlier').textContent='−';$('earlier').title='提前 0.5 秒';$('earlier').setAttribute('aria-label','提前 0.5 秒');$('later').textContent='＋';$('later').title='延后 0.5 秒';$('later').setAttribute('aria-label','延后 0.5 秒');$('offset-hint').parentElement.hidden=true;syncSection.append($('offset-hint'));$('align-status').textContent='';

@@ -1,20 +1,10 @@
 const {test}=require('node:test');
 const assert=require('node:assert/strict');
-const {batchTranslationBody,batchTranslationResult,seedBatchTranslationBody,seedBatchTranslationResult,usableTranslation,translationJobs,createTranslator}=require('./zhiyun-subtitles.user.js');
+const {seedBatchTranslationBody,seedBatchTranslationResult,usableTranslation,translationJobs,createTranslator}=require('./zhiyun-subtitles.user.js');
 const flush=()=>new Promise(resolve=>setImmediate(resolve));
-const jobs=Array.from({length:20},(_,i)=>({id:String(i),text:'English sentence '+i,context:{course:'Architecture',before:[],after:[]}}));
+const jobs=Array.from({length:20},(_,i)=>({id:String(i),text:'English sentence '+i}));
 function requests(){const calls=[];function make(entries){let resolve,reject;const promise=new Promise((yes,no)=>{resolve=yes;reject=no});const c={entries,resolve,reject,aborted:false};calls.push(c);return {promise,abort(){c.aborted=true}};}const request=(text)=>make([{text}]);request.batch=entries=>make(entries);return {request,calls};}
-test('batch prompt preserves target IDs and bounds reference while keeping each subtitle separate',()=>{
- const body=batchTranslationBody(jobs.slice(0,6),'auto','zh',{before:['context'],glossary:'register = 寄存器'});
- const payload=JSON.parse(body.input[1].content[0].text);assert.equal(payload.target_subtitle,undefined);
- assert.deepEqual(payload.target_subtitles,jobs.slice(0,6).map((row,i)=>({id:String(i),text:row.text})));
- assert.match(body.input[0].content,/JSON/);assert.deepEqual(body.reasoning,{effort:'minimal'});assert.equal(payload.reference.terminology,'register = 寄存器');
-});
-test('batch parser maps by ID, isolates missing/duplicate/English answers, and rejects malformed IDs',()=>{
- const entries=jobs.slice(0,3);const parse=rows=>batchTranslationResult(JSON.stringify({translations:rows}),entries,'zh');
- assert.deepEqual(parse([{id:'2',text:'第三句'},{id:'0',text:'第一句'}]),['第一句',null,'第三句']);
- assert.deepEqual(parse([{id:'0',text:'First sentence'},{id:'1',text:'第二句'},{id:'1',text:'重复句'},{id:'2',text:'第三句'}]),[null,null,'第三句']);
- for(const raw of ['null','oops','{"translations":{}}','{"translations":[null]}','{"translations":[{"id":"99","text":"错位"}]}'])assert.deepEqual(batchTranslationResult(raw,entries,'zh'),[null,null,null]);
+test('translation validation rejects missing or untranslated content',()=>{
  assert.equal(usableTranslation('This is English','This is English','zh'),false);assert.equal(usableTranslation('中文','English output','en'),true);
  assert.equal(usableTranslation('We explain the parameter','译文：We explain the parameter','zh'),false);
  assert.equal(usableTranslation('This is fine','译文：This is fine','zh'),false);
@@ -65,13 +55,13 @@ test('Seed prefetch sends current cue immediately, batches 12 following and fall
  const d=requests(),t=createTranslator(d.request,()=>{},1,{},()=>12);
  const cues=Array.from({length:20},(_,index)=>({start:index*3,original:jobs[index].text}));
  t.start('auto','zh');
- t.schedule(translationJobs(cues,0,12,{},1,13));
+ t.schedule(translationJobs(cues,0,1,13));
  assert.deepEqual(d.calls.map(c=>c.entries.length),[1]);
  d.calls[0].resolve('当前字幕译文');await flush();
  assert.deepEqual(d.calls.map(c=>c.entries.length),[1,12]);
  d.calls[1].resolve(Array(12).fill(null));await flush();
  assert.equal(d.calls.length,2,'a mismatched prefetch does not immediately resubmit all of its text');
- t.schedule(translationJobs(cues,1,12,{},1,13));
+ t.schedule(translationJobs(cues,1,1,13));
  assert.deepEqual(d.calls.map(c=>c.entries.length),[1,12,1]);
  assert.equal(d.calls[2].entries[0].text,cues[1].original);
  t.stop();
@@ -80,13 +70,13 @@ test('Seed prefetch respects configured counts and UTF-8 request size',async()=>
  const cues=Array.from({length:25},(_,index)=>({start:index?index+2:0,original:'Explain step '+index}));
  for(const cap of [1,5,24]){
   const d=requests(),t=createTranslator(d.request,()=>{},1,{},()=>cap);
-  t.start('en','zh');t.schedule(translationJobs(cues,0,12,{},1,25));
+  t.start('en','zh');t.schedule(translationJobs(cues,0,1,25));
   d.calls[0].resolve('单条');await flush();
   assert.equal(d.calls[1].entries.length,cap);
   t.stop();
  }
  const d=requests(),t=createTranslator(d.request,()=>{},1,{},()=>24);
- t.start('zh','en');t.schedule(translationJobs(cues.map(cue=>({...cue,original:'专业字幕句子'.repeat(20)+cue.original})),0,12,{},1,25));
+ t.start('zh','en');t.schedule(translationJobs(cues.map(cue=>({...cue,original:'专业字幕句子'.repeat(20)+cue.original})),0,1,25));
  d.calls[0].resolve('One translation');await flush();
  const sent=d.calls[1].entries;
  assert.ok(sent.length>=2 && sent.length<24);

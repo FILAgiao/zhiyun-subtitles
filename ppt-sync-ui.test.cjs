@@ -8,7 +8,7 @@ const fs=require('node:fs'),assert=require('node:assert/strict'),{chromium}=requ
  await page.evaluate(()=>{
   window.values={'cache-auto':false,'gateway-guide-no-remind-v2':true};window.GM_getValue=(k,d)=>values[k]??d;window.GM_setValue=(k,v)=>values[k]=v;window.GM_deleteValue=k=>delete values[k];window.GM_registerMenuCommand=()=>{};
   window.GM_xmlhttpRequest=()=>({abort(){}});window.videoTime=34;window.seeks=0;
-  const key=JSON.stringify([null,null,null]);values['subtitle-sync:'+key]={anchors:[{videoTime:0,offset:13.5},{videoTime:100,offset:13.5}],manual:true,autoSync:false};values['subtitle-offset:'+key]=13.5;
+  const key=JSON.stringify([null,null,null]);values['subtitle-sync:'+key]={anchors:[{videoTime:0,offset:13.5},{videoTime:100,offset:13.5}],manual:true,autoSyncDisabled:true};values['subtitle-offset:'+key]=13.5;
   Object.defineProperties(document.querySelector('video'),{paused:{get:()=>true},readyState:{get:()=>3},duration:{get:()=>3600},currentTime:{get:()=>videoTime,set:v=>{seeks++;videoTime=v;}}});
  });
  await page.addScriptTag({content:fs.readFileSync('zhiyun-subtitles.user.js','utf8').replace(/const DEFAULT_ORIGIN=[^;]+;/,'const DEFAULT_ORIGIN="";')});await page.waitForTimeout(650);
@@ -41,7 +41,7 @@ const fs=require('node:fs'),assert=require('node:assert/strict'),{chromium}=requ
  await ui.locator('#slide-thumbs-close').click();await ui.locator('#slides').hover();await closePpt(ui);assert.ok(await ui.locator('#slide-ppt-sync').isHidden());assert.equal(await ui.locator('#ppt-sync-toggle').getAttribute('aria-expanded'),'false');await page.evaluate(()=>videoTime=70);await ui.locator('#show-slides').click();await ui.locator('#slides').hover();await ui.locator('#ppt-sync-toggle').click();assert.equal(await ui.locator('#slide-page').textContent(),'6 / 100');await page.waitForTimeout(250);await ui.locator('#slides').hover();await ui.locator('#slide-thumbs-toggle').click();assert.equal(await ui.locator('#ppt-offset').inputValue(),'-30');
  await ui.locator('#ppt-offset').fill('0');assert.equal(await ui.locator('#slide-page').textContent(),'4 / 100');assert.equal(await ui.locator('#offset').inputValue(),'13.5');
  assert.equal(await ui.locator('#ppt-earlier,#ppt-later,#ppt-reset').count(),0);
- await page.screenshot({path:'ppt-independent-sync-preview.png'});
+ await page.screenshot({path:'dist/ppt-independent-sync-preview.png'});
  await ui.locator('#slide-thumbs-close').click();await ui.locator('#slides').hover();await closePpt(ui);
  await page.evaluate(()=>{location.hash='#/replay?course_id=new';document.querySelector('#pane-ppt').innerHTML='<div class="tab-ppt"><img src="https://slides.test/new.svg"><span class="time">00:00:00</span></div><div class="tab-ppt"><img src="https://slides.test/missing.svg"></div>';});await page.waitForTimeout(650);
  if(await ui.locator('#panel').isHidden())await ui.locator('#compact').click();await ui.locator('#show-slides').click();await ui.locator('#slides').hover();await ui.locator('#ppt-sync-toggle').click();await page.waitForTimeout(250);await ui.locator('#slides').hover();await ui.locator('#slide-thumbs-toggle').click();assert.equal(await ui.locator('#ppt-offset').inputValue(),'0');await ui.locator('.slide-thumb').nth(1).click();assert.equal(await ui.locator('#ppt-align-page').isDisabled(),true);

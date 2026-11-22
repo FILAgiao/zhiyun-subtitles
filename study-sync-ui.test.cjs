@@ -73,7 +73,7 @@ const {chromium} = require('playwright');
     const waitForStatus = text => page.waitForFunction(text =>
       document.getElementById('zy-subtitle-host').shadowRoot.getElementById('ai-status').textContent.includes(text), text);
 
-    await ui.locator('#account-open').evaluate(node => node.click());
+    await ui.locator('#web-ask').click({force:true});
     await ui.locator('#gateway-email').fill('student@example.test');
     await ui.locator('#gateway-password').fill('PRIVATE_LOGIN_PASSWORD');
     await ui.locator('#gateway-login').click();
@@ -159,7 +159,8 @@ const {chromium} = require('playwright');
     assert.match(await ui.locator('#ai-log').textContent(), /沿反方向小步更新/);
     assert.equal(await ui.locator('#ai-log .ai-message[data-role=user] img').count(), 1, 'failed uploads remain readable from the local archive');
 
-    await ui.locator('#account-open').evaluate(node => node.click());
+    await ui.locator('#ai-questions-back').click();
+    await ui.locator('#web-settings-open').click();
     await ui.locator('#gateway-logout').click();
     await ui.locator('#gateway-login-form').waitFor({state: 'visible'});
     await ui.locator('#settings-close').click();

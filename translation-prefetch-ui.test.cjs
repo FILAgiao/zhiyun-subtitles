@@ -47,7 +47,7 @@ function installClock(){
  const context=native?await chromium.launchPersistentContext(path.resolve('.test-media/translation-prefetch-'+Date.now()),{headless:true,executablePath,viewport:{width:1440,height:900},args:['--disable-extensions-except='+extension,'--load-extension='+extension]}):await(browser=await chromium.launch({headless:true,executablePath})).newContext({viewport:{width:1440,height:900}});
  try{
   if(native){worker=context.serviceWorkers()[0]||await context.waitForEvent('serviceworker');await worker.evaluate(()=>chrome.storage.local.set({'cache-auto':false,'gateway-guide-no-remind-v2':true,'display-preferences':{mode:'original'},'gateway-account-v1':{url:'https://47.77.182.216.sslip.io/gateway',token:'fixture-translation-token'}}));}
-  async function open(cues,plans=[],profile='context'){
+  async function open(cues,plans=[],profile=null){
    const page=await context.newPage(),errors=[],worlds=new Map();let session,world;
    page.setDefaultTimeout(10000);page.on('pageerror',e=>errors.push(e.message));
    await page.route('**/*',route=>route.request().isNavigationRequest()?route.fulfill({contentType:'text/html; charset=utf-8',body:'<title>Translation Fixture</title><style>body{margin:0;background:#eee4d9}video{width:850px;height:480px;background:#263d4c}#pane-voice{display:none}</style><video></video><div id="pane-voice">'+markup(cues)+'</div>'}):route.abort());
@@ -91,27 +91,25 @@ function installClock(){
   }
   {
    const cues=Array.from({length:25},(_,i)=>({start:i?i+2:0,text:'Explain step '+i}));
-   const s=await open(cues,[],null);
+   const s=await open(cues,[],'context');
    await s.ui.locator('#settings-open').click();await s.ui.locator('#settings-tab-translation').click();
    const cap=s.ui.locator('#translation-batch-size');assert.equal(await cap.inputValue(),'12');
-   const profile=s.ui.locator('#translation-profile'),reference=s.ui.locator('#translation-context-size');
-   assert.equal(await profile.inputValue(),'economy');
-   assert.equal(await profile.locator('option[value="economy"]').textContent(),'默认字幕翻译 · 豆包');
-   assert.equal(await profile.locator('option[value="context"]').textContent(),'逐句翻译 · 术语增强');
-   const seedNote=s.ui.locator('#translation-seed-note'),contextNote=s.ui.locator('#translation-context-note');
-   assert.match(await seedNote.textContent(),/豆包 Seed Translation.*新版服务按原文字符单独计量/);
-   assert.match(await contextNote.textContent(),/大模型.*与 AI 问答共用的调用额度/);
-   assert.ok(await seedNote.isVisible() && await contextNote.isVisible(),'usage notes are shown before switching');
-   await reference.waitFor({state:'hidden'});
-   await profile.selectOption('context');await reference.waitFor();await cap.waitFor({state:'hidden'});
-   await profile.selectOption('economy');await cap.waitFor();await reference.waitFor({state:'hidden'});
+   for(const id of ['translation-profile','translation-context-fields','translation-context-note']){
+    assert.equal(await s.ui.locator('#'+id).count(),0,'legacy controls are absent');
+   }
+   const seedNote=s.ui.locator('#translation-seed-note');
+   assert.match(await seedNote.textContent(),/豆包 Seed Translation.*按原文字符单独计量/);
+   assert.ok(await seedNote.isVisible());
    await cap.fill('24');await cap.press('Tab');await s.ui.locator('#settings-close').click();
    await s.until(()=>s.evaluate(async native=>native
     ? (await chrome.storage.local.get('translation-batch-size'))['translation-batch-size']===24
     : fixtureValues['translation-batch-size']===24,native),'Batch size was not persisted');
    await s.start();await s.done(2);
-   assert.deepEqual((await s.calls()).map(call=>call.targets.length),[1,24]);
-   evidence.push({case:'user-configured 24-cue maximum'});await s.close();
+   const upgraded=await s.calls();
+   assert.deepEqual(upgraded.map(call=>call.targets.length),[1,24]);
+   assert.ok(upgraded.every(call=>call.model==='doubao-seed-translation-250915' && call.input.length===1));
+   assert.equal(upgraded[1].seedBatchFlag,true);
+   evidence.push({case:'saved legacy profile uses only Seed Translation, with configurable batch size'});await s.close();
   }
   {
    const cues=rows(15),s=await open(cues,[{},{invalid:'labels'}],null);
@@ -123,17 +121,17 @@ function installClock(){
   }
   {
    const cues=rows();cues[2]={start:10,text:'这里令 x 等于 y',school:'Here we set x equal to y'};cues[3]={start:15,text:'我们调用 foo bar 处理输入',school:'We call foo bar to process the input'};cues[4]={start:20,text:'接下来解释 how the processor handles memory requests and schedules instructions'};
-   const s=await open(cues);await s.start();await s.done(2);
+   const s=await open(cues);await s.start();await s.done(3);
    const initial=await s.calls(),targets=initial.flatMap(c=>c.targets.map(t=>t.text));
-   assert.equal(initial.length,2,'ten applicable cues prefetch in two batches');assert.ok(initial.every(c=>c.targets.length<=6));assert.ok(targets.includes(cues[11].text),'a later cue is already translated while playback stays at zero');assert.ok(!targets.includes(cues[12].text),'initial prefetch has a twelve-cue cap');assert.ok(!targets.includes(cues[2].text)&&!targets.includes(cues[3].text));assert.ok(targets.includes(cues[4].text),'substantial English in a mixed sentence remains translatable');
+   assert.deepEqual(initial.map(c=>c.targets.length),[1,1,9],'current cue and the two separated groups go in separate requests');assert.ok(targets.includes(cues[12].text),'a later cue is already translated while playback stays at zero');assert.ok(!targets.includes(cues[13].text),'initial prefetch has a twelve-cue cap after the current cue');assert.ok(!targets.includes(cues[2].text)&&!targets.includes(cues[3].text));assert.ok(targets.includes(cues[4].text),'substantial English in a mixed sentence remains translatable');
    const completedBeforeSeek=Math.max(...initial.map(c=>c.completed));await s.clock(5);await s.translated(translatedText(cues[1].text));assert.ok(completedBeforeSeek<=Date.now());
    for(const index of [2,3]){await s.clock(cues[index].start);await s.until(async()=>await s.ui.locator('#original').textContent()===cues[index].text,'mixed Chinese original not shown');assert.equal(await s.ui.locator('#translation').textContent(),'','short terms do not show school English as duplicate translation');}
    await s.clock(20);await s.translated(translatedText(cues[4].text));assert.equal((await s.calls()).flatMap(c=>c.targets).filter(t=>t.text===cues[1].text).length,1,'prefetched translation is reused when reached');
    await s.page.screenshot({path:'.test-media/translation-prefetch-'+(native?'edge-extension':'chrome-userscript')+'.png'});evidence.push({case:'prefetch and mixed variables',initialBatches:initial.map(c=>c.targets.length),completedBeforePlayback:true});await s.close();
   }
   {
-   const cues=rows(12,15),s=await open(cues);await s.start();await s.done(1);let targets=(await s.calls()).flatMap(c=>c.targets.map(t=>t.text));assert.ok(targets.includes(cues[4].text));assert.ok(!targets.includes(cues[5].text),'1x prefetch stops at sixty seconds');
-   await s.clock(0,2);await s.done(2);targets=(await s.calls()).flatMap(c=>c.targets.map(t=>t.text));assert.ok(targets.includes(cues[8].text),'2x reaches 120 video seconds');assert.ok(!targets.includes(cues[9].text));await s.clock(0,4);await s.page.waitForTimeout(300);assert.equal((await s.calls()).length,2,'high speeds retain the 120-second ceiling');evidence.push({case:'speed window',normalSeconds:60,doubleSeconds:120,maximumSeconds:120});await s.close();
+   const cues=rows(12,15),s=await open(cues);await s.start();await s.done(2);let targets=(await s.calls()).flatMap(c=>c.targets.map(t=>t.text));assert.ok(targets.includes(cues[4].text));assert.ok(!targets.includes(cues[5].text),'1x prefetch stops at sixty seconds');
+   await s.clock(0,2);await s.done(3);targets=(await s.calls()).flatMap(c=>c.targets.map(t=>t.text));assert.ok(targets.includes(cues[8].text),'2x reaches 120 video seconds');assert.ok(!targets.includes(cues[9].text));await s.clock(0,4);await s.page.waitForTimeout(300);assert.equal((await s.calls()).length,3,'high speeds retain the 120-second ceiling');evidence.push({case:'speed window',normalSeconds:60,doubleSeconds:120,maximumSeconds:120});await s.close();
   }
   {
    const cues=rows(80),s=await open(cues,[{hold:true}]);await s.start();await s.until(async()=>(await s.calls()).length===1,'initial request never starts');await s.clock(200);await s.page.waitForTimeout(220);assert.equal((await s.calls()).length,1,'seeking does not overlap paid work');await s.release(0);await s.done(3);
@@ -145,7 +143,7 @@ function installClock(){
   }
   {
    const cues=rows(12),s=await open(cues,[{invalid:'mixed'}]);await s.start();await s.done(2);await s.ui.locator('#translation-retry').waitFor({state:'visible'});assert.equal(await s.ui.locator('#mode').inputValue(),'both');await s.page.waitForTimeout(300);assert.equal((await s.calls()).length,2,'invalid entries do not retry on every playback tick');
-   await s.clock(30);await s.translated(translatedText(cues[6].text));assert.equal(await s.ui.locator('#translation-retry').isVisible(),true,'later valid subtitles continue while invalid output remains retryable');await s.clock(0);await s.page.waitForTimeout(150);await s.ui.locator('#translation-retry').click();await s.done(3);await s.translated(translatedText(cues[0].text));const last=(await s.calls()).at(-1);assert.deepEqual(last.targets.map(t=>t.text),[cues[0].text,cues[1].text],'manual retry preserves successful translations');assert.equal(await s.ui.locator('#translation-retry').isVisible(),false);evidence.push({case:'invalid output recovery',retryOnlyFailed:2,laterCuesContinue:true});await s.close();
+   await s.clock(30);await s.translated(translatedText(cues[6].text));assert.equal(await s.ui.locator('#translation-retry').isVisible(),true,'later valid subtitles continue while invalid output remains retryable');await s.clock(0);await s.page.waitForTimeout(150);await s.ui.locator('#translation-retry').click();await s.done(3);await s.translated(translatedText(cues[0].text));const last=(await s.calls()).at(-1);assert.deepEqual(last.targets.map(t=>t.text),[cues[0].text],'manual retry preserves successful translations');assert.equal(await s.ui.locator('#translation-retry').isVisible(),false);evidence.push({case:'invalid output recovery',retryOnlyFailed:1,laterCuesContinue:true});await s.close();
   }
   {
    const s=await open(rows(12),[{status:429,error:'unrecognized provider limit'}]);await s.start();await s.ui.locator('#translation-retry').waitFor({state:'visible'});assert.match(await s.ui.locator('#translation-status').textContent(),/暂时限制请求/);await s.page.waitForTimeout(300);assert.equal((await s.calls()).length,1,'unknown failures need explicit retry');assert.equal(await s.ui.locator('#mode').inputValue(),'both');await s.ui.locator('#translation-retry').click();await s.done(3);await s.translated('中文译文：');evidence.push({case:'unknown provider failure',automaticRetries:0,manualRecovery:true});await s.close();

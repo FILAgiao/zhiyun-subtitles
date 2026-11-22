@@ -18,7 +18,7 @@ async function api(path,body,auth=token){
  }
  return data;
 }
-function reset(loggedOut=false){generation++;renderPlanSettings(null);clearAnalytics();activeTab='analytics';admin=false;operationsData=null;operationsLoad++;creditPending=null;sessionStorage.removeItem('gateway-admin-credit-pending');token='';saveLogin('',loggedOut);$('dashboard').hidden=true;$('account').hidden=true;$('login-panel').hidden=false;$('login-password').value='';$('official-prompt-list').replaceChildren();$('official-prompt-form').reset();$('operations-content').hidden=true;$('operations-tab').hidden=true;$('manual-credit-form').reset();$('cost-rate-form').reset();$('access-settings-form').reset();$('credit-user').replaceChildren(el('option','选择账号'));$('credit-user').firstChild.value='';for(const id of ['credit-submit','rate-submit','access-submit','operations-refresh'])$(id).disabled=false;for(const id of ['credit-status','rate-status','access-status'])$(id).textContent='';for(const id of ['users-body','calls-body','sessions-body','actions-body','operations-users','operations-models','operations-credits','operations-rates','operations-alerts','operations-stats','operations-configured-cost'])$(id).replaceChildren();}
+function reset(loggedOut=false){generation++;renderPlanSettings(null);clearAnalytics();activeTab='analytics';admin=false;operationsData=null;operationsLoad++;creditPending=null;sessionStorage.removeItem('gateway-admin-credit-pending');token='';saveLogin('',loggedOut);$('dashboard').hidden=true;$('account').hidden=true;$('login-panel').hidden=false;$('login-password').value='';$('official-prompt-list').replaceChildren();$('official-prompt-form').reset();$('operations-content').hidden=true;$('operations-tab').hidden=true;$('manual-credit-form').reset();$('cost-rate-form').reset();$('access-settings-form').reset();$('credit-user').replaceChildren(el('option','选择账号'));$('credit-user').firstChild.value='';for(const id of ['credit-submit','rate-submit','access-submit','operations-refresh'])$(id).disabled=false;for(const id of ['credit-status','rate-status','access-status'])$(id).textContent='';for(const id of ['users-body','calls-body','sessions-body','actions-body','operations-users','operations-models','operations-credits','operations-rates','operations-alerts','operations-stats','operations-configured-cost','operations-coverage-total','operations-coverage-bar','operations-coverage-legend','operations-reconciliation-body','operations-reconciliation-summary'])$(id).replaceChildren();}
 function el(tag,text,className){const node=document.createElement(tag);if(text!==undefined)node.textContent=text;if(className)node.className=className;return node;}
 function td(row,primary,secondary,className){const cell=el('td',primary,className);if(secondary)cell.append(el('small',secondary));row.append(cell);return cell;}
 function empty(body,columns,message='暂无记录'){
@@ -302,13 +302,71 @@ function costCell(row,item){
  const complete=item.pricing_complete===true&&item.estimated_cost_cny!==null&&item.estimated_cost_cny!==undefined;
  return td(row,complete?money(item.estimated_cost_cny):'未知',complete?'按已配置费率估算':Number(item.priced_calls)>0?'已计价部分 '+money(item.known_cost_cny)+' 元；其余未计价':'未配置适用费率或待核对',complete?'cost-complete':'cost-unknown');
 }
-function addCoverageCell(row,item){
+function addCoverageCell(row,item,showDetails=false){
  if(item.official_estimate){
   const e=item.official_estimate;
-  return td(row,num(e.priced_calls)+' / '+num(item.requests)+' 次可估算',[asrCoverage(item.asr_estimate),pricingReasonText(e)].filter(Boolean).join(' · '));
+  const detail=showDetails?[asrCoverage(item.asr_estimate),pricingReasonText(e)].filter(Boolean).join(' · '):'';
+  return td(row,num(e.priced_calls)+' / '+num(item.requests)+' 次可估算',detail);
  }
  if(item.token_estimate){const e=item.token_estimate;return td(row,num(e.priced_calls)+' / '+num(Number(e.priced_calls||0)+Number(e.unpriced_calls||0))+' 次 Token 调用匹配官方费率'+(e.unpriced_calls?' · '+num(e.unpriced_calls)+' 次待核对':'')+(e.excluded_non_token_calls?' · 另有 '+num(e.excluded_non_token_calls)+' 次非 Token 调用':''));}
  return td(row,num(item.priced_calls)+' / '+num(item.requests)+' 次已计价'+(item.unpriced_calls?' · '+num(item.unpriced_calls)+' 次未知':''));
+}
+function renderOperationsCoverage(data, estimate){
+ const summary=data.summary||{};
+ const asr=summary.official_estimate?summary.asr_estimate:null;
+ const priced=Number(estimate.priced_calls||0);
+ const provisional=Number(asr?.unsettled_duration_calls||0);
+ const silent=Number(asr?.no_audio_calls||0);
+ const unpriced=Number(estimate.unpriced_calls??summary.unpriced_calls??0);
+ const groups=[
+  ['priced','已估算',priced-provisional-silent],
+  ['provisional','语音按时长暂估',provisional],
+  ['silent','无音频用量',silent],
+  ['unpriced','待对账',unpriced]
+ ].filter(([, ,count])=>count>0);
+ const count=priced+unpriced;
+ const bar=$('operations-coverage-bar'),legend=$('operations-coverage-legend');
+ const details=$('operations-reconciliation'),body=$('operations-reconciliation-body');
+ const uncertain=Number(summary.uncertain||0);
+ const users=(data.users||[]).filter(item=>item.uncertain>0)
+  .sort((a,b)=>b.uncertain-a.uncertain);
+ $('operations-coverage').hidden=!count&&!uncertain;
+ $('operations-coverage-title').textContent=!summary.official_estimate&&summary.token_estimate?'Token 费用覆盖':'费用覆盖';
+ $('operations-coverage-total').textContent=count?num(count)+' 次调用':'';
+ bar.hidden=!count;
+ bar.replaceChildren();
+ legend.replaceChildren();
+ for(const [key,label,value] of groups){
+  const segment=el('span',undefined,key);
+  segment.style.flexGrow=String(value);
+  bar.append(segment);
+  const item=el('li',label+' '+num(value)+' 次',key);
+  legend.append(item);
+ }
+ if(details.dataset.month!==data.month){
+  details.open=false;
+  details.dataset.month=data.month;
+ }
+ details.hidden=!uncertain&&!unpriced;
+ body.replaceChildren();
+ $('operations-reconciliation-summary').textContent='查看核对明细'+(uncertain?' · '+num(uncertain)+' 次上游结果或用量待确认':'');
+ if(provisional&&analyticsKnown(asr.unsettled_amount_cny)){
+  body.append(el('p','语音暂估小计 '+money(asr.unsettled_amount_cny,4)+' 元，已计入上方参考费用。'));
+ }
+ const reasons=pricingReasonText(estimate);
+ if(reasons)body.append(el('p','未计入的费用 · '+reasons));
+ if(uncertain){
+  body.append(el('p','流式语音取消、连接中断或超时，以及模型未回传完整用量，都可能留下待确认记录。网关保留已占额度，实际扣费以火山引擎账单为准。'));
+ }
+ if(users.length){
+  const accounts=el('ul',undefined,'operations-reconciliation-accounts');
+  for(const item of users){
+   const row=el('li');
+   row.append(el('span',(item.username||String(item.user_id))+' · '+item.app),el('strong',num(item.uncertain)+' 次'));
+   accounts.append(row);
+  }
+  body.append(el('h4','涉及 '+num(new Set(users.map(item=>item.user_id)).size)+' 个账号'),accounts);
+ }
 }
 function renderOperations(){const data=operationsData;if(!data||!admin)return;renderOfficialPricing(data);const summary=data.summary||{},stats=$('operations-stats');stats.replaceChildren();
  const official=summary.official_estimate;
@@ -320,7 +378,6 @@ function renderOperations(){const data=operationsData;if(!data||!admin)return;re
  const cards=[
   ['本月调用',num(summary.requests),'Token '+num(summary.total_tokens)],
   ['估算费用（元）',analyticsKnown(amount)?money(amount,4):'—'],
-  ['费用待确认',num(estimate.unpriced_calls??summary.unpriced_calls),official?pricingReasonText(official)||'当前用量均可估算':'模型未知或调用待核对'],
   ['人工实收（元）',money(summary.received_amount_cny??(data.credits||[]).filter(c=>c.kind==='manual_payment'&&c.amount_cny!==null&&c.amount_cny!==undefined).reduce((sum,c)=>sum+Number(c.amount_cny),0),2),Number(summary.received_unknown_count)>0?'另有 '+num(summary.received_unknown_count)+' 笔实收金额未填写':'仅本月已填写金额的人工记账']
  ];
  for(const [label,value,hint] of cards){const card=el('article',undefined,'stat');card.append(el('small',label),el('strong',value));if(hint)card.append(el('span',hint));stats.append(card);}
@@ -329,8 +386,25 @@ function renderOperations(){const data=operationsData;if(!data||!admin)return;re
   $('operations-configured-cost').textContent=summary.priced_calls?configuredCostText(summary):'';
   $('operations-cost-note').textContent='合计包含 Token 与 ASR 的当前官方参考费用。实际扣费及联网等费用见火山引擎账单。'+(data.quota_note?' '+data.quota_note:'');
  }
- const alerts=$('operations-alerts');alerts.replaceChildren();for(const alert of data.alerts||[]){const card=el('article',undefined,'operations-alert');card.append(el('strong',alert.username||'账号提醒'),el('p',alert.message||({request_near_limit:'调用额度即将用完',audio_near_limit:'语音额度即将用完',expires_soon:'账号即将到期',expired:'账号已到期',disabled:'账号已停用'}[alert.type]||alert.type)));alerts.append(card);}if(!alerts.children.length)alerts.append(el('p','当前没有额度、到期或停用提醒。','operations-alert empty'));
- renderOperationsUsers();const models=$('operations-models');models.replaceChildren();for(const item of data.models||[]){const row=el('tr');td(row,item.model||'未记录模型',undefined,'model');const state=item.uncertain?num(item.uncertain)+(asrEstimateText(item.asr_estimate)?' 次识别未确认完成':' 次待核对'):'';td(row,num(item.requests)+' 次',[state,item.translation_chars?num(item.translation_chars)+' 原文字符':''].filter(Boolean).join(' · '));td(row,num(item.input_tokens)+' / '+num(item.output_tokens));td(row,num(item.audio_seconds)+' 秒 / '+num(item.web_search)+' 次');costCell(row,item);addCoverageCell(row,item);models.append(row);}empty(models,6);
+ renderOperationsCoverage(data,estimate);
+ const alerts=$('operations-alerts'),accountAlerts=new Map();
+ for(const alert of data.alerts||[]){
+  if(alert.type==='uncertain')continue;
+  const key=JSON.stringify([alert.user_id,alert.username,alert.app]);
+  if(!accountAlerts.has(key))accountAlerts.set(key,{name:alert.username||'账号提醒',messages:new Set()});
+  accountAlerts.get(key).messages.add(alert.message||({
+   request_near_limit:'调用额度即将用完',audio_near_limit:'语音额度即将用完',
+   expires_soon:'账号即将到期',expired:'账号已到期',disabled:'账号已停用'
+  }[alert.type]||alert.type));
+ }
+ $('operations-account-alerts').hidden=!accountAlerts.size;
+ alerts.replaceChildren();
+ for(const {name,messages} of accountAlerts.values()){
+  const card=el('article',undefined,'operations-alert');
+  card.append(el('strong',name),el('p',[...messages].join(' · ')));
+  alerts.append(card);
+ }
+ renderOperationsUsers();const models=$('operations-models');models.replaceChildren();for(const item of data.models||[]){const row=el('tr');td(row,item.model||'未记录模型',undefined,'model');const state=item.uncertain?num(item.uncertain)+(asrEstimateText(item.asr_estimate)?' 次识别未确认完成':' 次待核对'):'';td(row,num(item.requests)+' 次',[state,item.translation_chars?num(item.translation_chars)+' 原文字符':''].filter(Boolean).join(' · '));td(row,num(item.input_tokens)+' / '+num(item.output_tokens));td(row,num(item.audio_seconds)+' 秒 / '+num(item.web_search)+' 次');costCell(row,item);addCoverageCell(row,item,true);models.append(row);}empty(models,6);
  const rates=$('operations-rates');rates.replaceChildren();for(const rate of data.cost_rates||[]){const row=el('tr');td(row,rate.model,date(rate.effective_from),'model');td(row,(rate.input_per_million===null?'未配置':money(rate.input_per_million))+' / '+(rate.output_per_million===null?'未配置':money(rate.output_per_million)));td(row,(rate.audio_per_minute===null?'语音未配置':money(rate.audio_per_minute)+' 元 / 分钟')+' · '+(rate.web_search_per_call===null?'联网未配置':money(rate.web_search_per_call)+' 元 / 次'));rates.append(row);}empty(rates,3);
  const credits=$('operations-credits');credits.replaceChildren();for(const item of data.credits||[]){const row=el('tr');td(row,date(item.created||item.created_at),item.username||String(item.user_id));td(row,item.kind==='manual_payment'?'人工充值':'赠送额度',item.app);td(row,'调用 +'+num(item.request_credit),'语音 +'+num(item.audio_credit_seconds)+' 秒');td(row,money(item.amount_cny,2),item.amount_cny===null?'金额未填写':'人工记录，非支付回执');td(row,item.note||'—',undefined,'operations-credits-note');credits.append(row);}empty(credits,5);
  const users=$('credit-user'),previous=users.value;users.replaceChildren(el('option','选择账号'));users.firstChild.value='';for(const item of data.users||[]){const option=el('option',(item.username||String(item.user_id))+' · '+(planNames[item.plan]||item.plan||'原有授权')+' · '+item.app);option.value=String(item.user_id)+'|'+item.app;users.append(option);}if([...users.options].some(o=>o.value===previous))users.value=previous;
@@ -343,7 +417,28 @@ function operationCostForSorting(item){
  return item.token_estimate?.complete?Number(item.token_estimate.amount_cny):-Infinity;
 }
 function renderOperationsUsers(){if(!operationsData||!admin)return;const key=$('operations-sort').value,body=$('operations-users');body.replaceChildren();const items=[...(operationsData.users||[])].sort((a,b)=>{if(key==='official_estimate')return operationCostForSorting(b)-operationCostForSorting(a)||Number(b.requests)-Number(a.requests);if(key==='estimated_cost_cny'){const av=a.pricing_complete?Number(a.estimated_cost_cny):-Infinity,bv=b.pricing_complete?Number(b.estimated_cost_cny):-Infinity;return bv-av||Number(b.requests)-Number(a.requests);}return Number(b[key]||0)-Number(a[key]||0);});
- for(const item of items){const row=el('tr');td(row,item.username||String(item.user_id),item.email+' · '+item.app);const state=item.enabled===0||item.enabled===false?'已停用':item.grant_enabled===0||item.grant_enabled===false?'应用已暂停':item.status==='expired'?'已到期':item.status==='active'?'正常':item.status||'正常';td(row,(planNames[item.plan]||item.plan||'原有授权')+' · '+state,item.expires?'到期 '+date(item.expires):'长期有效');td(row,num(item.quota_requests??item.requests)+' / '+num(item.request_limit),item.request_limit>0?'已用 '+Math.round(Number(item.request_ratio||0)*100)+'%':'未配置调用额度');const tokens=td(row,num(item.total_tokens)+' Token',num(item.audio_seconds)+' / '+num(item.audio_limit)+' 秒');if(item.translation_limit!=null)tokens.append(el('small','专用翻译 '+num(item.translation_chars)+' / '+num(item.translation_limit)+' 字符'));costCell(row,item);addCoverageCell(row,item);const cell=td(row,'');const button=el('button','追加额度');button.type='button';button.onclick=()=>{$('credit-user').value=String(item.user_id)+'|'+item.app;$('credit-app').value=item.app;$('manual-credit-card').scrollIntoView({behavior:'smooth',block:'start'});};cell.append(button);body.append(row);}empty(body,7);
+ for(const item of items){
+  const row=el('tr');
+  td(row,item.username||String(item.user_id),item.email+' · '+item.app);
+  const state=item.enabled===0||item.enabled===false?'已停用':item.grant_enabled===0||item.grant_enabled===false?'应用已暂停':item.status==='expired'?'已到期':item.status==='active'?'正常':item.status||'正常';
+  td(row,(planNames[item.plan]||item.plan||'原有授权')+' · '+state,item.expires?'到期 '+date(item.expires):'长期有效');
+  td(row,num(item.quota_requests??item.requests)+' / '+num(item.request_limit),item.request_limit>0?'已用 '+Math.round(Number(item.request_ratio||0)*100)+'%':'未配置调用额度');
+  td(row,analyticsNum(item.total_tokens));
+  td(row,analyticsNum(item.audio_seconds)+' / '+analyticsNum(item.audio_limit));
+  td(row,item.translation_chars==null&&item.translation_limit==null?'—':analyticsNum(item.translation_chars)+' / '+analyticsNum(item.translation_limit));
+  costCell(row,item);
+  addCoverageCell(row,item);
+  const cell=td(row,''),button=el('button','追加额度');
+  button.type='button';
+  button.onclick=()=>{
+   $('credit-user').value=String(item.user_id)+'|'+item.app;
+   $('credit-app').value=item.app;
+   $('manual-credit-card').scrollIntoView({behavior:'smooth',block:'start'});
+  };
+  cell.append(button);
+  body.append(row);
+ }
+ empty(body,9);
 }
 async function loadOperations(){if(!admin||!token)return;const own=generation,load=++operationsLoad;const month=$('operations-month').value;if(!/^\d{4}-\d{2}$/.test(month)){operationMessage('operations-status','请选择有效月份。',true);return;}$('operations-status').dataset.state='loading';$('operations-status').textContent='正在获取 '+month+' 的运营数据…';$('operations-refresh').disabled=true;
  try{const data=await api('/v1/admin/operations?month='+encodeURIComponent(month));if(own!==generation||load!==operationsLoad||!admin)return;operationsData=data;renderOperations();if(activeTab==='operations')$('period').textContent=month+' · 运营月份按 UTC，记录按北京时间';$('operations-status').dataset.state='ready';$('operations-status').textContent=month+' · 月份按 UTC 统计，时间按北京时间显示。数据仅管理员可见。';}

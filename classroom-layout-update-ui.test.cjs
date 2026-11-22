@@ -18,7 +18,60 @@ const native=process.argv.includes('--extension');
   assert.equal(await ui.locator('#classroom-source-retry,#slide-explain').count(),0);assert.match(await ui.locator('#classroom-translation-source').textContent(),/译关/);assert.match(await ui.locator('#classroom-caption-source').textContent(),/字幕 1/);assert.match(await ui.locator('#classroom-ppt-source').textContent(),/PPT 1/);
   const statusTops=await ui.locator('#classroom-sources > span').evaluateAll(nodes=>nodes.map(n=>n.getBoundingClientRect().top));assert.ok(Math.max(...statusTops)-Math.min(...statusTops)<2,'all source counts share a line');
   await ui.locator('#collapse').click();const launcher=ui.locator('#compact-launcher');assert.ok(await launcher.isVisible());assert.deepEqual(await launcher.locator(':scope > button').evaluateAll(nodes=>nodes.map(n=>n.id)),['compact','compact-explain','compact-history']);
-  let box=await launcher.boundingBox();assert.ok(box.x>1000&&box.x+box.width<1440,'launcher is anchored at the top right');await ui.locator('#compact-history').click();assert.ok(await ui.locator('#ai-learning').isVisible());await ui.locator('#ai-close').click();await launcher.waitFor({state:'visible'});box=await launcher.boundingBox();assert.ok(box.x>1000,'closing the conversation preserves the launcher anchor');await ui.locator('#compact').click();
+  let box=await launcher.boundingBox();
+  assert.ok(box.x>1000&&box.x+box.width<1440,'launcher starts at the top right');
+  const explain=ui.locator('#compact-explain');
+  const compact=ui.locator('#compact');
+  async function dragShortcut(button,x,y){
+   const start=await button.boundingBox();
+   await page.mouse.move(start.x+start.width/2,start.y+start.height/2);
+   await page.mouse.down();
+   await page.mouse.move(x,y,{steps:8});
+   await page.mouse.up();
+   return launcher.boundingBox();
+  }
+  const covered=await explain.boundingBox();
+  const coveredPoint={x:covered.x+covered.width/2,y:covered.y+covered.height/2};
+  await page.evaluate(({x,y})=>{
+   const control=document.createElement('button');
+   control.id='covered-classroom-control';
+   control.textContent='原网页控件';
+   Object.assign(control.style,{position:'fixed',left:(x-45)+'px',top:(y-14)+'px'});
+   control.onclick=()=>control.dataset.clicked='true';
+   document.body.append(control);
+   const explain=document.getElementById('zy-subtitle-host').shadowRoot.getElementById('compact-explain');
+   explain.addEventListener('click',()=>explain.dataset.clicked='true');
+  },coveredPoint);
+  box=await dragShortcut(explain,360,320);
+  assert.ok(box.x<400&&box.y>200,'dragging the PPT shortcut moves the whole launcher');
+  assert.equal(await explain.getAttribute('data-clicked'),null,'dragging does not request an explanation');
+  assert.ok(await ui.locator('#ai-learning').isHidden());
+  await page.mouse.click(coveredPoint.x,coveredPoint.y);
+  assert.equal(await page.locator('#covered-classroom-control').getAttribute('data-clicked'),'true','the underlying classroom control is usable again');
+  box=await dragShortcut(compact,1439,999);
+  assert.ok(box.x>1000&&box.y>850&&box.x+box.width<=1433&&box.y+box.height<=993,'the entire launcher fits at the bottom right edge');
+  assert.ok(await ui.locator('#panel').isHidden(),'dragging the classroom shortcut does not expand it');
+  const saved=native
+   ?await context.serviceWorkers()[0].evaluate(async()=>(await chrome.storage.local.get('classroom-launcher-position-v1'))['classroom-launcher-position-v1'])
+   :await page.evaluate(()=>values['classroom-launcher-position-v1']);
+  assert.ok(Math.abs(saved.x-box.x)<1&&Math.abs(saved.y-box.y)<1,'the last drag position is stored');
+  await page.setViewportSize({width:900,height:620});
+  await page.waitForFunction(()=>{
+   const rect=document.getElementById('zy-subtitle-host').shadowRoot.getElementById('compact-launcher').getBoundingClientRect();
+   return rect.width&&rect.right<=innerWidth-7&&rect.bottom<=innerHeight-7;
+  });
+  await page.setViewportSize(viewport);
+  const expected=box;
+  await ui.locator('#compact-history').click();
+  await ui.locator('#ai-learning').waitFor({state:'visible'});
+  await ui.locator('#ai-close').click();
+  await launcher.waitFor({state:'visible'});
+  box=await launcher.boundingBox();
+  assert.ok(Math.abs(box.x-expected.x)<1&&Math.abs(box.y-expected.y)<1,'resizing and opening AI keep the chosen position');
+  const click=await compact.boundingBox();
+  await page.mouse.move(click.x+click.width/2,click.y+click.height/2);
+  await page.mouse.down();await page.mouse.move(click.x+click.width/2+2,click.y+click.height/2+1);await page.mouse.up();
+  assert.ok(await ui.locator('#panel').isVisible(),'an ordinary click with slight pointer movement still expands the panel');
   await ui.locator('#show-slides').click();await ui.locator('#slide-image').evaluate(img=>img.decode());await page.waitForTimeout(180);
   let ppt=await ui.locator('#slides').boundingBox(),video=await page.locator('#cmc_video video').boundingBox();assert.ok(Math.abs(ppt.width-video.width)<3,'PPT and video receive equal width');assert.ok(video.width>480&&video.width<505,'video occupies half of the original classroom');assert.ok(Math.abs(video.width/video.height-16/9)<.01,'video keeps its intrinsic aspect ratio');assert.ok(ppt.x+ppt.width<=video.x,'side by side media do not overlap');await ui.locator('#collapse').click();await page.screenshot({path:'.test-media/classroom-layout-'+(native?'extension':'userscript')+'-split.png'});await ui.locator('#compact').click();
   assert.ok(await ui.locator('#slide-close').isHidden());await ui.locator('#slides').hover();await ui.locator('#ppt-sync-toggle').click();assert.equal(await ui.locator('#ppt-sync-toggle').textContent(),'−');assert.equal(await ui.locator('#slide-toolbar').evaluate(e=>[...e.children].filter(n=>!n.hidden).at(-1).id),'ppt-sync-toggle','minus is the rightmost visible toolbar control');await ui.locator('#ppt-sync-toggle').click();
@@ -30,6 +83,15 @@ const native=process.argv.includes('--extension');
   await ui.locator('#focus-fullscreen').click();await page.waitForFunction(()=>!document.fullscreenElement);await page.waitForTimeout(250);
   const restored=await ui.locator('#slides').boundingBox();assert.ok(Math.abs(restored.width-ordinary.width)<3,'exiting fullscreen drops oversized fullscreen geometry');assert.ok(restored.x>=0&&restored.y>=0&&restored.x+restored.width<=1440&&restored.y+restored.height<=1000,'restored PPT fits the page');assert.equal(await ui.locator('#focus-fullscreen').textContent(),'课堂全屏');await ui.locator('#collapse').click();await page.screenshot({path:'.test-media/classroom-layout-'+(native?'extension':'userscript')+'-exit.png'});await ui.locator('#compact').click();
   await ui.locator('#show-slides').click();assert.ok(await ui.locator('#slides').isHidden());assert.equal(await page.locator('#cmc_video video').getAttribute('data-zy-moved-video'),null,'closing restores website video positioning');
-  assert.deepEqual(errors,[]);console.log('PASS: '+(native?'Edge MV3':'Chrome userscript')+' three top-right classroom shortcuts, compact source counts, equal/aspect-correct split media, rightmost calibration minus, and fullscreen exit after oversized focus PPT.');
+  await ui.locator('#collapse').click();
+  if(native){
+   await page.reload();
+   await launcher.waitFor({state:'visible'});
+   box=await launcher.boundingBox();
+   assert.ok(Math.abs(box.x-expected.x)<1&&Math.abs(box.y-expected.y)<1,'the extension restores the position after reload');
+  }
+  await compact.press('Enter');
+  assert.ok(await ui.locator('#panel').isVisible(),'keyboard activation still opens the panel');
+  assert.deepEqual(errors,[]);console.log('PASS: '+(native?'Edge MV3':'Chrome userscript')+' classroom launcher drag, stored position, click and keyboard shortcuts, compact sources and split/fullscreen layout.');
  }finally{await context.close();if(browser)await browser.close();}
 })().catch(e=>{console.error(e);process.exitCode=1;});

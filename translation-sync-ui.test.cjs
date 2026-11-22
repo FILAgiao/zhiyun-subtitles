@@ -17,7 +17,7 @@ const {chromium}=require(process.env.PLAYWRIGHT_MODULE||'playwright');
    window.requests=[];window.intervalCallbacks=[];const originalInterval=window.setInterval;window.setInterval=(fn,ms,...args)=>{if(ms===100)intervalCallbacks.push(fn);return originalInterval(fn,ms,...args);};
    window.GM_xmlhttpRequest=options=>{
     requests.push({url:options.url,body:JSON.parse(options.data||'{}')});
-    if(options.url.includes('responses')) {const request=JSON.parse(options.data);const payload=request.input.length===1?{target_subtitle:request.input[0].content[0].text}:JSON.parse(request.input[1].content[0].text);const text=payload.target_subtitles?JSON.stringify({translations:payload.target_subtitles.map(row=>({id:row.id,text:'寄存器示例'}))}):'寄存器示例';window.setTimeout(()=>options.onload({status:200,responseText:JSON.stringify({output:[{type:'message',content:[{type:'output_text',text}]}]})}),100);}
+    if(options.url.includes('responses')) {const request=JSON.parse(options.data);const input=request.input[0].content[0].text;const text=/^\[01\] /.test(input)?input.split('\n').map(line=>line.slice(0,5)+'寄存器示例').join('\n'):'寄存器示例';window.setTimeout(()=>options.onload({status:200,responseText:JSON.stringify({output:[{type:'message',content:[{type:'output_text',text}]}]})}),100);}
     else if(options.url.endsWith('submit')) queueMicrotask(()=>options.onload({status:200,responseHeaders:'X-Api-Status-Code: 20000000',responseText:'{}'}));
     else if(options.url.endsWith('query')) window.releaseQuery=()=>options.onload({status:200,responseHeaders:'X-Api-Status-Code: 20000000',responseText:JSON.stringify({result:{utterances:[{text:phrase,start_time:0}]}})});
     return {abort(){options.onabort?.();}};
@@ -36,15 +36,21 @@ const {chromium}=require(process.env.PLAYWRIGHT_MODULE||'playwright');
   assert.equal(await ui.locator('#translation-status').textContent(),'翻译已开启');
   await page.waitForTimeout(200);
   assert.equal(await ui.locator('#translation-status').textContent(),'翻译已开启');
-  const contextual=await page.evaluate(()=>requests.find(r=>r.url.includes('responses'))?.body);
-  assert.equal(contextual.model,'doubao-seed-2-1-lite-260915');
-  const context=JSON.parse(contextual.input[1].content[0].text).reference;
+  const requestsForTranslation=await page.evaluate(()=>requests.filter(r=>r.url.includes('responses')).map(r=>r.body));
+  assert.ok(requestsForTranslation.length>0 && requestsForTranslation.every(body=>body.model==='doubao-seed-translation-250915' && body.input.length===1));
+  assert.deepEqual(requestsForTranslation[0].input[0].content[0].translation_options,{target_language:'zh'});
   await page.waitForFunction(()=>document.getElementById('zy-subtitle-host').shadowRoot.getElementById('translation').textContent==='寄存器示例');
-  assert.match(await ui.locator('#original').textContent(),/我们使用 Transformer/);assert.equal(await ui.locator('#translation').textContent(),'寄存器示例');assert.equal(await page.evaluate(()=>requests.some(r=>r.url.includes('responses')&&(JSON.parse(r.body.input[1].content[0].text).target_subtitles||[{text:JSON.parse(r.body.input[1].content[0].text).target_subtitle}]).some(row=>row.text.includes('我们使用')))),true);await page.evaluate(()=>{videoTime=8;const lines=document.querySelectorAll('.trans-lan')[4];const old=document.createElement('div');old.textContent='An unwanted English translation';lines.append(old);});await page.waitForTimeout(350);assert.equal(await ui.locator('#original').textContent(),'现在我们继续讲下一页');assert.equal(await ui.locator('#translation').textContent(),'');assert.equal(await page.evaluate(()=>requests.some(r=>r.url.includes('responses')&&(JSON.parse(r.body.input[1].content[0].text).target_subtitles||[{text:JSON.parse(r.body.input[1].content[0].text).target_subtitle}]).some(row=>row.text==='现在我们继续讲下一页'))),false);await page.evaluate(()=>videoTime=12);
-  assert.equal(context.subject,'CPU architecture');assert.equal(context.terminology,'register = 寄存器');assert.ok(context.preceding.length>=5);
-  await ui.locator('#settings-open').click();await ui.locator('#settings-tab-translation').click();await ui.locator('#translation-profile').selectOption('economy');await page.waitForFunction(()=>{const body=requests.filter(r=>r.url.includes('responses')).at(-1)?.body;return body?.model==='doubao-seed-translation-250915';});
-  assert.equal(await page.evaluate(()=>requests.filter(r=>r.url.includes('responses')).at(-1).body.model),'doubao-seed-translation-250915');
-  const economical=await page.evaluate(()=>requests.filter(r=>r.url.includes('responses')).at(-1).body);assert.equal(economical.input.length,1);assert.deepEqual(economical.input[0].content[0].translation_options,{target_language:'zh'});
+  assert.match(await ui.locator('#original').textContent(),/我们使用 Transformer/);
+  assert.ok(requestsForTranslation.some(body=>body.input[0].content[0].text.includes('我们使用')));
+  await page.evaluate(()=>{videoTime=8;const lines=document.querySelectorAll('.trans-lan')[4];const old=document.createElement('div');old.textContent='An unwanted English translation';lines.append(old);});
+  await page.waitForTimeout(350);
+  assert.equal(await ui.locator('#original').textContent(),'现在我们继续讲下一页');
+  assert.equal(await ui.locator('#translation').textContent(),'');
+  assert.equal(await page.evaluate(()=>requests.some(r=>r.url.includes('responses')&&r.body.input[0].content[0].text.includes('现在我们继续讲下一页'))),false);
+  await page.evaluate(()=>videoTime=12);
+  await ui.locator('#settings-open').click();await ui.locator('#settings-tab-translation').click();
+  assert.equal(await ui.locator('#translation-profile').count(),0);
+  assert.ok(await ui.locator('#translation-batch-size').isVisible());
   await ui.locator('#settings-tab-sync').click();await ui.locator('#auto-sync').check();assert.equal(await ui.locator('#auto-sync').isChecked(),true);
   await page.evaluate(()=>playing=true);
   await page.waitForFunction(()=>document.querySelector('#zy-subtitle-host').shadowRoot.getElementById('sync-auto-indicator').title.includes('20 分钟'));
@@ -79,6 +85,6 @@ const {chromium}=require(process.env.PLAYWRIGHT_MODULE||'playwright');
   await ui.locator('#sync-auto-indicator[data-state="waiting"]').waitFor({state:'visible'});
   assert.equal(await ui.locator('#auto-sync').isChecked(),true);
   assert.deepEqual(errors,[]);
-  console.log('Translation context, timer visibility/interval/off/manual/error/course reset and late ASR takeover passed (mock services only).');
+  console.log('Seed Translation, timer visibility/interval/off/manual/error/course reset and late ASR takeover passed (mock services only).');
  } finally {await browser.close();}
 })().catch(error=>{console.error(error);process.exitCode=1;});

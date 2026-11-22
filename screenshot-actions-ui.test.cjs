@@ -138,19 +138,37 @@ const source = fs.readFileSync('warm-theme.js', 'utf8') + '\n' + fs.readFileSync
       assert.doesNotMatch(input, /OTHER_COURSE/);
       await page.close();
     }
-    // The request includes real annotation pixels and excludes old conversation history.
-    {
+    // Both the default pen and the explicit circle tool are composited into requests.
+    for (const translate of [false, true]) {
       const {page, host} = await mount({session: {history: history('OLD_HISTORY'), conversationTitle: '旧问题', open: false}});
       await crop(page, host);
-      await host.locator('#ai-crop-draw').click();
-      await host.locator('#ai-crop-circle').click();
+      const tools = host.locator('#ai-crop-tools');
+      assert.equal(await tools.isHidden(), true);
+      const actions = await Promise.all(['use', 'send', 'translate'].map(id => host.locator('#ai-crop-' + id).boundingBox()));
+      assert.ok(actions.every(action => action.y === actions[0].y && Math.abs(action.width - actions[0].width) < 2));
+      assert.ok(actions[0].x < actions[1].x && actions[1].x < actions[2].x);
+      if (!translate) {
+        await host.locator('#ai-crop-draw').click();
+        await host.locator('#ai-crop-circle').click();
+      }
       const box = await host.locator('#ai-crop-preview').boundingBox();
       await page.mouse.move(box.x + 40, box.y + 40); await page.mouse.down();
       await page.mouse.move(box.x + 280, box.y + 170, {steps: 6}); await page.mouse.up();
-      await host.locator('#ai-crop-send').evaluate(button => {button.click(); button.click();});
+      const action = host.locator(translate ? '#ai-crop-translate' : '#ai-crop-send');
+      if (translate) {
+        assert.equal(await action.innerText(), '翻译这句话');
+        assert.equal(await tools.isHidden(), true, 'drawing does not require expanding the tools');
+      }
+      await action.evaluate(button => {button.click(); button.click();});
       await finished(page);
       const request = await page.evaluate(() => calls[0]);
-      assert.doesNotMatch(JSON.stringify(request.input), /OLD_HISTORY/);
+      if (translate) {
+        assert.match(JSON.stringify(request.input), /OLD_HISTORY_QUESTION/);
+        assert.match(request.input.at(-1).content[0].text, /红色圈画标出的这句话翻译成中文/);
+        assert.match(request.input[0].content, /大学课程学习助手.*最小例子/);
+      } else {
+        assert.doesNotMatch(JSON.stringify(request.input), /OLD_HISTORY/);
+      }
       const image = request.input.at(-1).content.find(item => item.type === 'input_image').image_url;
       const pixels = await page.evaluate(async src => {
         const image = new Image(); image.src = src; await image.decode();
@@ -161,7 +179,7 @@ const source = fs.readFileSync('warm-theme.js', 'utf8') + '\n' + fs.readFileSync
         return {width: canvas.width, height: canvas.height, red};
       }, image);
       assert.deepEqual([pixels.width, pixels.height], [480, 260], 'submitted image preserves the selected bounds');
-      assert.ok(pixels.red > 100, 'the AI request includes the composited red circle');
+      assert.ok(pixels.red > 100, 'the AI request includes composited red annotation pixels');
       assert.equal(await page.evaluate(() => calls.length), 1, 'repeated clicks submit exactly once');
       assert.equal(await host.locator('#ai-attachment').isVisible(), false);
       await page.close();
@@ -177,8 +195,8 @@ const source = fs.readFileSync('warm-theme.js', 'utf8') + '\n' + fs.readFileSync
     }
     // Optional notes stay beside collection, remain usable on narrow screens, and Escape dismisses them first.
     {
-      const {page, host} = await mount();
-      await page.setViewportSize({width: 375, height: 844});
+      const {page, host} = await mount({session: {history: history("NARROW_HISTORY"), open: false}});
+      await page.setViewportSize({width: 320, height: 844});
       await crop(page, host);
       assert.equal(await host.locator('#ai-clip-title').isHidden(), true);
       assert.equal(await host.locator('#ai-clip-note').isHidden(), true);
@@ -191,7 +209,7 @@ const source = fs.readFileSync('warm-theme.js', 'utf8') + '\n' + fs.readFileSync
       await host.locator('#ai-clip-title').fill('窄屏可选标题');
       await host.locator('#ai-clip-note').fill('窄屏可选备注');
       const editor = await host.locator('.ai-clip-editor').boundingBox();
-      assert.ok(editor.x >= 0 && editor.y >= 0 && editor.x + editor.width <= 376 && editor.y + editor.height <= 845, 'notes editor fits the narrow viewport');
+      assert.ok(editor.x >= 0 && editor.y >= 0 && editor.x + editor.width <= 321 && editor.y + editor.height <= 845, 'notes editor fits the narrow viewport');
       assert.equal(await host.locator('.ai-crop-actions').evaluate(node => node.scrollWidth <= node.clientWidth), true, 'action controls are not clipped');
       await page.screenshot({path: '.test-media/screenshot-notes-' + artifactVersion + '.png'});
       await page.keyboard.press('Escape');
@@ -204,6 +222,16 @@ const source = fs.readFileSync('warm-theme.js', 'utf8') + '\n' + fs.readFileSync
       await page.keyboard.press('Escape');
       assert.equal(await host.locator('#ai-crop').count(), 0);
       assert.equal(await page.evaluate(() => calls.length), 0);
+      await page.close();
+    }
+    {
+      const {page, host} = await mount();
+      await page.setViewportSize({width: 320, height: 700});
+      await crop(page, host);
+      await host.locator('#ai-crop-translate').click();
+      await finished(page);
+      const question = await page.evaluate(() => calls[0].input.at(-1).content[0].text);
+      assert.match(question, /截图选区中的文字翻译成中文/);
       await page.close();
     }
     // An awaited prompt catalog cannot resurrect a screenshot after reset, course change, or teardown.
@@ -225,7 +253,7 @@ const source = fs.readFileSync('warm-theme.js', 'utf8') + '\n' + fs.readFileSync
       await page.close();
     }
     assert.deepEqual(errors, []);
-    console.log('PASS: screenshot actions hide unavailable history, validate same-course archives, send annotated pixels once, start clean new conversations, and cancel without model requests. All AI replies are local mocks.');
+    console.log('PASS: screenshot actions hide unavailable history, validate same-course archives, draw immediately, send annotated pixels once, translate within the crop, start clean new conversations, and cancel without model requests. All AI replies are local mocks.');
   } finally {
     await browser.close();
   }
