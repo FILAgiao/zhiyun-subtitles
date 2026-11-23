@@ -1,7 +1,7 @@
 {
   "version": "0.20.115",
-  "backup": "/opt/zhiyun-gateway/backend/.rollback-release-0.20.115-20261123T064019Z",
-  "database_backup": "/data/gateway-before-0.20.115-20261123T064019Z.sqlite3",
+  "backup": "/opt/zhiyun-gateway/backend/.rollback-release-0.20.115-20261123T092307Z",
+  "database_backup": "/data/gateway-before-0.20.115-20261123T092307Z.sqlite3",
   "changed": [
     "analytics_api.py",
     "pricing.py",
@@ -121,8 +121,8 @@
       "sha256": "3fe77e28d46a3d6ff958e7f94090eb2b60fdc9b08f34bfdb057d1cc93611f133"
     },
     "extension.zip": {
-      "bytes": 2105323,
-      "sha256": "fa5f276fec82c014749f22eae9dbd03ae8d933a78a4e443f65fd5e82c39b98f3"
+      "bytes": 2105334,
+      "sha256": "d1cbe67e7499a6667afc4a5177805be350369ae0456044ecf3f9454c55a3178b"
     },
     "landing/brand-logo.png": {
       "bytes": 16647,
