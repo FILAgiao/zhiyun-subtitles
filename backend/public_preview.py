@@ -75,16 +75,22 @@ def seed_preview(gateway,*,clips=False):
 
 
 class PreviewGateway(Gateway):
-    """The preview cannot send email, call providers or administer real accounts."""
-    def handle(self,method,path,*args,**kwargs):
+    """The preview cannot send real email, call providers or administer real accounts."""
+    def handle(self,method,path,headers,body,ip,stream_sink=None):
+        route=urlsplit(path).path
+        if method=='POST' and route in ('/v1/auth/register-code','/v1/auth/register') and getattr(self,'study_mailer',None):
+            email=body.get('email') if isinstance(body,dict) else None
+            if not isinstance(email,str) or not email.strip().lower().endswith('@example.test'):
+                raise Fault(400,'本地预览请使用 @example.test 示例邮箱')
+            return super().handle(method,path,headers,body,ip,stream_sink)
         allowed={('GET','/health'),('GET','/v1/me'),('GET','/v1/account/access'),
                  ('GET','/v1/study/clips'),('GET','/v1/study/clip-image'),('POST','/v1/study/clips'),('DELETE','/v1/study/clips'),
                  ('GET','/v1/study/capabilities'),('GET','/v1/study/conversations'),
                  ('POST','/v1/auth/login'),('POST','/v1/auth/logout'),('POST','/v1/auth/web-session'),
                  ('POST','/v1/study/conversations'),('DELETE','/v1/study/conversations')}
-        if (method,urlsplit(path).path) not in allowed:
-            raise Fault(503,'本地验收不开放邮件、模型或管理写入')
-        return super().handle(method,path,*args,**kwargs)
+        if (method,route) not in allowed:
+            raise Fault(503,'本地验收不开放真实邮件、模型或管理写入')
+        return super().handle(method,path,headers,body,ip,stream_sink)
 
 
 def main():
@@ -92,6 +98,10 @@ def main():
     with tempfile.TemporaryDirectory() as folder:
         def offline(*args,**kwargs):raise Fault(503,'本地预览不连接模型服务')
         gateway=PreviewGateway(folder+'/preview.sqlite3',upstream=offline,upstream_stream=offline)
+        if args.demo:
+            def preview_mailer(recipient,code):
+                print(f'本地注册验证码（{recipient}）：{code}',flush=True)
+            gateway.study_mailer=preview_mailer
         demo=seed_preview(gateway,clips=True) if args.demo else None
         server=make_preview_server(gateway,args.port)
         print(json.dumps({'url':'http://127.0.0.1:'+str(server.server_port)+'/gateway/','port':server.server_port,**({'demo':demo} if demo else {})},ensure_ascii=False),flush=True)

@@ -19,3 +19,6 @@
 .nav-admin{color:#68564c;white-space:nowrap;padding-block:8px}
 @media(min-width:541px) and (max-width:850px){.nav-actions{gap:12px;flex-wrap:wrap;justify-content:flex-end}}
 @media(max-width:540px){.nav-actions{gap:8px}}
+
+.nav-actions .nav-signup{color:#a84420;font-weight:750;white-space:nowrap}
+.account-services-links>a[hidden]{display:none!important}

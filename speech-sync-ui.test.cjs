@@ -160,7 +160,15 @@ function mockAudio({currentTime=22,streaming=false,startPaused=false,initialRate
    const s=await open([{queryTimeouts:1}]);await s.start();await s.done();await oneSubmission(s);assert.equal((await s.calls()).filter(x=>x.action==='query').length,2);assert.equal(await s.offset(),'2');await s.close();
   }
   {
-   const s=await open([{holdQuery:true}]);await s.start();await s.pending('1:query');await s.ui.locator('#sync-toggle').click();await s.done();const cancelled=await s.status();await s.release('1:query');await s.page.waitForTimeout(100);assert.equal(await s.offset(),'0');assert.equal(await s.status(),cancelled);await oneSubmission(s);await s.close();
+   const s=await open([{holdQuery:true}]);await s.start();await s.pending('1:query');
+   await s.ui.locator('#collapse').click();
+   const notice=s.ui.locator('#compact-sync-status');
+   assert.equal(await notice.textContent(),'正在同步字幕…');
+   assert.equal(await notice.isVisible(),true);
+   await s.ui.locator('#compact').click();
+   await s.ui.locator('#sync-toggle').click();await s.done();
+   assert.equal(await notice.textContent(),'');
+   const cancelled=await s.status();await s.release('1:query');await s.page.waitForTimeout(100);assert.equal(await s.offset(),'0');assert.equal(await s.status(),cancelled);await oneSubmission(s);await s.close();
   }
   {
    const s=await open([{holdQuery:true}]);await s.start();await s.pending('1:query');await s.ui.locator('#sync-auto-indicator').filter({hasText:'🔄'}).waitFor({state:'attached'});await s.page.evaluate(()=>location.hash='#/replay?course_id=speech-late-other-course');await s.page.waitForTimeout(650);await s.release('1:query');await s.page.waitForTimeout(150);assert.equal(await s.offset(),'0');assert.equal(await s.ui.locator('#sync-complete').isHidden(),true);assert.doesNotMatch(await s.status(),/匹配成功/);assert.deepEqual(await s.attempts(),[]);assert.equal(await s.live(),'');await s.close();

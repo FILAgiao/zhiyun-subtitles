@@ -50,6 +50,14 @@ const fs=require('node:fs'),assert=require('node:assert/strict'),{chromium}=requ
   await page.setViewportSize({width:1440,height:900});await page.waitForTimeout(180);await ui.locator('#focus-fullscreen').click();await page.waitForFunction(()=>document.fullscreenElement?.id==='player');await page.waitForTimeout(180);assert.deepEqual(await layout(),before,'re-entering fullscreen restores current PPT and video geometry');assert.deepEqual(await page.evaluate(()=>values['ppt-free-window-v2']??null),manualGeometry,'capture and fullscreen transitions preserve manual PPT geometry');
   // Exercise the shared launcher action and actual getSlide callback from the full installer.
   await ui.locator('#collapse').click();await ui.locator('#compact-explain').click();await page.waitForFunction(()=>aiBodies.length===2);const original=await pixels(await page.evaluate(()=>aiBodies[1].input.at(-1).content.find(x=>x.type==='input_image').image_url));assert.deepEqual(original.size,[1600,900]);expectColors(original);assert.doesNotMatch(await ui.locator('#ai-status').textContent(),/未授权|尚未授权/);assert.deepEqual(await layout(),before);assert.equal(await page.evaluate(()=>shares),0);assert.equal(await page.evaluate(()=>nativeCalls),0);assert.deepEqual(await page.evaluate(()=>otherRequests),[]);assert.ok((await page.evaluate(()=>schoolReads)).every(url=>url.startsWith('https://')));assert.deepEqual(errors,[]);
+  await ui.getByRole('button',{name:'添加 PPT 到对话'}).click();
+  const attachment=ui.locator('#ai-attachment');
+  await attachment.getByText('PPT 第 1 页已添加').waitFor();
+  expectColors(await pixels(await attachment.locator('img').getAttribute('src')));
+  assert.equal(await page.evaluate(()=>aiBodies.length),2);
+  assert.equal(await preview.count(),0);
+  await ui.getByRole('button',{name:'移除 PPT'}).click();
+  assert.equal(await attachment.isHidden(),true);
   await page.screenshot({path:'.test-media/classroom-ppt-integration-regression.png'});
   console.log('PASS: complete userscript classroom focus/fullscreen, actual getSlide and middle drag/compact-explain, real PPT pixels via HTTP-to-HTTPS GM Blob, local mock AI, no sharing or native capture and no layout change.');
  }finally{await browser.close();}

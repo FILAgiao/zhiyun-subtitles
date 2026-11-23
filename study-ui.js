@@ -36,10 +36,12 @@ function makeCompactLauncherDraggable(launcher, getValue, setValue) {
   const top=Math.max(8,Math.min(y,win.innerHeight-box.height-8));
   const scale=box.width/parseFloat(win.getComputedStyle(launcher).width)||1;
   Object.assign(launcher.style,{left:left/scale+'px',top:top/scale+'px',right:'auto'});
+  launcher.toggleAttribute('data-sync-notice-above',top+box.height+42>win.innerHeight);
   return {x:left,y:top};
  }
  function restorePosition() {
   if(position)place(position.x,position.y);
+  else launcher.toggleAttribute('data-sync-notice-above',launcher.getBoundingClientRect().bottom+42>win.innerHeight);
  }
  launcher.addEventListener('pointerdown',event=>{
   if(event.button!==0||drag)return;
@@ -163,6 +165,8 @@ function mount({shadow,mascot,getValue=(_key,fallback)=>fallback,setValue=()=>{}
  refreshSyncControl();
  const actionRow=document.createElement('div');actionRow.id='study-actions';actionRow.innerHTML='<button id="ai-open">✦ 讲解这页</button><button id="transcript-open">☷ 问题列表</button>';
  const compactLauncher=document.createElement('nav');compactLauncher.id='compact-launcher';compactLauncher.hidden=true;compactLauncher.setAttribute('aria-label','课堂快捷入口');$('compact').before(compactLauncher);compactLauncher.append($('compact'));compactLauncher.insertAdjacentHTML('beforeend','<button id="compact-explain" type="button" aria-label="讲解这页 PPT">✦ 讲解这页</button><button id="compact-history" type="button" aria-label="AI对话" title="AI对话" translate="no">AI对话</button>');
+ const compactSyncStatus=document.createElement('span');compactSyncStatus.id='compact-sync-status';compactSyncStatus.setAttribute('role','status');compactLauncher.append(compactSyncStatus);
+ style.textContent+='#compact-sync-status{position:absolute;top:calc(100% + 6px);left:0;padding:4px 10px;border:1px solid var(--zy-line,#dce5ef);border-radius:999px;background:var(--zy-card,#fff);color:var(--zy-text,#405970);box-shadow:0 3px 12px #18392b20;white-space:nowrap;pointer-events:none;font:500 12px/18px "Segoe UI","Microsoft YaHei",sans-serif}#compact-sync-status:empty{opacity:0}#compact-launcher[data-sync-notice-above] #compact-sync-status{top:auto;bottom:calc(100% + 6px)}';
  makeCompactLauncherDraggable(compactLauncher,getValue,setValue);
  $('compact-explain').onclick=()=>$('ai-open').click();
  style.textContent+=`#compact-launcher{z-index:40;pointer-events:auto;position:fixed;width:max-content;box-sizing:border-box;touch-action:none;user-select:none;cursor:grab;right:20px;left:auto;top:64px;display:flex;align-items:center;gap:2px;padding:4px;border:1px solid var(--zy-line,#dce5ef);border-radius:999px;background:var(--zy-card,#fff);box-shadow:0 5px 20px #18392b26;max-width:calc(100vw - 24px);font:600 14px/20px "Segoe UI","Microsoft YaHei",sans-serif}#compact-launcher[hidden]{display:none!important}#compact-launcher[data-dragging=true]{cursor:grabbing}#compact-launcher button{cursor:inherit;position:static;min-width:0;min-height:40px;top:auto;right:auto;margin:0;padding:7px 12px;border:0;border-radius:999px;background:transparent;color:var(--zy-text,#405970);box-shadow:none;white-space:nowrap;font:inherit}#compact-launcher #compact{font-size:14px;min-width:110px}#compact-launcher #compact-explain{background:var(--zy-soft,#edf4ff);color:var(--zy-accent,#215da1)}#compact-launcher #compact-history{width:auto;padding:7px 12px;font-size:14px}#sync-auto-indicator[data-busy=true]{animation:zy-sync-working 1.4s linear infinite}@keyframes zy-sync-working{to{transform:rotate(360deg)}}:host([data-ai-workspace]) #compact-launcher{display:none!important}@media(max-width:600px){#compact-launcher{right:12px}#compact-launcher button{padding:7px 10px}#compact-launcher #compact{min-width:100px}}@media(prefers-reduced-motion:reduce){#sync-auto-indicator{animation:none!important}}`;

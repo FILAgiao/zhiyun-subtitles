@@ -4,7 +4,7 @@ buildPublicPage();
 const version=JSON.parse(fs.readFileSync('backend/public-page.json','utf8')).pageVersion;
 const target=path.resolve('dist/gateway-website-'+version+'-local');
 const backend=['clips_api.py','clips.js','clips.css','speech_stream.py','server.py','admin_api.py','prompt_api.py','study_api.py','operations_api.py','analytics_api.py','pricing.py','public_page.py','public_preview.py','official-prompts.json','admin.html','admin.css','admin.js','privacy.html','download.html','download.template.html','download.css','public-page.json','site.js','portal.css','portal.js','study.html','study.css','study.js','account.html','account.css','account.js','CLIPS-API.md','WEBSITE-LOCAL.md','STUDY-API.md','OPERATIONS.md'];
-const files=backend.map(name=>'backend/'+name).concat(['02','01','03','04','05','06'].map(id=>'backend/landing/image-'+id+'.webp'),'backend/landing/brand-logo.png');
+const files=backend.map(name=>'backend/'+name).concat(['02','01','03','04','05','06'].map(id=>'backend/landing/image-'+id+'.webp'),'backend/landing/brand-logo.png','backend/landing/plugin-qr.png');
 fs.mkdirSync(target,{recursive:true});
 const hashes={};
 for(const name of files){const data=fs.readFileSync(name),dest=path.join(target,name);fs.mkdirSync(path.dirname(dest),{recursive:true});fs.writeFileSync(dest,data);hashes[name]={bytes:data.length,sha256:crypto.createHash('sha256').update(data).digest('hex')};}

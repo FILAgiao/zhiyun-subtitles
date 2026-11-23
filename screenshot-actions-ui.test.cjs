@@ -48,11 +48,11 @@ const source = fs.readFileSync('warm-theme.js', 'utf8') + '\n' + fs.readFileSync
     }, {course: COURSE, session, saved, delayedPrompts});
     return {page, host: page.locator('#host')};
   }
-  async function crop(page, host) {
-    await page.mouse.move(120, 100);
+  async function crop(page, host, start = {x: 120, y: 100}, end = {x: Math.min(600, page.viewportSize().width - 24), y: 360}) {
+    await page.mouse.move(start.x, start.y);
     await page.mouse.down({button: 'middle'});
     await host.locator('#ai-crop').waitFor({state: 'visible'});
-    await page.mouse.move(Math.min(600, page.viewportSize().width - 24), 360, {steps: 8});
+    await page.mouse.move(end.x, end.y, {steps: 8});
     await page.mouse.up({button: 'middle'});
     await host.locator('#ai-crop-preview').waitFor();
     assert.equal(await host.locator('#ai-crop-send').innerText(), '新对话提问');
@@ -63,6 +63,37 @@ const source = fs.readFileSync('warm-theme.js', 'utf8') + '\n' + fs.readFileSync
   const history = marker => [{role: 'user', text: marker + '_QUESTION'}, {role: 'assistant', text: marker + '_ANSWER'}];
   const indexed = (id, origin = COURSE) => ({id, origin, title: id, course: '测试课程', source: '文字提问', updated: Date.now()});
   try {
+    // The right edge follows the crop, and the panel stays reachable near viewport edges.
+    {
+      const {page, host} = await mount();
+      const toolbar = host.locator('.ai-crop-head');
+      await crop(page, host);
+      let panel = await toolbar.boundingBox();
+      assert.deepEqual([panel.x + panel.width, panel.y], [600, 368]);
+      await host.locator('#ai-crop-cancel').click();
+
+      await crop(page, host, {x: 720, y: 610}, {x: 1198, y: 890});
+      panel = await toolbar.boundingBox();
+      assert.deepEqual([panel.x + panel.width, panel.y + panel.height], [1192, 602]);
+      await host.locator('#ai-crop-draw').click();
+      await host.locator('#ai-crop-circle').waitFor();
+      panel = await toolbar.boundingBox();
+      assert.equal(panel.y + panel.height, 602, 'expanded tools stay above the selection');
+      await host.locator('#ai-crop-cancel').click();
+
+      await crop(page, host, {x: 10, y: 10}, {x: 580, y: 890});
+      panel = await toolbar.boundingBox();
+      assert.equal(panel.x, 588, 'a tall crop leaves the drawing area clear when there is room to the right');
+      assert.ok(panel.y + panel.height <= 892);
+      await page.setViewportSize({width: 320, height: 480});
+      await page.waitForFunction(() => {
+        const panel = document.querySelector('#host').shadowRoot.querySelector('.ai-crop-head').getBoundingClientRect();
+        return panel.left >= 8 && panel.top >= 8 && panel.right <= 312 && panel.bottom <= 472;
+      });
+      await host.locator('#ai-crop-cancel').click();
+      await page.close();
+    }
+
     // There is always a working new-conversation action, with no dead continuation button.
     {
       const {page, host} = await mount();
@@ -156,7 +187,7 @@ const source = fs.readFileSync('warm-theme.js', 'utf8') + '\n' + fs.readFileSync
       await page.mouse.move(box.x + 280, box.y + 170, {steps: 6}); await page.mouse.up();
       const action = host.locator(translate ? '#ai-crop-translate' : '#ai-crop-send');
       if (translate) {
-        assert.equal(await action.innerText(), '翻译这句话');
+        assert.equal(await action.innerText(), '翻译');
         assert.equal(await tools.isHidden(), true, 'drawing does not require expanding the tools');
       }
       await action.evaluate(button => {button.click(); button.click();});
@@ -198,6 +229,9 @@ const source = fs.readFileSync('warm-theme.js', 'utf8') + '\n' + fs.readFileSync
       const {page, host} = await mount({session: {history: history("NARROW_HISTORY"), open: false}});
       await page.setViewportSize({width: 320, height: 844});
       await crop(page, host);
+      const aiRow = await host.locator('.ai-crop-ai-actions').boundingBox();
+      const drawButton = await host.locator('#ai-crop-draw').boundingBox();
+      assert.ok(aiRow.y + aiRow.height <= drawButton.y, 'AI actions get a full row on narrow screens');
       assert.equal(await host.locator('#ai-clip-title').isHidden(), true);
       assert.equal(await host.locator('#ai-clip-note').isHidden(), true);
       assert.equal(await host.locator('#ai-clip-details summary').innerText(), '备注');

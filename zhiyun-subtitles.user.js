@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         浙大上课爽
 // @namespace    zhiyunzimu.local
-// @version      0.20.112
+// @version      0.20.115
 // @description  网课不硬扛，浙大上课爽！智云课堂同步字幕、PPT 讲解与本机缓存。
 // @match        https://*/*
 // @match        http://*/*
@@ -282,10 +282,12 @@ function makeCompactLauncherDraggable(launcher, getValue, setValue) {
   const top=Math.max(8,Math.min(y,win.innerHeight-box.height-8));
   const scale=box.width/parseFloat(win.getComputedStyle(launcher).width)||1;
   Object.assign(launcher.style,{left:left/scale+'px',top:top/scale+'px',right:'auto'});
+  launcher.toggleAttribute('data-sync-notice-above',top+box.height+42>win.innerHeight);
   return {x:left,y:top};
  }
  function restorePosition() {
   if(position)place(position.x,position.y);
+  else launcher.toggleAttribute('data-sync-notice-above',launcher.getBoundingClientRect().bottom+42>win.innerHeight);
  }
  launcher.addEventListener('pointerdown',event=>{
   if(event.button!==0||drag)return;
@@ -409,6 +411,8 @@ function mount({shadow,mascot,getValue=(_key,fallback)=>fallback,setValue=()=>{}
  refreshSyncControl();
  const actionRow=document.createElement('div');actionRow.id='study-actions';actionRow.innerHTML='<button id="ai-open">✦ 讲解这页</button><button id="transcript-open">☷ 问题列表</button>';
  const compactLauncher=document.createElement('nav');compactLauncher.id='compact-launcher';compactLauncher.hidden=true;compactLauncher.setAttribute('aria-label','课堂快捷入口');$('compact').before(compactLauncher);compactLauncher.append($('compact'));compactLauncher.insertAdjacentHTML('beforeend','<button id="compact-explain" type="button" aria-label="讲解这页 PPT">✦ 讲解这页</button><button id="compact-history" type="button" aria-label="AI对话" title="AI对话" translate="no">AI对话</button>');
+ const compactSyncStatus=document.createElement('span');compactSyncStatus.id='compact-sync-status';compactSyncStatus.setAttribute('role','status');compactLauncher.append(compactSyncStatus);
+ style.textContent+='#compact-sync-status{position:absolute;top:calc(100% + 6px);left:0;padding:4px 10px;border:1px solid var(--zy-line,#dce5ef);border-radius:999px;background:var(--zy-card,#fff);color:var(--zy-text,#405970);box-shadow:0 3px 12px #18392b20;white-space:nowrap;pointer-events:none;font:500 12px/18px "Segoe UI","Microsoft YaHei",sans-serif}#compact-sync-status:empty{opacity:0}#compact-launcher[data-sync-notice-above] #compact-sync-status{top:auto;bottom:calc(100% + 6px)}';
  makeCompactLauncherDraggable(compactLauncher,getValue,setValue);
  $('compact-explain').onclick=()=>$('ai-open').click();
  style.textContent+=`#compact-launcher{z-index:40;pointer-events:auto;position:fixed;width:max-content;box-sizing:border-box;touch-action:none;user-select:none;cursor:grab;right:20px;left:auto;top:64px;display:flex;align-items:center;gap:2px;padding:4px;border:1px solid var(--zy-line,#dce5ef);border-radius:999px;background:var(--zy-card,#fff);box-shadow:0 5px 20px #18392b26;max-width:calc(100vw - 24px);font:600 14px/20px "Segoe UI","Microsoft YaHei",sans-serif}#compact-launcher[hidden]{display:none!important}#compact-launcher[data-dragging=true]{cursor:grabbing}#compact-launcher button{cursor:inherit;position:static;min-width:0;min-height:40px;top:auto;right:auto;margin:0;padding:7px 12px;border:0;border-radius:999px;background:transparent;color:var(--zy-text,#405970);box-shadow:none;white-space:nowrap;font:inherit}#compact-launcher #compact{font-size:14px;min-width:110px}#compact-launcher #compact-explain{background:var(--zy-soft,#edf4ff);color:var(--zy-accent,#215da1)}#compact-launcher #compact-history{width:auto;padding:7px 12px;font-size:14px}#sync-auto-indicator[data-busy=true]{animation:zy-sync-working 1.4s linear infinite}@keyframes zy-sync-working{to{transform:rotate(360deg)}}:host([data-ai-workspace]) #compact-launcher{display:none!important}@media(max-width:600px){#compact-launcher{right:12px}#compact-launcher button{padding:7px 10px}#compact-launcher #compact{min-width:100px}}@media(prefers-reduced-motion:reduce){#sync-auto-indicator{animation:none!important}}`;
@@ -1805,9 +1809,9 @@ if(typeof module==='object'&&module.exports)module.exports={create};else root.ZY
   function mountLearningAssistant(options) {
     const {shadow,request,analytics=null,promptStore=null,studyStore=null,collapsedEntry=true,getApiKey=()=>'',canUse=()=>!!String(getApiKey()||'').trim(),getCapabilities=()=>({webSearch:true}),getAccountSummary=()=>null,getCourseId=()=>'',onOpenAccount=()=>onOpenSettings('connection'),prepareSlide=()=>{},getSlide=()=>null,getContext=()=>'',getCourseTitle=()=>'',getCaptureTarget=()=>null,getValue=(_,d)=>d,setValue=()=>{},onRequireLogin=()=>{},onOpenSettings=()=>{}}=options;
     if(!shadow || typeof request!=='function')throw new Error('AI 助手缺少 shadow 或 request');
-    const doc=shadow.ownerDocument,win=doc.defaultView;
+    const doc=shadow.ownerDocument,win=doc.defaultView,hasSlideSource=typeof options.getSlide==='function';
     function ensureAccess(feature='learning'){if(canUse(feature))return true;onRequireLogin(feature);return false;}
-    let settings=settingsOf(getValue(STORAGE_KEY,DEFAULTS)),history=[],lastAnswer=null,recentSlides=[],lastSlideKey='',pendingImage=null,controller=null,destroyed=false,cleanupCapture=null,requestSerial=0,slideContextEnabled=settings.followSlides,capturePending=false,sendPreparing=false,captureHideCount=0,captureHiddenElements=[];
+    let settings=settingsOf(getValue(STORAGE_KEY,DEFAULTS)),history=[],lastAnswer=null,recentSlides=[],lastSlideKey='',pendingImage=null,pendingSlideLabel='',controller=null,destroyed=false,cleanupCapture=null,requestSerial=0,slideContextEnabled=settings.followSlides,capturePending=false,sendPreparing=false,captureHideCount=0,captureHiddenElements=[];
     let preferredPromptMode=settings.mode;
     let legacyPrompts=settings.prompts.map(p=>({...p})),legacyCustom=settings.customPrompt;
     let promptAccount='',promptEpoch=0,promptReady=false,promptCloudReady=false,promptLoading=null,promptMessage='',redrawPrompts=()=>{};
@@ -1829,6 +1833,12 @@ if(typeof module==='object'&&module.exports)module.exports={create};else root.ZY
     const panel=make('section',{id:'ai-learning',role:'dialog','aria-label':'AI 讲解'});panel.hidden=true;
     style.textContent+="#ai-card-row{flex-wrap:wrap}#ai-study-web{font-size:11px;color:var(--zy-accent,#b94e22);padding:7px 2px;text-decoration:none}#ai-cloud-save{font-size:11px}#ai-card-row [hidden]{display:none!important}@media(max-width:400px){#ai-card-row{gap:6px}#ai-card-row #ai-card-hint{display:none}#ai-card-row button{padding:6px 8px}}";
     panel.innerHTML='<div class="ai-head"><button id="ai-questions-back" type="button" aria-label="返回问题列表">← 问题列表</button><strong>✦ AI 讲解</strong><button id="ai-settings-open" title="AI 设置" aria-label="AI 设置">⚙</button><button id="ai-close" aria-label="收起 AI 讲解">×</button></div><div class="ai-toolbar"><select id="ai-mode" aria-label="讲解模式"></select><button id="ai-slide-action">讲解本页 PPT</button><button id="ai-screenshot" type="button">截图</button></div><div id="ai-log" role="log" aria-label="课程对话" aria-live="polite"></div><div id="ai-status" role="status"></div><div id="ai-context-badge"></div><div id="ai-card-row" class="ai-card-row" hidden><button id="ai-save-card" type="button" disabled title="选择全部或逐句导出为本地 PNG">↓ 导出知识卡</button><button id="ai-cloud-save" type="button" title="文字问答同步到当前账号，截图可另行收藏原图；仅本人可见">保存到账号</button><a id="ai-study-web" href="https://47.77.182.216.sslip.io/gateway/study" target="_blank" rel="noopener noreferrer">网页回看 ↗</a><span id="ai-card-hint" class="ai-hint">保存问答，方便复习</span></div><form id="ai-compose"><div id="ai-attachment" hidden><img alt="待发送的课程截图"><span>截图已就位</span><button type="button" id="ai-remove-image" aria-label="移除截图">×</button></div><textarea id="ai-question" maxlength="4000" placeholder="卡在哪儿了？直接问，也可以粘贴截图。" aria-label="向 AI 提问"></textarea><div class="ai-actions"><button id="ai-clear" type="button" title="清空本课程的对话和图片上下文">新对话</button><button id="ai-stop" type="button" hidden>停止</button><span class="ai-hint">Enter 发送 · Shift 换行</span><button id="ai-send" type="submit">发送 ↗</button></div></form>';
+    const screenshotButton=panel.querySelector('#ai-screenshot');
+    const attachSlideButton=hasSlideSource?make('button',{id:'ai-add-slide',type:'button',text:'添加 PPT 到对话'}):null;
+    if(attachSlideButton){
+      // The extension's screenshot shortcut still dispatches to this button.
+      screenshotButton.hidden=true;screenshotButton.before(attachSlideButton);
+    }
     const accountStrip=make('div',{id:'ai-account-strip'}),accountSummaryButton=make('button',{id:'ai-account-status',type:'button'});accountStrip.hidden=true;accountStrip.append(accountSummaryButton);panel.querySelector('.ai-head').after(accountStrip);
     function updateAccountSummary(){const summary=getAccountSummary();accountStrip.hidden=!summary?.trial;if(!summary?.trial)return;accountSummaryButton.textContent=summary.text+' · '+summary.quota;accountSummaryButton.title=summary.deadline;accountSummaryButton.dataset.low=String(summary.low);accountSummaryButton.setAttribute('aria-label',summary.text+'，'+summary.quota+'，点击查看账号详情');}
     listen(accountSummaryButton,'click',()=>onOpenAccount());listen(shadow,'zy-account-state',updateAccountSummary);updateAccountSummary();
@@ -2065,8 +2075,16 @@ if(typeof module==='object'&&module.exports)module.exports={create};else root.ZY
     listen($('ai-question'),'input',()=>{fitQuestion();persist();});listen(win,'pagehide',persist);
     const composeResize=new win.ResizeObserver(()=>fitQuestion());composeResize.observe(panel);cleanups.push(()=>composeResize.disconnect());
     function stop(){if(controller){flushPendingReply?.();flushPendingReply=null;persist();}requestSerial++;controller?.abort();controller=null;capturePending=false;sendPreparing=false;setBusy(false);}
-    function setBusy(busy){$('ai-send').disabled=busy;$('ai-slide-action').disabled=busy;$('ai-stop').hidden=!busy;$('ai-save-card').disabled=busy||!lastAnswer;panel.setAttribute('aria-busy',String(busy));updateCardSelection();}
-    function attach(src){pendingImage=src;$('ai-attachment').hidden=!src;$('ai-attachment').querySelector('img').src=src||'';fitQuestion();}
+    function setBusy(busy){$('ai-send').disabled=busy;$('ai-slide-action').disabled=busy;if(attachSlideButton)attachSlideButton.disabled=busy;$('ai-stop').hidden=!busy;$('ai-save-card').disabled=busy||!lastAnswer;panel.setAttribute('aria-busy',String(busy));updateCardSelection();}
+    function attach(src,slideLabel=''){
+      pendingImage=src;pendingSlideLabel=src?slideLabel:'';
+      const attachment=$('ai-attachment'),preview=attachment.querySelector('img'),label=attachment.querySelector('span');
+      attachment.hidden=!src;preview.src=src||'';preview.alt=pendingSlideLabel||'待发送的课程截图';
+      label.textContent=pendingSlideLabel?pendingSlideLabel.split(' · ')[0].split('，')[0]+'已添加':'截图已就位';
+      label.title=pendingSlideLabel;
+      $('ai-remove-image').setAttribute('aria-label',pendingSlideLabel?'移除 PPT':'移除截图');
+      fitQuestion();
+    }
     function notifySlide(slide=getSlide()) {
       if(!slide)return;const key=String(slide.url||slide.index||'');if(!key || key===lastSlideKey)return;lastSlideKey=key;
       if(settings.followSlides&&slideContextEnabled){recentSlides=recentSlides.filter(s=>s.key!==key);recentSlides.push({url:slide.url,index:slide.index,time:slide.time,title:slide.title,dataUrl:slide.dataUrl,key});recentSlides=recentSlides.slice(-2);badge();}
@@ -2120,14 +2138,17 @@ if(typeof module==='object'&&module.exports)module.exports={create};else root.ZY
       question=String(question||'').trim();if(!question && !image && !pendingImage)return;if(controller)return;if(fresh||image){clear();conversationSource=source==='文字提问'?'截图提问':source;}
       open();const currentKey=String(getApiKey()||'');if(!currentKey.trim()){status('请先登录账号，解锁 AI 讲解与截图问答。');onRequireLogin();return;}
       controller=new AbortController();const ownController=controller,signal=controller.signal,serial=++requestSerial;
-      const chosenSettings=settingsOf(settings),currentImage=slide?null:(image||pendingImage),currentSlide=slide||getSlide();let images=[],labels=[],warning='',reply=null,replyTurn=null,feedbackTimer=null,transportConnected=false,renderTimer=null,pendingReply='';
+      const chosenSettings=settingsOf(settings),currentImage=slide?null:(image||pendingImage),currentSlide=slide||getSlide();
+      const attachedSlideLabel=currentImage&&!image?pendingSlideLabel:'';
+      if(attachedSlideLabel&&!question)question='请讲解这页 PPT。';
+      let images=[],labels=[],warning='',reply=null,replyTurn=null,feedbackTimer=null,transportConnected=false,renderTimer=null,pendingReply='';
       const renderReply=()=>{renderTimer=null;if(!reply||destroyed||serial!==requestSerial)return;renderMarkdown(doc,reply.querySelector('.ai-stream-text'),pendingReply.replace(/^联网搜索未开通，本次按普通对话回答。\s*/,''),{renderDiagrams:false});followLatest();};
       const flushRender=()=>{clearTimeout(renderTimer);renderTimer=null;renderReply();};flushPendingReply=flushRender;
       setBusy(true);status(slide?'正在读取本页 PPT…':'正在整理课程上下文…');
       try {
         notifySlide(currentSlide);
         if(slide && settings.followSlides && slideContextEnabled && !currentImage){for(const s of recentSlides.filter(s=>s.url!==currentSlide?.url).slice(-1)){try{images.push(await slideImage(s,signal));labels.push(slideLabel(s));}catch(e){if(e.name==='AbortError')throw e;warning='上一页图片未读取，已使用其余课程上下文。';}}}
-        if(currentImage){images.push(currentImage);labels.push('用户选择的课程区域');}
+        if(currentImage){images.push(currentImage);labels.push(attachedSlideLabel||'用户选择的课程区域');}
         else if(currentSlide && slide){images.push(await slideImage(currentSlide,signal));labels.push(slideLabel(currentSlide));}
         const context=[currentImage||fresh||(conversationOrigin&&conversationOrigin!==String(getCourseId()))?'':String(getContext()||''),labels.length?'附图依次为：'+labels.join('；'):currentImage?'附图是用户选择的课程区域。':''].filter(Boolean).join('\n');
         const summarize=!conversationTitle;
@@ -2146,10 +2167,30 @@ if(typeof module==='object'&&module.exports)module.exports={create};else root.ZY
         if(/^联网搜索未开通，本次按普通对话回答。/.test(answer)){answer=answer.replace(/^联网搜索未开通，本次按普通对话回答。\s*/,'');}
         lastAnswer={text:answer,mode:modeFor(chosenSettings,chosenSettings.mode).label,course:conversationCourse||String(getCourseTitle()||getContext()||'我的课堂知识卡').split('\n')[0].slice(0,100),image:currentImage||images.at(-1)||history.find(t=>t.image)?.image||null,question:question};$('ai-card-row').hidden=false;
         if(replyTurn)replyTurn.text=answer;else history.push({role:'assistant',text:answer});if(reply)reply._cardTurn=replyTurn;if(reply){clearTimeout(renderTimer);renderTimer=null;renderMarkdown(doc,reply.querySelector('.ai-stream-text'),answer);followLatest();}else reply=message('assistant',answer);status(warning||'可以继续追问，或换一种讲法。');persist();if(analyticsOwner)analytics?.feature('ai',analyticsOperation,analyticsOwner);
-      }catch(e){if(!destroyed && serial===requestSerial){persist();status(e.name==='AbortError'?'已停止。':e.message||'讲解暂时失败，请重试。');if(e.name!=='AbortError'){if(!$('ai-question').value)$('ai-question').value=question;if(currentImage)attach(currentImage);}}}
+      }catch(e){if(!destroyed && serial===requestSerial){persist();status(e.name==='AbortError'?'已停止。':e.message||'讲解暂时失败，请重试。');if(e.name!=='AbortError'){if(!$('ai-question').value)$('ai-question').value=question;if(currentImage)attach(currentImage,attachedSlideLabel);}}}
       finally{clearInterval(feedbackTimer);clearTimeout(renderTimer);if(flushPendingReply===flushRender)flushPendingReply=null;if(controller===ownController){controller=null;setBusy(false);}}
     }
     async function explainSlide(){const before=requestSerial;let slide=getSlide();if(!ensureAccess())return;if(!slide){await prepareSlide();slide=getSlide();}if(destroyed||before!==requestSerial)return;slideContextEnabled=settings.followSlides;if(!slide){open();status('请先打开本课程的 PPT，再点击讲解本页。');return;}await send('请讲解当前这页 PPT，结合老师附近的字幕说明重点和我需要掌握的内容。',{slide:slide||{},image:null});}
+    async function addSlideToConversation(){
+      if(destroyed||controller||sendPreparing||!ensureAccess())return;
+      const reader=new AbortController();
+      controller=reader;capturePending=true;
+      open();setBusy(true);status('正在读取本页 PPT…');
+      try{
+        let slide=getSlide();
+        if(!slide){await prepareSlide();if(reader.signal.aborted)return;slide=getSlide();}
+        if(!slide)throw Error('请先打开本课程的 PPT，再添加到对话。');
+        const data=await slideImage(slide,reader.signal);
+        if(reader.signal.aborted||destroyed)return;
+        attach(data,slideLabel(slide));
+        status('PPT 已添加，输入问题后发送。');
+        $('ai-question').focus();
+      }catch(error){
+        if(!reader.signal.aborted&&!destroyed)status(error.message||'PPT 读取失败，请重试。');
+      }finally{
+        if(controller===reader){controller=null;capturePending=false;setBusy(false);}
+      }
+    }
     function clear(){refreshSavedSettings();currentQuestionAnchor=null;readingSpace.remove();jumpLatest.hidden=true;activeImageDismiss?.();resetCardChoices();persist();stop();conversationId='';conversationTitle='';conversationSource='文字提问';conversationCourse='';conversationOrigin='';conversationOwner='';conversationSync='';lastCloudSignature='';cloudFailure=false;lastAnswer=null;$('ai-save-card').disabled=true;$('ai-card-row').hidden=true;cleanupCapture?.();panel.querySelector('#ai-question').value='';history=[];recentSlides=[];lastSlideKey='';slideContextEnabled=false;$('ai-log').replaceChildren();attach(null);greeting();badge();status('已开始新对话，旧截图与 PPT 上下文已清空。');persist();}
     const captureNotice=make('div',{id:'ai-capture-session',role:'status'});captureNotice.hidden=true;captureNotice.innerHTML='<span>正在截取当前页面…</span><button type="button" id="ai-capture-session-stop">取消截图</button>';shadow.append(captureNotice);
     function hideCaptureNotice(){captureNotice.hidden=true;}
@@ -2297,7 +2338,39 @@ if(typeof module==='object'&&module.exports)module.exports={create};else root.ZY
       const serial=requestSerial,viewport=sourceViewport||captureViewport();
       if(gesture){const from=gesture.viewport||viewport,convert=p=>({x:Math.max(0,Math.min(viewport.w,p.x*viewport.w/from.w)),y:Math.max(0,Math.min(viewport.h,p.y*viewport.h/from.h))});gesture={...gesture,start:convert(gesture.start),end:convert(gesture.end)};}
       const layer=make('section',{id:'ai-crop',role:'dialog','aria-label':'截图与批注'});
-      layer.innerHTML='<div id="ai-crop-stage"><img id="ai-crop-image" alt="当前标签页本地截图"><div id="ai-crop-selection"></div></div><div class="ai-crop-head"><strong>拖框选择 · Esc 取消</strong><button id="ai-crop-cancel" type="button" aria-label="关闭截图" style="position:absolute;right:8px;top:6px">×</button><div class="ai-crop-actions"><select id="ai-crop-conversation" aria-label="截图添加到哪个对话" hidden></select><button id="ai-crop-draw" disabled aria-expanded="false" aria-controls="ai-crop-tools" title="可直接在截图上画，点击这里展开圈画工具">圈画</button><div class="ai-crop-ai-actions"><button id="ai-crop-use" disabled>继续上次对话</button><button id="ai-crop-send" disabled>新对话提问</button><button id="ai-crop-translate" disabled title="将圈出的文字或截图选区中的文字翻译成中文">翻译这句话</button></div><div class="ai-clip-favorite"><button id="ai-crop-save" disabled title="保存截图和批注到自己的账号，不调用 AI">收藏</button><details id="ai-clip-details" hidden><summary title="可选：编辑收藏标题和备注">备注</summary><div class="ai-clip-editor"><label>标题<input id="ai-clip-title" maxlength="200" aria-label="收藏标题" placeholder="收藏标题"></label><label>备注（可选）<textarea id="ai-clip-note" maxlength="4000" aria-label="收藏笔记" placeholder="记下这张截图的重点"></textarea></label><small>随截图一起保存，可直接点击收藏。</small></div></details></div></div><div id="ai-crop-tools" hidden><button id="ai-crop-pen" aria-pressed="true">画笔</button><button id="ai-crop-circle" aria-pressed="false">圈选</button><button id="ai-crop-undo" disabled>撤销</button><button id="ai-crop-reset">清除批注</button></div><p id="ai-clip-status" role="status" aria-live="polite"></p></div>';
+      layer.innerHTML=`
+        <div id="ai-crop-stage"><img id="ai-crop-image" alt="当前标签页本地截图"><div id="ai-crop-selection"></div></div>
+        <div class="ai-crop-head">
+          <strong>拖框选择 · Esc 取消</strong>
+          <button id="ai-crop-cancel" type="button" aria-label="关闭截图">×</button>
+          <div class="ai-crop-actions">
+            <select id="ai-crop-conversation" aria-label="截图添加到哪个对话" hidden></select>
+            <div class="ai-crop-ai-actions">
+              <button id="ai-crop-use" disabled>继续上次对话</button>
+              <button id="ai-crop-send" disabled>新对话提问</button>
+              <button id="ai-crop-translate" disabled title="将圈出的文字或截图选区中的文字翻译成中文">翻译</button>
+            </div>
+            <button id="ai-crop-draw" disabled aria-expanded="false" aria-controls="ai-crop-tools" title="可直接在截图上画，点击这里展开圈画工具">圈画</button>
+            <div class="ai-clip-favorite">
+              <button id="ai-crop-save" disabled title="保存截图和批注到自己的账号，不调用 AI">收藏</button>
+              <details id="ai-clip-details" hidden>
+                <summary title="可选：编辑收藏标题和备注">备注</summary>
+                <div class="ai-clip-editor">
+                  <label>标题<input id="ai-clip-title" maxlength="200" aria-label="收藏标题" placeholder="收藏标题"></label>
+                  <label>备注（可选）<textarea id="ai-clip-note" maxlength="4000" aria-label="收藏笔记" placeholder="记下这张截图的重点"></textarea></label>
+                  <small>随截图一起保存，可直接点击收藏。</small>
+                </div>
+              </details>
+            </div>
+          </div>
+          <div id="ai-crop-tools" hidden>
+            <button id="ai-crop-pen" aria-pressed="true">画笔</button>
+            <button id="ai-crop-circle" aria-pressed="false">圈选</button>
+            <button id="ai-crop-undo" disabled>撤销</button>
+            <button id="ai-crop-reset">清除批注</button>
+          </div>
+          <p id="ai-clip-status" role="status" aria-live="polite"></p>
+        </div>`;
       shadow.append(layer);const img=layer.querySelector('img'),stage=layer.querySelector('#ai-crop-stage'),selection=layer.querySelector('#ai-crop-selection'),use=layer.querySelector('#ai-crop-use'),submit=layer.querySelector('#ai-crop-send'),translateButton=layer.querySelector('#ai-crop-translate');
       const destination=layer.querySelector('#ai-crop-conversation');
       destination.append(make('option',{value:'new',text:'新对话'}));
@@ -2309,10 +2382,36 @@ if(typeof module==='object'&&module.exports)module.exports={create};else root.ZY
       const captureCourse=String(getCourseId()),captureUrl=win.location.href;
       const draw=layer.querySelector('#ai-crop-draw'),favorite=layer.querySelector('#ai-crop-save'),clipStatus=layer.querySelector('#ai-clip-status');
       layer.querySelector('#ai-clip-title').value=String(getCourseTitle()||doc.title||'截图收藏').slice(0,200);
-      const clipDetails=layer.querySelector('#ai-clip-details');
-      const clipStyle=make('style');clipStyle.textContent='#ai-crop .ai-crop-head{max-height:calc(100vh - 16px);overflow:auto;padding-top:32px}#ai-crop .ai-crop-actions{display:flex;flex-wrap:wrap;gap:6px}#ai-crop .ai-crop-actions button{flex:1;white-space:nowrap;padding:8px}#ai-crop .ai-crop-ai-actions{display:grid;grid-auto-flow:column;grid-auto-columns:1fr;flex:2 0 auto;gap:6px}#ai-crop .ai-crop-ai-actions button{padding:6px;font-size:12px}#ai-crop #ai-crop-save{background:#b94e29;color:#fff}#ai-crop #ai-crop-tools[hidden],#ai-crop #ai-crop-conversation{display:none!important}#ai-crop #ai-crop-tools{margin-top:10px}#ai-crop .ai-clip-favorite{display:flex;flex:1;min-width:112px;align-items:center;gap:4px}#ai-crop-use[hidden]{display:none!important}#ai-clip-details{font-size:12px}#ai-clip-details summary{cursor:pointer;white-space:nowrap;padding:8px 4px;border-radius:6px}#ai-clip-details summary:hover,#ai-clip-details[open] summary{background:var(--zy-soft,#eee)}#ai-clip-details .ai-clip-editor{box-sizing:border-box;position:fixed;z-index:2;width:min(360px,calc(100vw - 16px));max-height:calc(100vh - 16px);overflow:auto;border:1px solid var(--zy-line,#ddd);border-radius:10px;padding:12px;background:var(--zy-card,#fff);color:var(--zy-text,#233954);box-shadow:0 8px 28px #0003}#ai-clip-details label{display:block;margin-bottom:8px}#ai-clip-details small{display:block;color:var(--zy-muted,#667)}#ai-clip-details input,#ai-clip-details textarea{display:block;box-sizing:border-box;width:100%;margin-top:6px;padding:8px;font:inherit}#ai-clip-note{max-height:90px}#ai-clip-status{font-size:12px;margin:8px 0 0}';layer.append(clipStyle);
-      draw.onclick=()=>{const tools=layer.querySelector('#ai-crop-tools');tools.hidden=!tools.hidden;draw.setAttribute('aria-expanded',String(!tools.hidden));layoutPreview();};
-      const cancel=()=>{img.onload=null;win.removeEventListener('resize',layoutPreview);doc.removeEventListener('fullscreenchange',layoutPreview);layer.remove();doc.removeEventListener('keydown',onKey,true);if(cleanupCapture===cancel)cleanupCapture=null;};cleanupCapture=cancel;
+      const clipDetails=layer.querySelector('#ai-clip-details'),toolbar=layer.querySelector('.ai-crop-head');
+      const clipStyle=make('style');clipStyle.textContent=`
+        #ai-crop .ai-crop-head{max-height:calc(100% - 16px);overflow:auto}
+        #ai-crop:not(.ai-crop-preview) .ai-crop-head{padding-top:32px}
+        #ai-crop #ai-crop-cancel{position:absolute;right:8px;top:6px;width:32px;height:32px;padding:0;border:1px solid var(--zy-line,#ddd);border-radius:8px;font:18px/1 sans-serif}
+        #ai-crop.ai-crop-preview .ai-crop-head{box-sizing:border-box;right:auto;bottom:auto;width:min(440px,calc(100% - 16px));pointer-events:auto;display:grid;grid-template-columns:minmax(0,1fr) auto;align-content:start;gap:6px;padding:10px}
+        #ai-crop.ai-crop-preview #ai-crop-cancel{position:static}
+        #ai-crop.ai-crop-preview .ai-crop-actions,#ai-crop-tools,#ai-clip-status{grid-column:1/-1}
+        #ai-crop .ai-crop-actions button,#ai-crop-tools button{min-height:32px;padding:6px 8px;white-space:nowrap}
+        #ai-crop .ai-crop-ai-actions{display:grid;grid-auto-flow:column;grid-auto-columns:minmax(0,1fr);flex:3 1 258px;min-width:0;gap:6px}
+        #ai-crop .ai-crop-ai-actions button{min-width:0;padding-inline:6px;font-size:12px;white-space:normal;overflow-wrap:anywhere}
+        #ai-crop .ai-clip-favorite{display:flex;flex:1 1 90px;align-items:center;gap:4px}
+        #ai-crop #ai-crop-save{flex:1}
+        @media(max-width:440px){#ai-crop.ai-crop-preview .ai-crop-ai-actions{flex-basis:100%}}
+        #ai-crop-tools{display:flex;flex-wrap:wrap;gap:6px}
+        #ai-crop #ai-crop-tools[hidden],#ai-crop #ai-crop-conversation,#ai-crop-use[hidden]{display:none!important}
+        #ai-clip-details{font-size:12px}
+        #ai-clip-details summary{cursor:pointer;white-space:nowrap;padding:8px 4px;border-radius:6px}
+        #ai-clip-details summary:hover,#ai-clip-details[open] summary{background:var(--zy-soft,#eee)}
+        #ai-clip-details .ai-clip-editor{box-sizing:border-box;position:fixed;z-index:2;width:min(360px,calc(100vw - 16px));max-height:calc(100vh - 16px);overflow:auto;border:1px solid var(--zy-line,#ddd);border-radius:10px;padding:12px;background:var(--zy-card,#fff);color:var(--zy-text,#233954);box-shadow:0 8px 28px #0003}
+        #ai-clip-details label{display:block;margin-bottom:8px}
+        #ai-clip-details small{display:block;color:var(--zy-muted,#667)}
+        #ai-clip-details input,#ai-clip-details textarea{display:block;box-sizing:border-box;width:100%;margin-top:6px;padding:8px;font:inherit}
+        #ai-clip-note{max-height:90px}
+        #ai-clip-status{font-size:12px;margin:0;overflow-wrap:anywhere}
+        #ai-clip-status:empty{position:absolute}
+      `;layer.append(clipStyle);
+      draw.onclick=()=>{const tools=layer.querySelector('#ai-crop-tools');tools.hidden=!tools.hidden;draw.setAttribute('aria-expanded',String(!tools.hidden));};
+      const toolbarResize=new win.ResizeObserver(layoutPreview);toolbarResize.observe(toolbar);
+      const cancel=()=>{img.onload=null;toolbarResize.disconnect();win.removeEventListener('resize',layoutPreview);doc.removeEventListener('fullscreenchange',layoutPreview);layer.remove();doc.removeEventListener('keydown',onKey,true);if(cleanupCapture===cancel)cleanupCapture=null;};cleanupCapture=cancel;
       const onKey=e=>{if(e.key==='Escape'){e.preventDefault();e.stopImmediatePropagation();if(clipDetails.open)clipDetails.open=false;else cancel();}};doc.addEventListener('keydown',onKey,true);
       const point=e=>({x:Math.max(0,Math.min(viewport.w,e.clientX*viewport.w/win.innerWidth)),y:Math.max(0,Math.min(viewport.h,e.clientY*viewport.h/win.innerHeight))});
       const update=p=>{if(!start)return;rect={x:Math.min(start.x,p.x),y:Math.min(start.y,p.y),w:Math.abs(start.x-p.x),h:Math.abs(start.y-p.y)};Object.assign(selection.style,{display:'block',left:rect.x*win.innerWidth/viewport.w+'px',top:rect.y*win.innerHeight/viewport.h+'px',width:rect.w*win.innerWidth/viewport.w+'px',height:rect.h*win.innerHeight/viewport.h+'px'});};
@@ -2324,9 +2423,20 @@ if(typeof module==='object'&&module.exports)module.exports={create};else root.ZY
         const w=centered?canvas.width*scale:rect.w*scale,h=centered?canvas.height*scale:rect.h*scale;
         const x=centered?(width-w)/2:Math.max(0,Math.min(width-w,rect.x*width/viewport.w)),y=centered?(height-h)/2:Math.max(0,Math.min(height-h,rect.y*height/viewport.h));
         Object.assign(canvas.style,{position:'absolute',left:x+'px',top:y+'px',width:w+'px',height:h+'px',pointerEvents:'auto'});
-        const toolbar=layer.querySelector('.ai-crop-head');Object.assign(toolbar.style,{bottom:'auto',right:'auto',pointerEvents:'auto'});toolbar.style.width=Math.max(1,Math.min(480,width-16))+'px';
-        const toolbarHeight=toolbar.getBoundingClientRect().height;
-        Object.assign(toolbar.style,{left:Math.max(8,Math.min(x,width-toolbar.offsetWidth-8))+'px',top:(y+h+toolbarHeight+16<=height?y+h+8:Math.max(8,y-toolbarHeight-8))+'px'});
+        const gap=8,edge=8,right=x+w,bottom=y+h;
+        const {width:toolbarWidth,height:toolbarHeight}=toolbar.getBoundingClientRect();
+        const maxLeft=width-toolbarWidth-edge,maxTop=height-toolbarHeight-edge;
+        let left=Math.max(edge,Math.min(right-toolbarWidth,maxLeft)),top=bottom+gap;
+        if(top>maxTop){
+          const above=y-toolbarHeight-gap;
+          if(above>=edge)top=above;
+          else{
+            top=Math.max(edge,Math.min(bottom-toolbarHeight,maxTop));
+            if(right+gap<=maxLeft)left=right+gap;
+            else if(x-toolbarWidth-gap>=edge)left=x-toolbarWidth-gap;
+          }
+        }
+        Object.assign(toolbar.style,{left:left+'px',top:top+'px'});
         if(clipDetails.open){const editor=clipDetails.querySelector('.ai-clip-editor'),anchor=clipDetails.getBoundingClientRect(),eh=editor.offsetHeight;Object.assign(editor.style,{left:Math.max(8,Math.min(anchor.right-editor.offsetWidth,width-editor.offsetWidth-8))+'px',top:Math.max(8,Math.min(anchor.bottom+eh+8<=height?anchor.bottom+4:anchor.top-eh-4,height-eh-8))+'px'});}
       }
       win.addEventListener('resize',layoutPreview);doc.addEventListener('fullscreenchange',layoutPreview);
@@ -2341,7 +2451,7 @@ if(typeof module==='object'&&module.exports)module.exports={create};else root.ZY
         // glass card must not cover it when sharing ends or fullscreen changes.
         img.style.setProperty('display','none','important');stage.style.pointerEvents='none';
         for(const [key,value] of Object.entries({background:centered?'#071519b3':'transparent',border:'0',borderRadius:'0',boxShadow:'none',backdropFilter:'none',pointerEvents:'none'}))layer.style.setProperty(key.replace(/[A-Z]/g,c=>'-'+c.toLowerCase()),value,'important');
-        layer.querySelector('strong').textContent='随意摘 · 截图预览';layer.querySelector('#ai-crop-tools').hidden=true;draw.disabled=favorite.disabled=submit.disabled=translateButton.disabled=false;use.disabled=!destination.querySelector('option[value="current"]')&&destination.options.length<2;layer.querySelector('#ai-clip-details').hidden=false;
+        layer.querySelector('strong').textContent='随意摘';layer.querySelector('#ai-crop-tools').hidden=true;draw.disabled=favorite.disabled=submit.disabled=translateButton.disabled=false;use.disabled=!destination.querySelector('option[value="current"]')&&destination.options.length<2;layer.querySelector('#ai-clip-details').hidden=false;
         layoutPreview();redraw();if(analyticsOwner)analytics?.feature('screenshot',analyticsOperation,analyticsOwner);
         const canvasPoint=e=>{const r=canvas.getBoundingClientRect();return{x:(e.clientX-r.left)*canvas.width/r.width,y:(e.clientY-r.top)*canvas.height/r.height};};
         canvas.onpointerdown=e=>{if(e.button!==0||clipBusy)return;e.preventDefault();active={tool,points:[canvasPoint(e)]};canvas.setPointerCapture(e.pointerId);redraw();};
@@ -2592,7 +2702,7 @@ if(typeof module==='object'&&module.exports)module.exports={create};else root.ZY
     },true);
     listen(resume,'click',e=>{if(suppressResumeClick&&e.detail!==0){suppressResumeClick=false;e.preventDefault();e.stopPropagation();return;}suppressResumeClick=false;open();});listen($('ai-close'),'click',collapse);listen($('ai-settings-open'),'click',()=>{mountSettings();onOpenSettings('ai');});
     listen($('ai-mode'),'change',()=>{settings.mode=$('ai-mode').value;save();});listen($('ai-stop'),'click',()=>{stop();status('已停止本次讲解。');});listen($('ai-clear'),'click',clear);listen($('ai-save-card'),'click',openCardDialog);listen($('ai-remove-image'),'click',()=>attach(null));
-    listen($('ai-slide-action'),'click',explainSlide);listen(captureNotice.querySelector('button'),'click',()=>{stop();hideCaptureNotice();cleanupCapture?.();});listen(win,'pagehide',()=>{if(capturePending)stop();cleanupCapture?.();hideCaptureNotice();});listen($('ai-compose'),'submit',e=>{e.preventDefault();send($('ai-question').value);});listen($('ai-question'),'paste',paste);listen($('ai-screenshot'),'click',startCapture);
+    listen($('ai-slide-action'),'click',explainSlide);listen(captureNotice.querySelector('button'),'click',()=>{stop();hideCaptureNotice();cleanupCapture?.();});listen(win,'pagehide',()=>{if(capturePending)stop();cleanupCapture?.();hideCaptureNotice();});listen($('ai-compose'),'submit',e=>{e.preventDefault();send($('ai-question').value);});listen($('ai-question'),'paste',paste);listen(screenshotButton,'click',startCapture);listen(attachSlideButton,'click',addSlideToConversation);
     listen($('ai-question'),'keydown',e=>{e.stopPropagation();if(e.key==='Enter'&&!e.shiftKey&&!e.isComposing){e.preventDefault();send(e.currentTarget.value);}});
     for(const [id,fn] of [['ai-open',explainSlide],['slide-explain',explainSlide],['ai-capture',startCapture]])listen(shadow.getElementById(id),'click',fn);
     function mountSettings(container=shadow.getElementById('settings-ai')){
@@ -2830,7 +2940,7 @@ return {create,opaque,courseKey,MAX_EVENTS,MAX_BATCH};
 (function(root,factory){const api=factory();if(typeof module==='object'&&module.exports)module.exports=api;else root.ZYGateway=api;})(globalThis,function(){
 'use strict';
 const DEFAULT_ORIGIN="https://47.77.182.216.sslip.io/gateway";
-const CLIENT_VERSION='0.20.112';
+const CLIENT_VERSION='0.20.115';
 function clientHeaders(){return {'X-Client-Version':CLIENT_VERSION,'X-Client-Channel':'userscript'};}
 const KEY='gateway-account-v1',APP='zhiyun-subtitles',CLIENT=globalThis.ZY_CLIENT_TYPE||'userscript';
 function baseURL(value){const u=new URL(String(value).trim());if(u.username||u.password||u.search||u.hash||!['/','/gateway','/gateway/'].includes(u.pathname)||(u.protocol!=='https:'&&!(u.protocol==='http:'&&['localhost','127.0.0.1'].includes(u.hostname))))throw Error('请填写 HTTPS 服务地址；本机调试可使用 http://127.0.0.1:8080');return u.origin+(u.pathname==='/'?'':'/gateway');}
@@ -7297,19 +7407,31 @@ const ZY_ONBOARDING_ARTWORK="data:image/webp;base64,UklGRvzlBwBXRUJQVlA4WAoAAAAw
     return time + anchors.at(-1).offset;
   }
   const SYNC_INTERVAL_SECONDS = 20 * 60;
+  const SYNC_SEEK_RETRY_SECONDS = 2 * 60;
   function createSyncSchedule() {
-    let enabled = false, last = null, elapsed = 0;
+    let enabled = false, last = null, elapsed = 0, retrying = false;
+    const remaining = () => Math.max(0, (retrying ? SYNC_SEEK_RETRY_SECONDS : SYNC_INTERVAL_SECONDS) - elapsed);
     return {
       get enabled() { return enabled; },
       get elapsed() { return elapsed; },
-      enable() { enabled = true; last = null; elapsed = 0; },
-      stop() { enabled = false; last = null; elapsed = 0; },
+      get retrying() { return retrying; },
+      get remaining() { return remaining(); },
+      enable() { enabled = true; last = null; elapsed = 0; retrying = false; },
+      stop() { enabled = false; last = null; elapsed = 0; retrying = false; },
+      resetPosition() { last = null; },
+      seek(interrupted = false) {
+        last = null;
+        if (enabled && (interrupted || retrying)) {
+          retrying = true;
+          elapsed = 0;
+        }
+      },
       advance(time, playing, busy = false) {
         if (!enabled) return false;
         const delta = last === null ? 0 : time - last; last = time;
         if (playing && !busy && delta > 0 && delta <= 3) elapsed += delta;
-        if (!playing || busy || elapsed < SYNC_INTERVAL_SECONDS) return false;
-        elapsed = 0; return true;
+        if (!playing || busy || remaining() > 0) return false;
+        elapsed = 0; retrying = false; return true;
       }
     };
   }
@@ -7571,12 +7693,13 @@ const ZY_ONBOARDING_ARTWORK="data:image/webp;base64,UklGRvzlBwBXRUJQVlA4WAoAAAAw
       if($('sync-result')){$('sync-result').dataset.available='true';if(!periodic||$('study-sync')?.open)$('sync-result').hidden=false;}
       stopTranscript(true);$('align-label').textContent='';$('align-attempts')?.replaceChildren();
       $('align-status').textContent='正在确认语音服务与账号权限…';
+      refreshSyncTimer();
       try{
         await Promise.race([gateway.ensureAccess(),new Promise(resolve=>{releasePreparation=resolve;})]);
         if(!stillPreparing())return;
         if(!gateway.canUse('speech')){if(!periodic)gateway.requireFeature('speech');$('align-status').textContent='当前账号尚未开通语音同步，请查看账号权限。';return;}
       }catch(error){if(stillPreparing())$('align-status').textContent='暂时无法确认语音服务：'+(error.message||'连接失败')+'；未提交语音，可重试。';return;}
-      finally{if(cancelAlignment===cancelPreparation){cancelAlignment=null;$('auto-align').textContent='开始匹配';}}
+      finally{if(cancelAlignment===cancelPreparation){cancelAlignment=null;$('auto-align').textContent='开始匹配';refreshSyncTimer();}}
     }
 
     const video = mainVideo, credentials = gateway.configured()?{apiKey:gateway.credential()}:GM_getValue('speech-credentials', null);
@@ -7597,7 +7720,7 @@ const ZY_ONBOARDING_ARTWORK="data:image/webp;base64,UklGRvzlBwBXRUJQVlA4WAoAAAAw
     const locatedSummary=()=>`文字已定位到字幕 ${stamp(locatedCandidate.start).slice(0,8)}，但缺少该边界的逐词时间，暂不能确定时间差；原偏移未改动。`;
     const logAttempt=text=>{const list=$('align-attempts');if(list){const li=document.createElement('li');li.textContent=`第 ${alignmentAttempt} 次：${text}`;list.replaceChildren(li);}};
     if($('align-attempts'))$('align-attempts').replaceChildren();
-    const listeners = ['pause','seeking','emptied','ended'];
+    const listeners = ['pause','emptied','ended'];
     let interrupted=false,buffering=false,resumeRecording=null,bufferRestarts=0;
     const onWaiting=()=>{buffering=true;if(recorder?.state==='recording'){interrupted=true;clearTimeout(timer);recorder.stop();}};
     const onPlaying=()=>{buffering=false;resumeRecording?.();};
@@ -7610,6 +7733,7 @@ const ZY_ONBOARDING_ARTWORK="data:image/webp;base64,UklGRvzlBwBXRUJQVlA4WAoAAAAw
     };
     cancelAlignment = cancel;
     $('auto-align').textContent = '停止匹配';
+    refreshSyncTimer();
     listeners.forEach(event => video.addEventListener(event, cancel));
     try {
       video.playbackRate=1;
@@ -7628,7 +7752,9 @@ const ZY_ONBOARDING_ARTWORK="data:image/webp;base64,UklGRvzlBwBXRUJQVlA4WAoAAAAw
         const next=addSyncAnchor(syncAnchors,started,response.offset);
         if(!next)throw Object.assign(Error('匹配时间差无效或与已有同步点冲突'),{code:'alignment_conflict'});
         syncAnchors=next;syncManual=false;$('offset').value=response.offset;updateOffset();saveSyncState();
-        applied={offset:response.offset};tick();
+        applied={offset:response.offset};
+        if(periodic)periodicAlignmentPending=false;
+        tick();
         logAttempt('匹配成功 ✓ · '+offsetText(response.offset)+' · 已立即生效');
         $('align-status').textContent=summary();$('align-label').textContent='匹配成功 ✓ · 已同步';
       };
@@ -7794,6 +7920,7 @@ const ZY_ONBOARDING_ARTWORK="data:image/webp;base64,UklGRvzlBwBXRUJQVlA4WAoAAAAw
       video.removeEventListener('waiting',onWaiting);video.removeEventListener('playing',onPlaying);video.removeEventListener('ratechange',onRate);
       if(video.playbackRate===1) video.playbackRate=previousRate;
       cancelAlignment=null; $('auto-align').textContent='开始匹配'; $('align-feedback').hidden=true;
+      refreshSyncTimer();
     }
   }
   let splitControls=null, fullscreenSplitStyles=null;
@@ -8891,24 +9018,43 @@ const ZY_ONBOARDING_ARTWORK="data:image/webp;base64,UklGRvzlBwBXRUJQVlA4WAoAAAAw
   };
   let syncAnchors = [], syncManual = false;
   const syncSchedule = createSyncSchedule();
-  let syncAutoPaused = false;
+  let syncAutoPaused = false, periodicAlignmentPending = false, syncSeekNoticeUntil = 0;
+  function onSyncSeek() {
+    if (route !== courseIdentity(location.hash)) return;
+    const interrupted = periodicAlignmentPending && syncSchedule.enabled;
+    syncSchedule.seek(interrupted);
+    if (interrupted) {
+      periodicAlignmentPending = false;
+      syncSeekNoticeUntil = performance.now() + 4000;
+    }
+    cancelAlignment?.();
+    refreshSyncTimer();
+  }
   function offsetKey() { return 'subtitle-offset:' + courseIdentity(location.hash); }
   function syncKey() { return 'subtitle-sync:' + courseIdentity(location.hash); }
   function refreshSyncTimer(){
     const timer=$('sync-auto-indicator');
     if(!timer)return;
     const busy=!!cancelAlignment,enabled=syncSchedule.enabled;
-    const remaining=Math.ceil(Math.max(0,SYNC_INTERVAL_SECONDS-syncSchedule.elapsed)/60);
+    const remaining=Math.ceil(syncSchedule.remaining/60);
     const live=ZYClassroomMedia.isLive(mainVideo),ready=mainVideo&&!mainVideo.paused&&!mainVideo.seeking&&mainVideo.readyState>=3&&!!cues.length;
     const signed=gateway.configured()?!!gateway.credential():!!GM_getValue('speech-credentials',null)?.apiKey;
     const verified=!gateway.configured()||!!gateway.study?.identity?.(),permitted=gateway.canUse('speech');
-    const detail=busy?$('align-status').textContent||'正在匹配课堂音轨与字幕':syncAutoPaused?$('sync-status').textContent:enabled?(live?'直播字幕跟随实时推送，无需回放校准':!signed?'定时校准已记住，登录后开始按播放时长计时':!verified?'等待确认账号语音权限；尚未开始计时':!permitted?'当前账号暂不能使用语音校准，请检查权限和有效期；启用偏好保留':ready?'定时校准已开启，再播放约 '+remaining+' 分钟复查':'定时校准已记住，等待视频和字幕就绪；暂停不计时'):syncAnchors.length?'正在应用本课程已保存的同步点':'定时校准未开启';
+    const playbackDetail=syncSchedule.retrying
+      ? '进度已跳转，继续播放约 '+remaining+' 分钟后自动重试；暂停不计时'
+      : ready?'定时校准已开启，再播放约 '+remaining+' 分钟复查':'定时校准已记住，等待视频和字幕就绪；暂停不计时';
+    const detail=busy?$('align-status').textContent||'正在匹配课堂音轨与字幕':syncAutoPaused?$('sync-status').textContent:enabled?(live?'直播字幕跟随实时推送，无需回放校准':!signed?'定时校准已记住，登录后开始按播放时长计时':!verified?'等待确认账号语音权限；尚未开始计时':!permitted?'当前账号暂不能使用语音校准，请检查权限和有效期；启用偏好保留':playbackDetail):syncAnchors.length?'正在应用本课程已保存的同步点':'定时校准未开启';
     timer.hidden=!(busy||enabled||syncAutoPaused);
     timer.dataset.busy=String(busy);
     timer.dataset.state=busy?'working':syncAutoPaused?'paused':enabled?'waiting':'synced';
     timer.textContent=busy?'🔄':syncAutoPaused?'⚠':'🕒';
     timer.title=detail;
     timer.setAttribute('aria-label',detail);
+    const notice=$('compact-sync-status');
+    const message=enabled&&syncSchedule.retrying&&performance.now()<syncSeekNoticeUntil
+      ? '继续播放 2 分钟后重试'
+      : busy?'正在同步字幕…':'';
+    if(notice.textContent!==message)notice.textContent=message;
   }
   function refreshSyncBadge(){refreshSyncTimer();const complete=$('sync-complete');if(!complete)return;complete.hidden=!syncAnchors.length;complete.title=syncManual?'已保存同步点 · 手动微调':'已匹配 · '+syncAnchors.length+' 个同步点';const saved=$('sync-saved');if(saved)saved.textContent=syncAnchors.length?'已同步 · '+stamp(syncAnchors.at(-1).videoTime).slice(0,8):'尚未匹配';const hint=$('offset-hint');hint.title=syncAnchors.map(p=>'播放 '+Math.round(p.videoTime)+' 秒：偏移 '+p.offset+' 秒').join('；');}
   function saveSyncState() { GM_setValue(syncKey(), {anchors: syncAnchors, manual: syncManual, autoSyncDisabled:!$('auto-sync').checked});refreshSyncBadge(); }
@@ -8935,7 +9081,7 @@ const ZY_ONBOARDING_ARTWORK="data:image/webp;base64,UklGRvzlBwBXRUJQVlA4WAoAAAAw
   function loadOffset() {
     $('offset').value = GM_getValue(offsetKey(), GM_getValue('subtitle-offset:' + location.hash, 0));
     const saved = GM_getValue(syncKey(), {}); syncAnchors = syncAnchorsValid(saved?.anchors); syncManual = !!saved?.manual;
-    syncSchedule.stop(); syncAutoPaused=false;
+    syncSchedule.stop(); syncAutoPaused=false; periodicAlignmentPending=false; syncSeekNoticeUntil=0;
     // Older builds also stored autoSync=false when no choice had been made.
     const enabled=!syncManual&&saved?.autoSyncDisabled!==true;
     $('auto-sync').checked=enabled;if(enabled)syncSchedule.enable();
@@ -8963,7 +9109,13 @@ const ZY_ONBOARDING_ARTWORK="data:image/webp;base64,UklGRvzlBwBXRUJQVlA4WAoAAAAw
     if (syncAnchors.length && shadow.activeElement !== $('offset')) { $('offset').value = Math.round(syncOffsetAt(mainVideo.currentTime, 0, syncAnchors) * 100) / 100; updateOffset(false); }
     if (!syncSchedule.enabled) return;
     const playing = !ZYClassroomMedia.isLive(mainVideo) && !mainVideo.paused && !mainVideo.seeking && !mainVideo.ended && mainVideo.readyState >= 3 && !!cues.length && gateway.canUse('speech');
-    if (syncSchedule.advance(mainVideo.currentTime, playing, !!cancelAlignment)) runAlignment(true);
+    if (syncSchedule.advance(mainVideo.currentTime, playing, !!cancelAlignment)) {
+      periodicAlignmentPending=true;
+      runAlignment(true).finally(()=>{
+        periodicAlignmentPending=false;
+        refreshSyncTimer();
+      });
+    }
     else if (!cancelAlignment) {
       const status=$('sync-status'),detail=$('sync-auto-indicator').title;
       if(status.textContent!==detail)status.textContent=detail;
@@ -9068,7 +9220,13 @@ const ZY_ONBOARDING_ARTWORK="data:image/webp;base64,UklGRvzlBwBXRUJQVlA4WAoAAAAw
     const selected = splitVideo?.isConnected ? {video:splitVideo,rect:splitVideo.getBoundingClientRect()} : candidates[0];
     layoutSlides(); syncSlide();
     $('focus-fullscreen').textContent=fs?'退出全屏':'课堂全屏';
-    mainVideo=selected?.video ?? null;
+    const nextVideo=selected?.video ?? null;
+    if (nextVideo!==mainVideo) {
+      mainVideo?.removeEventListener('seeking',onSyncSeek);
+      mainVideo=nextVideo;
+      mainVideo?.addEventListener('seeking',onSyncSeek);
+      syncSchedule.resetPosition();
+    }
     if(!$('slides').hidden)updateSlideSeek();
     tickAutoSync();
     observeCacheCourse();

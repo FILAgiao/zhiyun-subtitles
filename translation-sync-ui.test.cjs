@@ -22,7 +22,7 @@ const {chromium}=require(process.env.PLAYWRIGHT_MODULE||'playwright');
     else if(options.url.endsWith('query')) window.releaseQuery=()=>options.onload({status:200,responseHeaders:'X-Api-Status-Code: 20000000',responseText:JSON.stringify({result:{utterances:[{text:phrase,start_time:0}]}})});
     return {abort(){options.onabort?.();}};
    };
-   window.playing=false;window.playCalls=0;window.rejectPlay=true;const video=document.querySelector('video');video.play=async()=>{playCalls++;if(rejectPlay)throw Error('blocked');playing=true;video.dispatchEvent(new Event('playing'));};Object.defineProperties(video,{paused:{get:()=>!playing},readyState:{get:()=>3},duration:{get:()=>3600},currentTime:{get:()=>window.videoTime??12,set(){ }},playbackRate:{get:()=>1,set(){}}});
+   window.playing=false;window.playCalls=0;window.rejectPlay=true;const video=document.querySelector('video');video.play=async()=>{playCalls++;if(rejectPlay)throw Error('blocked');playing=true;video.dispatchEvent(new Event('playing'));};Object.defineProperties(video,{paused:{get:()=>!playing},readyState:{get:()=>3},duration:{get:()=>3600},currentTime:{get:()=>window.videoTime??12,set(time){window.videoTime=time;video.dispatchEvent(new Event('seeking'));}},playbackRate:{get:()=>1,set(){} }});
    const timeout=window.setTimeout;window.setTimeout=(fn,ms,...args)=>timeout(fn,(ms===12000||ms===20000)?20:ms===2000?10:ms,...args);
    const track={stop(){}};video.captureStream=()=>({getAudioTracks:()=>[track],getTracks:()=>[track]});
    window.MediaStream=class{};window.MediaRecorder=class{constructor(){this.mimeType='audio/webm';this.state='inactive';}start(){this.state='recording';}stop(){this.state='inactive';this.ondataavailable({data:new Blob(['audio'])});this.onstop();}};
@@ -68,23 +68,58 @@ const {chromium}=require(process.env.PLAYWRIGHT_MODULE||'playwright');
   await page.waitForTimeout(200);assert.equal(await ui.locator('#offset').inputValue(),'5');
   // Drive the existing playback tick to the exact 20-minute boundary.
   await ui.locator('#mode').selectOption('original');await ui.locator('#settings-open').click();await ui.locator('#settings-tab-sync').click();await ui.locator('#auto-sync').check();await ui.locator('#settings-close').click();
+  await ui.locator('#collapse').click();
+  const compact=ui.locator('#compact-launcher');
+  const notice=compact.locator('#compact-sync-status');
+  assert.equal(await notice.textContent(),'');
   await page.evaluate(()=>{
-    playing=true;window.captureAttempts=0;
-    document.querySelector('video').captureStream=()=>{captureAttempts++;throw Error('mock periodic audio failure');};
-    const tick=intervalCallbacks.find(fn=>String(fn).includes('tick();updateEditHandles'));
-    if(!tick)throw Error('Missing existing playback timer');
-    for(let elapsed=0;elapsed<1200;elapsed++){videoTime=12+elapsed;tick();}
+    playing=true;window.captureAttempts=0;window.releaseQuery=null;
+    const video=document.querySelector('video'),capture=video.captureStream;
+    video.captureStream=()=>{captureAttempts++;return capture();};
+    window.playbackTick=intervalCallbacks.find(fn=>String(fn).includes('tick();updateEditHandles'));
+    if(!playbackTick)throw Error('Missing existing playback timer');
+    for(let elapsed=0;elapsed<1200;elapsed++){videoTime=12+elapsed;playbackTick();}
   });
   assert.equal(await page.evaluate(()=>captureAttempts),0,'no calibration before 20 minutes');
   await page.evaluate(()=>videoTime=1212);
-  await page.waitForFunction(()=>document.querySelector('#zy-subtitle-host').shadowRoot.getElementById('sync-status').textContent.includes('遇到错误'));
-  assert.equal(await page.evaluate(()=>captureAttempts),1);
+  await page.waitForFunction(()=>!!window.releaseQuery);
+  assert.equal(await notice.textContent(),'正在同步字幕…');
+  const placement=await notice.evaluate(e=>({top:e.getBoundingClientRect().top,bottom:e.parentElement.getBoundingClientRect().bottom,pointerEvents:getComputedStyle(e).pointerEvents}));
+  assert.ok(placement.top>placement.bottom);
+  assert.equal(placement.pointerEvents,'none');
+  await page.keyboard.press('ArrowRight');
+  assert.equal(await page.evaluate(()=>videoTime),1222);
+  assert.equal(await notice.textContent(),'继续播放 2 分钟后重试');
   assert.equal(await ui.locator('#auto-sync').isChecked(),true);
+  await page.evaluate(()=>releaseQuery());
+  const readSyncState=()=>page.evaluate(()=>saved['subtitle-sync:'+JSON.stringify([null,null,null])]);
+  assert.deepEqual((await readSyncState()).anchors,[]);
+  assert.equal((await readSyncState()).autoSyncDisabled,false);
+  await page.evaluate(()=>{
+    for(let elapsed=0;elapsed<=61;elapsed++){videoTime=1222+elapsed;playbackTick();}
+  });
+  await page.keyboard.press('ArrowLeft');
+  assert.equal(await page.evaluate(()=>videoTime),1273);
+  await page.evaluate(()=>{
+    playing=false;
+    for(let elapsed=0;elapsed<=120;elapsed++){videoTime=1273+elapsed;playbackTick();}
+    playing=true;
+    for(let elapsed=0;elapsed<120;elapsed++){videoTime=1393+elapsed;playbackTick();}
+  });
+  assert.equal(await page.evaluate(()=>captureAttempts),1,'the second seek restarts the retry delay and paused ticks do not count');
+  await page.evaluate(()=>{
+    document.querySelector('video').captureStream=()=>{captureAttempts++;throw Error('mock periodic audio failure');};
+    videoTime=1513;
+  });
+  await page.waitForFunction(()=>document.querySelector('#zy-subtitle-host').shadowRoot.getElementById('sync-status').textContent.includes('遇到错误'));
+  assert.equal(await page.evaluate(()=>captureAttempts),2,'retry starts after two playback minutes');
+  assert.equal(await ui.locator('#auto-sync').isChecked(),true);
+  await compact.locator('#compact').click();
   await ui.locator('#sync-auto-indicator[data-state="paused"]').waitFor({state:'visible'});
   await page.evaluate(()=>location.hash='#/replay?course_id=next');
   await ui.locator('#sync-auto-indicator[data-state="waiting"]').waitFor({state:'visible'});
   assert.equal(await ui.locator('#auto-sync').isChecked(),true);
   assert.deepEqual(errors,[]);
-  console.log('Seed Translation, timer visibility/interval/off/manual/error/course reset and late ASR takeover passed (mock services only).');
+  console.log('Seed Translation, periodic sync notice, keyboard seek, playback-only retry, manual takeover, error and course reset passed (mock services only).');
  } finally {await browser.close();}
 })().catch(error=>{console.error(error);process.exitCode=1;});

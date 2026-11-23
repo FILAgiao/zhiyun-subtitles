@@ -139,7 +139,7 @@ const owners={a:[record('a1','自己的问题 A','程序设计',hostile),record(
     mailMode='closed';
     // Manual registration and recharge are closed by default, on unsafe URLs, broken images or API failure.
     for(const tab of ['register','recharge']){
-      await page.goto(origin+'/gateway/account?tab='+tab);await page.locator('#channel-notice').filter({hasText:'正在核对'}).waitFor({state:'hidden'}).catch(()=>{});await page.locator('#channel-closed h3').filter({hasText:'暂未开放'}).waitFor();assert.equal(await page.locator('#channel-open').isVisible(),false);
+      await page.goto(origin+'/gateway/account?tab='+tab);await page.locator('#channel-notice').filter({hasText:'正在核对'}).waitFor({state:'hidden'}).catch(()=>{});await page.locator('#channel-closed').getByRole('heading',{name:'暂未开放'}).waitFor();assert.equal(await page.locator('#channel-open').isVisible(),false);
       for(const width of [390,320]){await page.setViewportSize({width,height:844});await fits(tab+width+' account overflow');}
     }
     access={registration:{enabled:true,qr_url:'https://127.0.0.1/private.png',instructions:'不得显示'},recharge:{enabled:true,qr_url:'https://qr.example.org/broken.png',instructions:'不得显示'}};

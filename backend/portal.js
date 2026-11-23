@@ -11,6 +11,7 @@
   const session=()=>({token,profile,generation,pending:pending(),notice:sessionNotice});
   function update(){
     document.querySelectorAll('[data-login]').forEach(button=>button.hidden=!!profile||pending());
+    document.querySelectorAll('[data-guest-only]').forEach(node=>node.hidden=!!profile||pending());
     document.querySelectorAll('[data-session-pending]').forEach(node=>node.hidden=!pending());
     document.querySelectorAll('.signed-user').forEach(node=>node.hidden=!profile);
     document.querySelectorAll('[data-user-name]').forEach(node=>node.textContent=profile?.username||profile?.email||'我的账号');
@@ -80,9 +81,9 @@
     }finally{clearTimeout(timer);controllers.delete(controller);}
   }
   function notice(message,error=false){$('login-status').textContent=message;$('login-status').classList.toggle('error',error);}
-  function openLogin(){const dialog=$('login-dialog');if(dialog&&!dialog.open){notice('');dialog.showModal();requestAnimationFrame(()=>$('login-name').focus());}}
+  function openLogin(){const dialog=$('login-dialog');if(dialog&&!dialog.open){resetPassword();notice('');dialog.showModal();requestAnimationFrame(()=>$('login-name').focus());}}
   document.querySelectorAll('button[data-login]').forEach(button=>button.addEventListener('click',openLogin));
-  $('login-dialog')?.addEventListener('close',resetPassword);
+  $('login-dialog')?.addEventListener('close',event=>{if(!event.currentTarget.open)resetPassword();});
   $('login-dialog')?.querySelector('[data-close-login]').addEventListener('click',()=>$('login-dialog').close());
   $('password-toggle')?.addEventListener('click',()=>{const show=$('login-password').type==='password';$('login-password').type=show?'text':'password';$('password-toggle').textContent=show?'隐藏':'显示';$('password-toggle').setAttribute('aria-pressed',String(show));});
   $('portal-login-form')?.addEventListener('submit',async event=>{
