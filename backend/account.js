@@ -104,36 +104,80 @@
     }
   }
 
+  function quotaCard(label, limit, used, unit) {
+    const card = document.createElement('div');
+    card.className = 'quota-card';
+    const title = document.createElement('dt');
+    title.textContent = label;
+    const reading = document.createElement('dd');
+    const value = document.createElement('div');
+    value.className = 'quota-value';
+    const detail = document.createElement('div');
+    detail.className = 'quota-meta';
+    reading.append(value, detail);
+    card.append(title, reading);
+
+    if (!Number.isFinite(limit) || limit < 0 || !Number.isFinite(used) || used < 0) {
+      value.classList.add('quota-unavailable');
+      value.textContent = '暂无法核对';
+      detail.textContent = '当前服务未返回完整用量';
+      return card;
+    }
+
+    const amount = number => {
+      const whole = Math.floor(number);
+      if (unit !== '秒' || whole < 60) return whole.toLocaleString('zh-CN') + ' ' + unit;
+      const minutes = Math.floor(whole / 60).toLocaleString('zh-CN');
+      const seconds = whole % 60;
+      return minutes + ' 分钟' + (seconds ? ' ' + seconds + ' 秒' : '');
+    };
+    const remaining = Math.max(0, limit - used);
+    value.textContent = amount(remaining);
+    const total = document.createElement('small');
+    total.textContent = '/ ' + amount(limit);
+    value.append(total);
+    if (limit === 0) {
+      detail.textContent = '本月未分配额度';
+      return card;
+    }
+
+    detail.textContent = remaining === 0 ? '本月额度已用完' : '已用 ' + amount(used);
+    const progress = document.createElement('progress');
+    progress.max = limit;
+    progress.value = remaining;
+    progress.setAttribute('aria-label', label + '剩余额度');
+    reading.append(progress);
+    return card;
+  }
+
   function renderMember(profile) {
     $('account-member').hidden = !profile;
     $('member-name').textContent = profile?.username || profile?.email || '';
-    $('member-plan').textContent = '';
+    const planLabel = $('member-plan');
+    const periodLabel = $('member-period');
+    planLabel.textContent = periodLabel.textContent = $('member-expiry').textContent = '';
+    planLabel.removeAttribute('data-expired');
     $('member-quota').replaceChildren();
-    $('member-expiry').textContent = '';
     if (!profile) return;
 
     const names = {free: '基础免费', trial: '免费体验', pro: 'PRO', ultra: 'Ultra', legacy: '原有授权'};
     const plan = profile.membership?.plan || profile.permissions?.plan || 'free';
-    $('member-plan').textContent = names[plan] || '我的账号';
-    const usage = profile.usage || {};
-    const rows = [
-      ['本月调用剩余', usage.request_limit, usage.requests, '次'],
-      ['本月语音剩余', usage.audio_limit, usage.audio_seconds, '秒'],
-    ];
-    if (usage.translation_limit != null) rows.push(['本月专用字幕翻译剩余', usage.translation_limit, usage.translation_chars, '字符']);
-    for (const [label, limit, used, unit] of rows) {
-      const row = document.createElement('div');
-      const name = document.createElement('dt');
-      const value = document.createElement('dd');
-      name.textContent = label;
-      const ready = Number.isFinite(limit) && limit >= 0 && Number.isFinite(used);
-      value.textContent = ready ? Math.max(0, Math.floor(limit - used)).toLocaleString('zh-CN') + ' ' + unit : '待核对';
-      row.append(name, value);
-      $('member-quota').append(row);
-    }
     const expires = Number(profile.membership?.expires || profile.permissions?.expires || 0);
+    const expired = profile.membership?.state === 'expired' || (expires > 0 && expires * 1000 <= Date.now());
+    planLabel.textContent = (names[plan] || '我的账号') + (expired ? ' · 已到期' : '');
+    planLabel.toggleAttribute('data-expired', expired);
     $('member-expiry').textContent = expires > 0 ? '有效期至 ' + portal.date(expires * 1000) + '（北京时间）' : '未设置到期时间';
+
+    const usage = profile.usage || {};
+    const month = typeof usage.month === 'string' && usage.month.match(/^(\d{4})-(0[1-9]|1[0-2])$/);
+    if (month) periodLabel.textContent = ' · ' + month[1] + ' 年 ' + Number(month[2]) + ' 月（UTC）';
+    $('member-quota').append(
+      quotaCard('AI 问答与语音共用调用', usage.request_limit, usage.requests, '次'),
+      quotaCard('语音时长', usage.audio_limit, usage.audio_seconds, '秒'),
+      quotaCard('专用字幕翻译', usage.translation_limit, usage.translation_chars, '字符'),
+    );
   }
+
 
   function renderSession() {
     const {profile, pending, notice} = portal.session();
@@ -142,7 +186,7 @@
     $('account-channel').hidden = signedIn && !recharge;
     $('registration-preview').hidden = recharge || signedIn;
     $('account-guest').hidden = signedIn || pending || registered;
-    $('account-nav').textContent = signedIn ? '我的额度' : '免费注册';
+    if(!recharge)document.title = (signedIn ? '我的额度' : '免费注册') + ' · 浙大上课爽';
     $('member-recharge').hidden = recharge;
     $('member-back').hidden = !recharge;
     $('portal-session-notice').textContent = notice || (pending ? '正在恢复登录…' : '');
@@ -247,7 +291,7 @@
     channelTitle.textContent = '充值 / 增加额度';
     channelDescription.textContent = '查看当前开放的额度办理方式。';
     $('channel-closed-copy').textContent = '充值渠道暂未开放，请稍后再试。';
-    $('account-nav').removeAttribute('aria-current');
+    $('member-title').setAttribute('aria-level', '2');
   }
 
   $('channel-retry').addEventListener('click', channels);

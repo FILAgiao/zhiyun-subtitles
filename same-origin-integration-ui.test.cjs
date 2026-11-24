@@ -27,6 +27,35 @@ with tempfile.TemporaryDirectory() as folder:
   page.on('pageerror',error=>errors.push(error.message));page.on('request',request=>requests.push(request.url()));
   await page.goto(base+'/gateway/');assert.equal(await page.title(),'浙大上课爽 · 网课不硬扛');
   assert.equal(requests.filter(url=>url.includes('/v1/')).length,0,'public homepage never reads personal APIs');
+  const navigation=page.getByRole('navigation',{name:'主导航'});
+  const navLabels=()=>navigation.getByRole('link').allTextContents();
+  const siteLinks=await navLabels();
+  assert.ok(siteLinks.some(label=>label.trim()==='随意摘'));
+  for(const [route,current] of [['/account?tab=register','account'],['/study','study'],['/study#clips','clips'],['/privacy','privacy']]){
+   await page.goto(base+'/gateway'+route);
+   const active=page.locator('[data-nav="'+current+'"][aria-current="page"]:visible');
+   await active.waitFor();
+   assert.deepEqual(await navLabels(),siteLinks,'same guest navigation on '+route);
+   assert.ok(await page.getByRole('navigation',{name:'页脚导航'}).getByRole('link',{name:'隐私与数据说明'}).isVisible());
+   if(current==='clips'){
+    await page.getByRole('button',{name:'登录查看收藏'}).waitFor();
+    assert.match(await page.title(),/^随意摘/);
+    await page.locator('#study-text-tab').click();
+    await page.locator('[data-nav="study"][aria-current="page"]').waitFor();
+   }
+   if(current==='account'||current==='study'){
+    await navigation.getByRole('link',{name:'登录账号'}).click();
+    await page.getByRole('dialog',{name:'登录账号'}).waitFor();
+    assert.ok(await page.locator('#login-dialog').getByRole('link',{name:'免费注册'}).isVisible());
+    if(current==='account')await page.screenshot({path:path.join(previews,'login.png'),animations:'disabled'});
+    await page.locator('[data-close-login]').click();
+   }
+   for(const width of [320,390,768,1024,1440]){
+    await page.setViewportSize({width,height:880});
+    assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),'site fits '+route+' at '+width);
+   }
+  }
+  await page.goto(base+'/gateway/');
   await page.getByRole('link',{name:'我的问答',exact:true}).click();await page.waitForURL(/\/gateway\/study$/);
   await page.getByRole('button',{name:'登录查看问答'}).click();await page.locator('#login-name').fill(setup.demo.username);await page.locator('#login-password').fill('incorrect-preview-password');await page.locator('#login-submit').click();await page.getByText('账号或密码不正确，请核对后重试。',{exact:true}).waitFor();
   await page.locator('#login-password').fill(setup.demo.password);await page.locator('#login-submit').click();await page.locator('#study-workspace').waitFor({state:'visible'});await page.locator('.conversation-item').nth(1).waitFor();
@@ -106,6 +135,34 @@ with tempfile.TemporaryDirectory() as folder:
   assert.equal(await page.locator('#email-registration').isVisible(),false);
   assert.match(await page.locator('#member-plan').innerText(),/基础免费/);
   assert.match(await page.locator('#member-quota').innerText(),/0 次/);
+  assert.equal(await page.getByText('本月未分配额度',{exact:true}).count(),3);
+  assert.equal(await page.locator('#member-quota progress').count(),0);
+  const sampleUsage={month:'2026-11',request_limit:100,requests:22,audio_limit:3600,audio_seconds:1084,translation_limit:10000,translation_chars:1800};
+  let example=sampleUsage;
+  let expiredExample=false;
+  const quotaFixture=async route=>{
+   const response=await route.fetch();
+   const original=await response.json();
+   await route.fulfill({response,json:{...original,username:'示例同学',membership:expiredExample?{plan:'trial',state:'expired',expires:Date.UTC(2026,10,1)/1000}:{plan:'trial',state:'trial',expires:Date.UTC(2026,11,23)/1000},usage:example}});
+  };
+  await page.route('**/gateway/v1/me',quotaFixture);
+  await page.reload();
+  await page.locator('#member-name').filter({hasText:'示例同学'}).waitFor();
+  assert.match(await page.locator('#member-plan').innerText(),/免费体验/);
+  assert.match(await page.locator('#member-period').innerText(),/2026 年 11 月/);
+  assert.deepEqual(await page.locator('#member-quota progress').evaluateAll(bars=>bars.map(bar=>[bar.value,bar.max])),[[78,100],[2516,3600],[8200,10000]]);
+  assert.match(await page.locator('#member-quota').innerText(),/41 分钟 56 秒/);
+  await page.screenshot({path:path.join(previews,'quota.png'),fullPage:true});
+  await page.setViewportSize({width:390,height:844});
+  assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
+  await page.screenshot({path:path.join(previews,'quota-mobile.png'),fullPage:true});
+  example={...sampleUsage,requests:139,translation_limit:null};
+  expiredExample=true;
+  await page.reload();
+  await page.locator('#member-plan').filter({hasText:'已到期'}).waitFor();
+  assert.equal(await page.getByText('本月额度已用完',{exact:true}).count(),1);
+  assert.equal(await page.getByText('暂无法核对',{exact:true}).count(),1);
+  await page.unroute('**/gateway/v1/me',quotaFixture);
   await page.locator('#member-recharge').click();
   await page.waitForURL(base+'/gateway/account?tab=recharge');
   await page.locator('#channel-closed').waitFor();
@@ -117,6 +174,6 @@ with tempfile.TemporaryDirectory() as folder:
 
   const reduced=await browser.newContext({reducedMotion:'reduce'}),reducedPage=await reduced.newPage();await reducedPage.goto(base+'/gateway/');assert.equal(await reducedPage.locator('html').evaluate(el=>el.classList.contains('motion-ready')),false);await reduced.close();
   const noJS=await browser.newContext({javaScriptEnabled:false}),noJSPage=await noJS.newPage();await noJSPage.goto(base+'/gateway/');assert.ok(await noJSPage.locator('h1').isVisible());assert.ok(await noJSPage.locator('.account-services h2').isVisible());await noJS.close();
-  console.log('PASS: actual same-origin Python backend, free two-step email registration and account login, zero-model reading/search/course/detail/delete/logout, shared account-page session, QR closed, 390px, reduced motion and no-JS fallback; '+executablePath);
+  console.log('PASS: actual same-origin Python backend, shared navigation and login, two-step registration, real and sample quota states, zero-model reading/search/course/detail/delete/logout, shared account-page session, QR closed, 390px, reduced motion and no-JS fallback; '+executablePath);
  }finally{await browser?.close();fixture.stdin.end('\n');}
 })().catch(error=>{console.error(error);process.exitCode=1;});

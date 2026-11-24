@@ -4,11 +4,15 @@
   const P=window.ZYPortal,$=id=>document.getElementById(id);
   const el=(tag,text,cls)=>{const n=document.createElement(tag);if(text!==undefined)n.textContent=text;if(cls)n.className=cls;return n;};
   const heading=document.querySelector('h1'),originalHeading=heading?.innerHTML;
+  const lead=document.querySelector('.page-lead'),originalLead=lead?.innerHTML;
+  const guest=$('study-guest'),guestTitle=guest.querySelector('h2'),guestCopy=guest.querySelector('p'),guestLogin=guest.querySelector('[data-login]');
+  const textGuest=[guestTitle.textContent,guestCopy.innerHTML,guestLogin.textContent];
+  const clipsGuest=['把课堂截图留在自己的账号里。','登录后查看你主动收藏的截图与批注。','登录查看收藏'];
   const tabs=el('nav',undefined,'study-tabs');tabs.setAttribute('aria-label','学习记录分类');
   tabs.innerHTML='<button type="button" id="study-text-tab">我的问答</button><button type="button" id="study-clips-tab">随意摘 · 收藏夹</button>';
   $('study-guest').before(tabs);
   const section=el('section');section.id='clips-workspace';section.hidden=true;
-  section.innerHTML='<div class="clip-intro"><div><p class="eyebrow">留住这一刻的理解</p><h2>随意摘</h2><p>收藏截图和圈画，按课程慢慢回看。</p></div><button type="button" id="clips-resume" class="button subtle" disabled>继续上次阅读</button><button type="button" id="clips-refresh" class="button subtle">刷新收藏</button></div><div class="clip-filters"><label>搜索收藏<input id="clips-search" type="search" placeholder="标题、课程或笔记"></label><label>课程<select id="clips-course"><option value="">全部课程</option></select></label><label>保存日期<input id="clips-date" type="date"></label><label class="clip-name-toggle"><input id="clips-show-name" type="checkbox" checked> 显示名称</label></div><p id="clips-status" role="status" aria-live="polite"></p><div id="clips-grid" class="clips-grid" aria-label="收藏画廊" aria-busy="false"></div><p class="data-note">点击截图中的「收藏」才会上传图片和批注。仅本人可见；删除会移除账号中的图片和缩略图。本机问答与已下载图片保留。</p>';
+  section.innerHTML='<div class="clip-intro"><div><p class="eyebrow">留住这一刻的理解</p><h2>收藏夹</h2></div><button type="button" id="clips-resume" class="button subtle" disabled>继续上次阅读</button><button type="button" id="clips-refresh" class="button subtle">刷新收藏</button></div><div class="clip-filters"><label>搜索收藏<input id="clips-search" type="search" placeholder="标题、课程或笔记"></label><label>课程<select id="clips-course"><option value="">全部课程</option></select></label><label>保存日期<input id="clips-date" type="date"></label><label class="clip-name-toggle"><input id="clips-show-name" type="checkbox" checked> 显示名称</label></div><p id="clips-status" role="status" aria-live="polite"></p><div id="clips-grid" class="clips-grid" aria-label="收藏画廊" aria-busy="false"></div><p class="data-note">点击截图中的「收藏」才会上传图片和批注。仅本人可见；删除会移除账号中的图片和缩略图。本机问答与已下载图片保留。</p>';
   $('study-workspace').after(section);
   const reader=el('dialog');reader.id='clip-reader';reader.setAttribute('aria-labelledby','clip-reader-title');
   reader.innerHTML='<header class="clip-reader-head"><div><p id="clip-reader-course" class="eyebrow"></p><h2 id="clip-reader-title"></h2></div><button type="button" id="clip-close" class="button subtle" aria-label="关闭图片阅读器">×</button></header><div class="clip-course-nav"><button type="button" id="clip-prev-course" class="button subtle">← 上门课</button><select id="clip-reader-courses" aria-label="切换课程"></select><button type="button" id="clip-next-course" class="button subtle">下门课 →</button></div><div id="clip-stage" tabindex="0" role="region" aria-label="图片阅读区：左右切换课程，上下切换图片"><img id="clip-full-image" alt="" decoding="async"><p id="clip-image-status" role="status"></p></div><div class="clip-image-nav"><button type="button" id="clip-prev" class="button subtle">↑ 上一张</button><span id="clip-position" aria-live="polite"></span><button type="button" id="clip-next" class="button subtle">↓ 下一张</button><button type="button" id="clip-zoom" class="button subtle">放大</button></div><div class="clip-reader-note"><p id="clip-note"></p><div class="clip-links"><span id="clip-time"></span><a id="clip-origin" target="_blank" rel="noopener noreferrer">回到来源 ↗</a><button type="button" id="clip-delete" class="text-link danger">删除收藏</button></div></div><footer class="clip-reader-footer"><label><input type="checkbox" id="clip-axes" checked> 双向切换</label><span>图片区：左右换课程，上下连续翻图；笔记正常滚动。</span></footer>';
@@ -119,7 +123,30 @@
   }
   function remember(){const item=current();if(!item)return;positions.clipId=item.id;positions[item.groupKey]=item.id;try{sessionStorage.setItem(memoryKey(),JSON.stringify(positions));}catch{}}
   function close(){imageGeneration++;reader.close();zoom.close();deletion.close();$('clip-full-image').removeAttribute('src');$('clip-zoom-image').removeAttribute('src');$('clip-stage').removeAttribute('data-state');$('clip-stage').setAttribute('aria-busy','false');lastFocused?.focus();if(refreshPending)scheduleReturnRefresh();}
-  function showTab(value){tab=value;if(heading){if(tab==='clips')heading.replaceChildren(document.createTextNode('随意'),el('em','摘。'));else heading.innerHTML=originalHeading;}const signed=!!P.session().profile;$('study-text-tab').setAttribute('aria-current',String(tab==='text'));$('study-clips-tab').setAttribute('aria-current',String(tab==='clips'));$('study-workspace').hidden=!signed||tab!=='text';section.hidden=!signed||tab!=='clips';if(tab==='clips'&&signed&&!loading)load({keepVisible:items.length>0});}
+  function showTab(value){
+    tab=value;
+    const viewingClips=tab==='clips';
+    P.markPage(viewingClips?'clips':'study');
+    document.title=(viewingClips?'随意摘':'我的问答')+' · 浙大上课爽';
+    if(heading){
+      if(viewingClips)heading.replaceChildren(document.createTextNode('随意'),el('em','摘。'));
+      else heading.innerHTML=originalHeading;
+    }
+    if(lead){
+      if(viewingClips)lead.textContent='收藏截图和批注，按课程回看。';
+      else lead.innerHTML=originalLead;
+    }
+    const [title,copy,login]=viewingClips?clipsGuest:textGuest;
+    guestTitle.textContent=title;
+    guestCopy.innerHTML=copy;
+    guestLogin.textContent=login;
+    const signed=!!P.session().profile;
+    $('study-text-tab').setAttribute('aria-current',String(!viewingClips));
+    $('study-clips-tab').setAttribute('aria-current',String(viewingClips));
+    $('study-workspace').hidden=!signed||viewingClips;
+    section.hidden=!signed||!viewingClips;
+    if(viewingClips&&signed&&!loading)load({keepVisible:items.length>0});
+  }
   function filters(){const q=$('clips-search').value.trim().toLocaleLowerCase(),course=$('clips-course').value,date=$('clips-date').value;return items.filter(item=>(!q||(item.title+' '+item.course+' '+item.groupTitle+' '+item.note).toLocaleLowerCase().includes(q))&&(!course||item.groupKey===course)&&(!date||new Date(item.created).toLocaleDateString('sv-SE',{timeZone:'Asia/Shanghai'})===date));}
   function render({keepVisible=false}={}){
     const filtered=filters(),grid=$('clips-grid'),cards=[];

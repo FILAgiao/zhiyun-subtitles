@@ -33,20 +33,56 @@
 .channel-details{display:flex;align-items:flex-start;gap:15px}
 .channel-details img{width:150px;height:150px;object-fit:contain;border:1px solid var(--line);background:#fff;flex:none}
 .channel-details p{white-space:pre-wrap;overflow-wrap:anywhere}
-.account-page[data-view="member"]{display:block;min-height:530px;padding-block:65px}
-.account-page[data-view="recharge"]{grid-template-columns:minmax(0,1.12fr) minmax(0,1fr)}
+.account-page[data-view="member"]{display:block;min-height:530px;max-width:1140px;padding-block:44px 20px}
+.account-page[data-view="recharge"]{grid-template-columns:minmax(0,.9fr) minmax(0,1.1fr);gap:45px}
 .account-page[data-view="recharge"] .account-main{width:100%;margin:0}
-.account-member{min-width:0;max-width:650px}
-.account-page[data-view="recharge"] .account-member{border-left:1px solid var(--line);padding-left:32px}
-.account-member h2{font-size:36px;letter-spacing:-.04em;line-height:1.25;margin:0 0 10px}
-.member-name{overflow-wrap:anywhere;font-size:15px;margin-bottom:7px}
-.member-plan{color:#a64720;font-size:13px;margin-bottom:13px}
-#member-quota{margin:0 0 16px}
-#member-quota>div{display:flex;align-items:baseline;justify-content:space-between;gap:15px;border-bottom:1px solid var(--line);padding:13px 0}
-#member-quota dt{color:#586669;font-size:13px}
-#member-quota dd{font-size:16px;margin:0;text-align:right}
-.member-links{display:flex;flex-wrap:wrap;gap:12px 23px}
-#member-expiry{color:#586669}
+.account-member{min-width:0}
+.member-summary{display:flex;align-items:center;justify-content:space-between;gap:20px 36px;padding:26px 28px 24px;border:1px solid #e3e6ef;border-radius:18px;background:radial-gradient(ellipse at 95% 5%,#fff6ed 0%,transparent 62%),linear-gradient(141deg,#eef1fa,#e4e9f7)}
+.member-summary h1{font-size:clamp(32px,4vw,48px);letter-spacing:-.06em;line-height:1.15;margin:0 0 9px}
+.member-period{font-size:14px;color:#495b6b;margin:0}
+.member-identity{text-align:right;min-width:0}
+.member-plan{display:inline-block;border:1px solid #d5dbee;border-radius:100px;background:#fffefa;padding:5px 10px;color:#364b76;font-size:12px;font-weight:750;margin:0 0 6px}
+.member-plan[data-expired]{background:#fae8da;color:#8d411d;border-color:#ebcfbd}
+.member-name{overflow-wrap:anywhere;font-size:15px;font-weight:700;margin:0 0 3px}
+#member-expiry{font-size:12px;color:#495b6b;margin:0;line-height:1.55}
+.quota-cards{margin:15px 0 0;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:13px}
+.quota-card{min-width:0;border:1px solid var(--line);border-radius:14px;background:#fffdf8;padding:17px 17px 15px;display:flex;flex-direction:column}
+.quota-card dt{font-size:13px;color:#475b68;font-weight:700;line-height:1.4}
+.quota-card dd{margin:9px 0 0}
+.quota-card .quota-value{font-size:clamp(22px,2.8vw,35px);font-weight:780;letter-spacing:-.045em;line-height:1.18;overflow-wrap:anywhere;font-variant-numeric:tabular-nums}
+.quota-card .quota-value small{font-size:12px;color:#475b68;letter-spacing:0;margin-left:4px}
+.quota-card .quota-unavailable{font-size:17px;letter-spacing:0}
+.quota-card .quota-meta{font-size:12px;color:#586669;margin-top:7px;line-height:1.45}
+.quota-card progress{appearance:none;display:block;width:100%;height:6px;margin-top:13px;border:0;border-radius:100px;background:#e7eaf3;overflow:hidden}
+.quota-card progress::-webkit-progress-bar{background:#e7eaf3}
+.quota-card progress::-webkit-progress-value{background:#646fb8;border-radius:100px}
+.quota-card progress::-moz-progress-bar{background:#646fb8;border-radius:100px}
+.member-links{display:flex;align-items:center;justify-content:space-between;gap:12px 18px;margin-top:18px;padding-top:15px;border-top:1px solid var(--line)}
+.member-links p{font-size:12px;line-height:1.6;color:#586669;margin:0}
+.member-actions{display:flex;flex-wrap:wrap;align-items:center;gap:9px 16px}
+.member-recharge{width:auto;min-height:37px;padding:7px 13px;border-radius:8px;font-size:13px;white-space:nowrap}
+.account-page[data-view="recharge"] .member-summary{padding:16px 19px}
+.account-page[data-view="recharge"] .member-summary h1{font-size:27px}
+.account-page[data-view="recharge"] .quota-cards{grid-template-columns:1fr;gap:7px}
+.account-page[data-view="recharge"] .quota-card{padding:10px 12px}
+.account-page[data-view="recharge"] .quota-value{font-size:20px}
+.account-page[data-view="recharge"] .quota-card dd{margin-top:4px}
+.account-page[data-view="recharge"] .quota-card progress{margin-top:8px}
+@media(max-width:800px){
+  .account-page[data-view="member"]{padding-block:25px 12px}
+  .account-page[data-view="recharge"]{gap:25px}
+  .member-summary{padding:18px 16px}
+  .quota-cards{grid-template-columns:1fr;gap:9px}
+  .quota-card{padding:12px 14px}
+  .quota-card .quota-value{font-size:25px}
+  .quota-card .quota-unavailable{font-size:17px}
+}
+@media(max-width:520px){
+  .member-summary,.member-links{flex-direction:column;align-items:flex-start;gap:12px}
+  .member-identity{text-align:left}
+  .member-summary h1{margin-bottom:5px}
+}
+
 .registration-preview{min-width:0;min-height:533px;padding:32px 34px 27px;border:1px solid #e3e6ef;border-radius:29px;background:radial-gradient(ellipse at 95% 2%,#fff5eb 0%,transparent 58%),radial-gradient(ellipse at 4% 99%,#d8e3f4 0%,transparent 70%),linear-gradient(140deg,#eef1fe,#e7ebf8)}
 .registration-preview h2{font-size:36px;line-height:1.19;letter-spacing:-.04em;margin:0;font-weight:750}
 .preview-lead{font-size:13px;color:#4d5270;line-height:1.65;margin:7px 0 0}
@@ -83,7 +119,6 @@
   .account-main{width:100%}
   .registration-preview{min-height:0}
   .account-main h1{font-size:40px}
-  .account-page[data-view="recharge"] .account-member{border-left:0;border-top:1px solid var(--line);padding:22px 0 0}
 }
 @media(max-width:700px){.account-site .site-header{border-bottom:0}.account-site .site-footer{padding-bottom:21px}}
 @media(max-width:520px){

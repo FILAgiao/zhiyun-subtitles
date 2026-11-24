@@ -1,7 +1,7 @@
 {
   "version": "0.20.115",
-  "backup": "/opt/zhiyun-gateway/backend/.rollback-release-0.20.115-20261123T092307Z",
-  "database_backup": "/data/gateway-before-0.20.115-20261123T092307Z.sqlite3",
+  "backup": "/opt/zhiyun-gateway/backend/.rollback-release-0.20.115-20261124T003949Z",
+  "database_backup": "/data/gateway-before-0.20.115-20261124T003949Z.sqlite3",
   "changed": [
     "analytics_api.py",
     "pricing.py",
@@ -45,8 +45,8 @@
   ],
   "public_files": {
     "clips.js": {
-      "bytes": 29151,
-      "sha256": "4193264cadf11666cecb8639fdb798211abe10cc6a3779e48957eb252dbdbf39"
+      "bytes": 30090,
+      "sha256": "8ca4cb1d6768a66643939d047494b7c8cba297e0d181b09a9d1f71fa6dc454e1"
     },
     "clips.css": {
       "bytes": 11393,
@@ -61,24 +61,24 @@
       "sha256": "053a485a90dd13661d12878e7b5b1cdcfe870502babc98b3cf02e1a7d1da6512"
     },
     "admin.html": {
-      "bytes": 39645,
-      "sha256": "c49cd309e26b8d43954c140ca315782181b596c59cb0d23227cdbc39de2055e9"
+      "bytes": 39822,
+      "sha256": "8b821ba7075f784b00df01d9d781c24d95e472bf87ba7cb0756a760ca71c5189"
     },
     "admin.js": {
       "bytes": 68186,
       "sha256": "9e69328d60c2deec1bc5ec9678fcd6fa25f41ae9d973222c92460a8fbd294bff"
     },
     "admin.css": {
-      "bytes": 33386,
-      "sha256": "4696aa4f40c9f73785f9ffbd18a226da934f013c7300ff164229257bfc444738"
+      "bytes": 33518,
+      "sha256": "91481956731e9b89c17f7b576fbc06e35ac1d66fa98df5610172aae2604786ab"
     },
     "privacy.html": {
-      "bytes": 7366,
-      "sha256": "6fa28c67240522b9d031e06d5526b062ccf09eb8cf826cdcdd945b8f49d38354"
+      "bytes": 9499,
+      "sha256": "caa5968a5db6a6035ca34a1ca357d4cdb66a44fdf4794bbca126a15e58d3296f"
     },
     "download.html": {
-      "bytes": 14448,
-      "sha256": "76d37818aa99359d79a0c4a5bb8f78824be1ba1dc824ef510599f604cde3e554"
+      "bytes": 14931,
+      "sha256": "83f9490488a194eef86aadc78bcbfe7ee297b8c22de2640170f45950fcc770b6"
     },
     "download.css": {
       "bytes": 19167,
@@ -89,40 +89,40 @@
       "sha256": "e5c18347c04e3fd0f2a6ff7c1ef2462c7ea67ecd4cf9ae3eeada8028b92a027c"
     },
     "portal.css": {
-      "bytes": 6538,
-      "sha256": "d7249624d509c74703624938f6b9f9e82c039ad690d1b0ff9b8473c350bd0ef4"
+      "bytes": 11130,
+      "sha256": "3b227a4a8b145f054120171da11840368696c214417bf632d0c1ce3dc40e66e4"
     },
     "portal.js": {
-      "bytes": 12014,
-      "sha256": "9590e1704f2d8334be5a4235ff620e3e189d3ddb75ee53c59cf85be001ab7be5"
+      "bytes": 12615,
+      "sha256": "ad76a559e863b22ba4b7add224addfe896a9d9de75b7889a7794babe3e95595f"
     },
     "study.html": {
-      "bytes": 6340,
-      "sha256": "f7f925f2e832de2e1eb537bdf4d9f4fe6fbbb67f54347ef9ff283fb7383d9409"
+      "bytes": 7466,
+      "sha256": "f11a99dfef0cdb35f25dfb29f6f924b9f0a52b7a9b03d90bfcd4a177a829e3f6"
     },
     "study.css": {
       "bytes": 10790,
       "sha256": "dae52111b164544c99824abbae2540e84c235d17e79151e6846eeda9b0bd2dd6"
     },
     "study.js": {
-      "bytes": 11482,
-      "sha256": "0af0feb2aa8f52aa075b2c3dde16e474a4b06019b97f7c17c5ea8c631061ae69"
+      "bytes": 11379,
+      "sha256": "ac1d3564e76138bc015cdd7ea235405119f6250b99bc09c650687bb5a6f0c760"
     },
     "account.html": {
-      "bytes": 8906,
-      "sha256": "60bcf172ee2a1a5951810758e2ca7db520393a6d490e78c3107a56c0c2caef20"
+      "bytes": 10317,
+      "sha256": "933dbf8e29168bd91aaccb650b52b908035558edec1269b6b6096d4feb290738"
     },
     "account.css": {
-      "bytes": 8023,
-      "sha256": "5b40f8b48c3401148270ee79bff1ff86acb7163d8fa652d2e76adce7ff21a076"
+      "bytes": 10726,
+      "sha256": "779a0e451f280c4dd0fd648f58dd3953323217edb5b0a8df9cd16dd9b5cf1350"
     },
     "account.js": {
-      "bytes": 12453,
-      "sha256": "3fe77e28d46a3d6ff958e7f94090eb2b60fdc9b08f34bfdb057d1cc93611f133"
+      "bytes": 14262,
+      "sha256": "561e9e5076a241aa505fe43a380e516ebda6911ed1605a814a84c7afe7af9e0e"
     },
     "extension.zip": {
-      "bytes": 2105334,
-      "sha256": "d1cbe67e7499a6667afc4a5177805be350369ae0456044ecf3f9454c55a3178b"
+      "bytes": 2105323,
+      "sha256": "c0ac2f4ec72b8134bd6f5d80c242248d7740aeef54caaadf67bf318466ac5bf0"
     },
     "landing/brand-logo.png": {
       "bytes": 16647,

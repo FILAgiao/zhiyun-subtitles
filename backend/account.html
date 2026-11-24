@@ -13,18 +13,27 @@
 </head>
 <body class="account-site">
   <a class="skip" href="#main">跳到正文</a>
-  <header class="site-header">
-    <nav class="shell nav" aria-label="主导航">
-      <a href="/gateway/" class="brand"><img src="/gateway/landing/brand-logo.png" width="42" height="42" alt=""><span>浙大上课爽</span></a>
-      <div class="nav-actions">
-        <a href="/gateway/#features">探索功能</a>
-        <a href="/gateway/study" data-nav="study">我的问答</a>
-        <a id="account-nav" href="/gateway/account?tab=register" data-nav="account" aria-current="page">免费注册</a>
-        <button type="button" class="nav-login" data-login>登录</button>
-        <span class="signed-user" hidden><span data-user-name></span><button type="button" data-logout>退出</button></span>
+  <!-- portal-header -->
+<header class="site-header site-shell">
+  <nav class="shell nav" aria-label="主导航">
+    <a href="/gateway/" class="brand" data-nav="home"><img src="/gateway/landing/brand-logo.png" width="42" height="42" alt=""><span>浙大上课爽</span></a>
+    <div class="nav-actions">
+      <a href="/gateway/#features" data-nav="features">探索功能</a>
+      <a href="/gateway/study" data-nav="study">我的问答</a>
+      <a href="/gateway/study#clips" data-nav="clips">随意摘</a>
+      <a href="/gateway/study?login=1" class="nav-login" data-login>登录账号</a>
+      <span class="nav-pending" data-session-pending hidden>正在核对登录…</span>
+      <a href="/gateway/account?tab=register" class="nav-signup" data-guest-only data-nav="account">免费注册</a>
+      <div class="signed-user nav-member" hidden>
+        <a href="/gateway/account?tab=register" class="nav-account" data-nav="account" aria-label="我的账号与额度"><strong>我的额度</strong><span data-user-name></span></a>
+        <button type="button" data-logout>退出</button>
       </div>
-    </nav>
-  </header>
+      <a href="/gateway/admin" class="nav-admin">管理后台</a>
+      <a href="/gateway/#install" class="nav-download" data-nav="install">获取插件 <span aria-hidden="true">↗</span></a>
+    </div>
+  </nav>
+</header>
+<!-- /portal-header -->
 
   <main id="main" class="shell account-page" data-view="register">
     <p id="portal-session-notice" class="notice session-notice" role="status"></p>
@@ -108,36 +117,54 @@
     </aside>
 
     <section id="account-member" class="account-member" aria-labelledby="member-title" hidden>
-      <h2 id="member-title">我的额度</h2>
-      <p id="member-name" class="member-name"></p>
-      <p id="member-plan" class="member-plan"></p>
-      <dl id="member-quota"></dl>
-      <p id="member-expiry" class="muted"></p>
+      <header class="member-summary">
+        <div>
+          <h1 id="member-title">我的额度</h1>
+          <p class="member-period">本月剩余用量<span id="member-period"></span></p>
+        </div>
+        <div class="member-identity">
+          <p id="member-plan" class="member-plan"></p>
+          <p id="member-name" class="member-name"></p>
+          <p id="member-expiry"></p>
+        </div>
+      </header>
+      <dl id="member-quota" class="quota-cards"></dl>
       <div class="member-links">
-        <a href="/gateway/study" class="account-link">查看我的问答 ↗</a>
-        <a id="member-recharge" href="/gateway/account?tab=recharge" class="account-link">充值 / 增加额度 ↗</a>
-        <a id="member-back" href="/gateway/account?tab=register" class="account-link" hidden>返回我的额度 ↗</a>
+        <p>原文字幕、PPT 缩放和课堂缓存不消耗这些额度。</p>
+        <div class="member-actions">
+          <a href="/gateway/study" class="account-link">查看我的问答 <span aria-hidden="true">↗</span></a>
+          <a id="member-recharge" href="/gateway/account?tab=recharge" class="account-action member-recharge">充值 / 增加额度</a>
+          <a id="member-back" href="/gateway/account?tab=register" class="account-link" hidden>返回我的额度 <span aria-hidden="true">↗</span></a>
+        </div>
       </div>
     </section>
     <noscript><p class="notice error">请启用 JavaScript 查看账号办理状态。</p></noscript>
   </main>
 
-  <footer class="site-footer shell"><span>网课不硬扛，浙大上课爽。</span><a href="/gateway/privacy">隐私与数据说明 ↗</a></footer>
+  <!-- portal-footer -->
+<footer class="site-footer site-shell">
+  <div class="shell site-footer-inner">
+    <div class="site-footer-brand"><a href="/gateway/" class="brand"><img src="/gateway/landing/brand-logo.png" width="32" height="32" alt=""><span>浙大上课爽</span></a><p>个人学习工具，非浙江大学官方产品。</p></div>
+    <nav aria-label="页脚导航"><a href="/gateway/privacy" data-nav="privacy">隐私与数据说明</a><a href="/gateway/admin">管理员登录</a></nav>
+  </div>
+</footer>
+<!-- /portal-footer -->
 
-  <dialog id="login-dialog" aria-labelledby="login-title">
-    <button type="button" class="dialog-close" data-close-login aria-label="关闭登录">×</button>
-    <p class="eyebrow">继续你的学习</p>
-    <h2 id="login-title">登录已有账号</h2>
-    <p class="muted login-intro">使用管理员为你开通的账号，或已注册的邮箱登录。</p>
-    <form id="portal-login-form">
-      <label for="login-name">邮箱或账号</label><input id="login-name" name="username" autocomplete="username" maxlength="254" required>
-      <label for="login-password">密码</label>
-      <div class="password-field"><input id="login-password" name="password" type="password" autocomplete="current-password" maxlength="256" required><button type="button" id="password-toggle" aria-controls="login-password" aria-pressed="false">显示</button></div>
-      <p id="login-status" class="notice" role="status" aria-live="polite"></p>
-      <button class="button primary" id="login-submit" type="submit">登录</button>
-    </form>
-    <p class="login-bottom">还没有账号？<a href="/gateway/account?tab=register">免费注册 ↗</a></p>
-  </dialog>
+  <!-- portal-login -->
+<dialog id="login-dialog" aria-labelledby="login-title">
+  <button type="button" class="dialog-close" data-close-login aria-label="关闭登录">×</button>
+  <h2 id="login-title">登录账号</h2>
+  <p class="login-intro">用你注册的邮箱或已有账号继续学习。</p>
+  <form id="portal-login-form">
+    <label for="login-name">邮箱或账号</label><input id="login-name" name="username" autocomplete="username" maxlength="254" required>
+    <label for="login-password">密码</label>
+    <div class="password-field"><input id="login-password" name="password" type="password" autocomplete="current-password" maxlength="256" required><button type="button" id="password-toggle" aria-controls="login-password" aria-pressed="false">显示</button></div>
+    <p id="login-status" class="notice" role="status" aria-live="polite"></p>
+    <button class="button primary" id="login-submit" type="submit">登录</button>
+  </form>
+  <p class="login-bottom">还没有账号？<a href="/gateway/account?tab=register">免费注册</a></p>
+</dialog>
+<!-- /portal-login -->
   <script src="/gateway/portal.js" defer></script>
   <script src="/gateway/account.js" defer></script>
 </body>

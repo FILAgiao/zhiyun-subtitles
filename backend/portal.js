@@ -82,7 +82,19 @@
   }
   function notice(message,error=false){$('login-status').textContent=message;$('login-status').classList.toggle('error',error);}
   function openLogin(){const dialog=$('login-dialog');if(dialog&&!dialog.open){resetPassword();notice('');dialog.showModal();requestAnimationFrame(()=>$('login-name').focus());}}
-  document.querySelectorAll('button[data-login]').forEach(button=>button.addEventListener('click',openLogin));
+  document.querySelectorAll('[data-login]').forEach(control=>control.addEventListener('click',event=>{
+    if(!$('login-dialog')||event.button!==0||event.metaKey||event.ctrlKey||event.shiftKey||event.altKey)return;
+    event.preventDefault();
+    openLogin();
+  }));
+  function markPage(page){
+    document.querySelectorAll('[data-nav]').forEach(link=>{
+      if(link.dataset.nav===page)link.setAttribute('aria-current','page');
+      else link.removeAttribute('aria-current');
+    });
+  }
+  const route=location.pathname.split('/').filter(Boolean).at(-1)?.replace(/\.html$/,'');
+  markPage(route==='study'?(location.hash==='#clips'?'clips':'study'):['privacy','account'].includes(route)?route:'home');
   $('login-dialog')?.addEventListener('close',event=>{if(!event.currentTarget.open)resetPassword();});
   $('login-dialog')?.querySelector('[data-close-login]').addEventListener('click',()=>$('login-dialog').close());
   $('password-toggle')?.addEventListener('click',()=>{const show=$('login-password').type==='password';$('login-password').type=show?'text':'password';$('password-toggle').textContent=show?'隐藏':'显示';$('password-toggle').setAttribute('aria-pressed',String(show));});
@@ -190,5 +202,5 @@
     update();
     if(next)await checkSession();
   });
-  window.ZYPortal={api,session,ready,openLogin,clear,date:(value)=>new Date(value).toLocaleString('zh-CN',{timeZone:'Asia/Shanghai',hour12:false,year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'})};
+  window.ZYPortal={api,session,ready,openLogin,clear,markPage,date:(value)=>new Date(value).toLocaleString('zh-CN',{timeZone:'Asia/Shanghai',hour12:false,year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'})};
 })();

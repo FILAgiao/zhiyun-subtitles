@@ -1,0 +1,44 @@
+<!-- portal-header -->
+<header class="site-header site-shell">
+  <nav class="shell nav" aria-label="主导航">
+    <a href="/gateway/" class="brand" data-nav="home"><img src="/gateway/landing/brand-logo.png" width="42" height="42" alt=""><span>浙大上课爽</span></a>
+    <div class="nav-actions">
+      <a href="/gateway/#features" data-nav="features">探索功能</a>
+      <a href="/gateway/study" data-nav="study">我的问答</a>
+      <a href="/gateway/study#clips" data-nav="clips">随意摘</a>
+      <a href="/gateway/study?login=1" class="nav-login" data-login>登录账号</a>
+      <span class="nav-pending" data-session-pending hidden>正在核对登录…</span>
+      <a href="/gateway/account?tab=register" class="nav-signup" data-guest-only data-nav="account">免费注册</a>
+      <div class="signed-user nav-member" hidden>
+        <a href="/gateway/account?tab=register" class="nav-account" data-nav="account" aria-label="我的账号与额度"><strong>我的额度</strong><span data-user-name></span></a>
+        <button type="button" data-logout>退出</button>
+      </div>
+      <a href="/gateway/admin" class="nav-admin">管理后台</a>
+      <a href="/gateway/#install" class="nav-download" data-nav="install">获取插件 <span aria-hidden="true">↗</span></a>
+    </div>
+  </nav>
+</header>
+<!-- /portal-header -->
+<!-- portal-footer -->
+<footer class="site-footer site-shell">
+  <div class="shell site-footer-inner">
+    <div class="site-footer-brand"><a href="/gateway/" class="brand"><img src="/gateway/landing/brand-logo.png" width="32" height="32" alt=""><span>浙大上课爽</span></a><p>个人学习工具，非浙江大学官方产品。</p></div>
+    <nav aria-label="页脚导航"><a href="/gateway/privacy" data-nav="privacy">隐私与数据说明</a><a href="/gateway/admin">管理员登录</a></nav>
+  </div>
+</footer>
+<!-- /portal-footer -->
+<!-- portal-login -->
+<dialog id="login-dialog" aria-labelledby="login-title">
+  <button type="button" class="dialog-close" data-close-login aria-label="关闭登录">×</button>
+  <h2 id="login-title">登录账号</h2>
+  <p class="login-intro">用你注册的邮箱或已有账号继续学习。</p>
+  <form id="portal-login-form">
+    <label for="login-name">邮箱或账号</label><input id="login-name" name="username" autocomplete="username" maxlength="254" required>
+    <label for="login-password">密码</label>
+    <div class="password-field"><input id="login-password" name="password" type="password" autocomplete="current-password" maxlength="256" required><button type="button" id="password-toggle" aria-controls="login-password" aria-pressed="false">显示</button></div>
+    <p id="login-status" class="notice" role="status" aria-live="polite"></p>
+    <button class="button primary" id="login-submit" type="submit">登录</button>
+  </form>
+  <p class="login-bottom">还没有账号？<a href="/gateway/account?tab=register">免费注册</a></p>
+</dialog>
+<!-- /portal-login -->

@@ -1,5 +1,29 @@
 const fs=require('node:fs'),path=require('node:path'),cp=require('node:child_process');
+const portalPages=['account','study','privacy'];
+function portalShell(){
+ const source=fs.readFileSync('backend/portal-shell.html','utf8');
+ const fragments={};
+ for(const name of ['header','footer','login']){
+  const pattern=new RegExp('<!-- portal-'+name+' -->[\\s\\S]+?<!-- /portal-'+name+' -->');
+  const match=source.match(pattern);
+  if(!match)throw Error('缺少官网共用组件 '+name);
+  fragments[name]={pattern,markup:match[0]};
+ }
+ for(const page of portalPages){
+  const file='backend/'+page+'.html';
+  const original=fs.readFileSync(file,'utf8');
+  let html=original;
+  for(const name of page==='privacy'?['header','footer']:['header','footer','login']){
+   const {pattern,markup}=fragments[name];
+   if(!pattern.test(html))throw Error('页面缺少共用组件位置 '+page+' '+name);
+   html=html.replace(pattern,()=>markup);
+  }
+  if(html!==original)fs.writeFileSync(file,html);
+ }
+ return fragments;
+}
 function buildPublicPage(){
+ const shell=portalShell();
  const settings=JSON.parse(fs.readFileSync('backend/public-page.json','utf8').replace(/^\uFEFF/,''));
  const version=settings.pageVersion||require('./package.json').version;
  if(!/^[0-9]+\.[0-9]+\.[0-9]+(?:-r[0-9]+)?$/.test(version))throw Error('无效的页面版本。');
@@ -12,7 +36,7 @@ function buildPublicPage(){
  const badge=(kind,url,icon,label,enabled)=>enabled?'<a class="store-button '+kind+'" href="'+escape(url)+'" target="_blank" rel="noopener noreferrer" aria-label="'+label+'">'+icon+'<span class="store-copy"><small>从商店获取</small><strong>'+label+'</strong></span><span class="badge-arrow" aria-hidden="true">↗</span></a>':'<button class="store-button '+kind+'" type="button" disabled aria-label="'+label+' · 即将上线 · 审核中">'+icon+'<span class="store-copy"><small>即将上线 · 审核中</small><strong>'+label+'</strong></span></button>';
  const chromeButton=badge('chrome',chrome,chromeIcon,'Chrome 插件商店',true);
  const edgeButton=badge('edge',edge,edgeIcon,'Edge 插件商店',Boolean(edge));
- const html=fs.readFileSync('backend/download.template.html','utf8').replace(/^\uFEFF/,'').replaceAll('{{VERSION}}',escape(version)).replaceAll('{{CHROME_BUTTON}}',chromeButton).replaceAll('{{EDGE_BUTTON}}',edgeButton);
+ const html=fs.readFileSync('backend/download.template.html','utf8').replace(/^\uFEFF/,'').replaceAll('{{VERSION}}',escape(version)).replace('{{PORTAL_HEADER}}',shell.header.markup).replace('{{PORTAL_FOOTER}}',shell.footer.markup).replaceAll('{{CHROME_BUTTON}}',chromeButton).replaceAll('{{EDGE_BUTTON}}',edgeButton);
  if(/\{\{[A-Z_]+\}\}/.test(html))throw Error('介绍页还有未替换的模板字段。');
  fs.writeFileSync('backend/download.html',html);
  fs.mkdirSync('backend/landing',{recursive:true});
@@ -20,8 +44,8 @@ function buildPublicPage(){
  fs.copyFileSync('assets/brand-logo.png','backend/landing/brand-logo.png');
  fs.copyFileSync('assets/share-qr.png','backend/landing/plugin-qr.png');
  const preview=path.resolve('dist/public-page-'+version);fs.mkdirSync(path.join(preview,'landing'),{recursive:true});
- const offline=html.replaceAll('/gateway/landing/','./landing/').replaceAll('/gateway/download.css','./download.css').replace('<script src="/gateway/portal.js" defer></script>','').replaceAll('/gateway/site.js','./site.js').replaceAll('href="/gateway/study','href="https://47.77.182.216.sslip.io/gateway/study').replaceAll('href="/gateway/account','href="https://47.77.182.216.sslip.io/gateway/account').replaceAll('href="/gateway/"','href="./index.html"').replaceAll('href="/gateway/extension.zip"','href="https://47.77.182.216.sslip.io/gateway/extension.zip"').replaceAll('href="/gateway/privacy"','href="https://47.77.182.216.sslip.io/gateway/privacy"').replaceAll('href="/gateway/admin"','href="https://47.77.182.216.sslip.io/gateway/admin"');
- fs.writeFileSync(path.join(preview,'index.html'),offline);fs.copyFileSync('backend/download.css',path.join(preview,'download.css'));fs.copyFileSync('backend/site.js',path.join(preview,'site.js'));
+ const offline=html.replaceAll('/gateway/landing/','./landing/').replaceAll('/gateway/download.css','./download.css').replaceAll('/gateway/portal.css','./portal.css').replace('<script src="/gateway/portal.js" defer></script>','').replaceAll('/gateway/site.js','./site.js').replaceAll('href="/gateway/study','href="https://47.77.182.216.sslip.io/gateway/study').replaceAll('href="/gateway/account','href="https://47.77.182.216.sslip.io/gateway/account').replaceAll('href="/gateway/"','href="./index.html"').replaceAll('href="/gateway/#','href="#').replaceAll('href="/gateway/extension.zip"','href="https://47.77.182.216.sslip.io/gateway/extension.zip"').replaceAll('href="/gateway/privacy"','href="https://47.77.182.216.sslip.io/gateway/privacy"').replaceAll('href="/gateway/admin"','href="https://47.77.182.216.sslip.io/gateway/admin"');
+ fs.writeFileSync(path.join(preview,'index.html'),offline);fs.copyFileSync('backend/download.css',path.join(preview,'download.css'));fs.copyFileSync('backend/portal.css',path.join(preview,'portal.css'));fs.copyFileSync('backend/site.js',path.join(preview,'site.js'));
  for(const file of fs.readdirSync('backend/landing'))fs.copyFileSync(path.join('backend/landing',file),path.join(preview,'landing',file));
  fs.writeFileSync(path.join(preview,'README.txt'),'浙大上课爽 · 本地介绍页 '+version+'\n\n解压后双击 index.html 查看。六张介绍图和样式已包含，无需登录或启动服务器。\nChrome 按钮打开商店，需要联网；'+(edge?'Edge 按钮打开商店。':'Edge 正在审核，按钮暂不可点击。')+'\n这是本地介绍页预览包，尚未部署到公网；不会改变现有扫码地址。账号与问答需通过同域 HTTP 预览（见完整官网验收包）；此离线文件内的账号链接指向原官网，功能待部署。\n部署源文件见仓库 backend/download.template.html、download.css、public-page.json。\n');
  const zip=path.resolve('dist/public-page-'+version+'.zip');

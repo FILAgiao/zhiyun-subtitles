@@ -2,7 +2,6 @@
 'use strict';
 (() => {
   const P=window.ZYPortal,$=id=>document.getElementById(id);
-  document.querySelectorAll('[data-nav="study"]').forEach(a=>a.setAttribute('aria-current','page'));
   let records=[],selected='',loadGeneration=0,detailGeneration=0,deleteBusy=false,initialized=false;
   const node=(tag,text,cls)=>{const item=document.createElement(tag);if(text!==undefined)item.textContent=text;if(cls)item.className=cls;return item;};
   const details=new Map();
