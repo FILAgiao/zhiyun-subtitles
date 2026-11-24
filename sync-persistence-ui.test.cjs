@@ -23,8 +23,15 @@ const native=process.argv.includes('--extension');
  assert.match(await ui.locator('#auto-sync').evaluate(e=>e.closest('label').textContent),/20 分钟/);
  assert.match(await ui.locator('#sync-auto-indicator').getAttribute('title'),/等待视频和字幕就绪|登录后开始按播放时长计时/);
  await ui.locator('#collapse').click();const compact=ui.locator('#compact-launcher');await compact.waitFor({state:'visible'});assert.deepEqual(await compact.locator(':scope > button').evaluateAll(nodes=>nodes.map(node=>node.id)),['compact','compact-explain','compact-history']);assert.equal(await compact.locator('#compact-sync-status').textContent(),'');await compact.locator('#compact').click();
- await ui.locator('#offset').evaluate(e=>{e.value=2;e.dispatchEvent(new Event('input',{bubbles:true}));});assert.equal(await ui.locator('#auto-sync').isChecked(),false);await load();assert.equal(await ui.locator('#auto-sync').isChecked(),false,'manual adjustment stays stopped');assert.equal(await ui.locator('#offset').inputValue(),'2');
- await setEnabled(true);await setEnabled(false);await load();assert.equal(await ui.locator('#auto-sync').isChecked(),false,'explicit disable persists');
+ await ui.locator('#offset').evaluate(e=>{e.value=2;e.dispatchEvent(new Event('input',{bubbles:true}));});assert.equal(await ui.locator('#auto-sync').isChecked(),true);
+ await ui.locator('#sync-manual-toggle').click();await ui.locator('#later').click();
+ assert.equal(await ui.locator('#auto-sync').isChecked(),true,'stepper preserves enabled preference');
+ await load();assert.equal(await ui.locator('#auto-sync').isChecked(),true,'manual adjustment and enabled preference persist together');assert.equal(await ui.locator('#offset').inputValue(),'2.5');
+ await ui.locator('#reset-offset').evaluate(e=>e.click());assert.equal(await ui.locator('#offset').inputValue(),'0');
+ assert.equal(await ui.locator('#auto-sync').isChecked(),true,'reset preserves enabled preference');
+ await setEnabled(false);
+ await ui.locator('#offset').evaluate(e=>{e.value=3;e.dispatchEvent(new Event('input',{bubbles:true}));});
+ await load();assert.equal(await ui.locator('#auto-sync').isChecked(),false,'manual adjustment respects an explicit disable');assert.equal(await ui.locator('#offset').inputValue(),'3');
  // Toggle twice and start navigation in the same content-script task. No wait or
  // page-evaluate round trip may give a deferred storage queue time to drain.
  for(let attempt=0;attempt<8;attempt++){
@@ -38,6 +45,6 @@ const native=process.argv.includes('--extension');
  const position=await ui.locator('#panel').evaluate(e=>{const a=e.getBoundingClientRect();return{x:a.x,y:a.y};});await page.evaluate(()=>{const host=document.getElementById('zy-subtitle-host');host.setAttribute('data-ai-workspace','');dispatchEvent(new Event('resize'));host.removeAttribute('data-ai-workspace');});const after=await ui.locator('#panel').evaluate(e=>{const a=e.getBoundingClientRect();return{x:a.x,y:a.y};});assert.ok(Math.abs(position.x-after.x)<2&&Math.abs(position.y-after.y)<2,'hidden workspace cannot rewrite panel position');
  if(native)await worker.evaluate(()=>chrome.storage.local.set({'gateway-account-v1':{url:'https://47.77.182.216.sslip.io/gateway',token:'fixture-denied'}}));else await page.evaluate(()=>GM_setValue('gateway-account-v1',{url:'https://47.77.182.216.sslip.io/gateway',token:'fixture-denied'}));
  await load();await page.waitForFunction(()=>document.querySelector('#zy-subtitle-host')?.shadowRoot?.querySelector('#sync-auto-indicator')?.title.includes('暂不能使用语音校准'));assert.equal(await ui.locator('#auto-sync').isChecked(),true,'permission denial retains user preference');
- assert.deepEqual(errors,[]);assert.deepEqual(paid,[]);console.log('PASS: '+(native?'Edge MV3':'Chrome full script')+' auto sync refresh, manual stop, explicit stop, course isolation, silent compact status when idle, hidden panel position; no audio/AI requests.');
+ assert.deepEqual(errors,[]);assert.deepEqual(paid,[]);console.log('PASS: '+(native?'Edge MV3':'Chrome full script')+' auto sync refresh, manual offset and reset, explicit stop, course isolation, silent compact status when idle, hidden panel position; no audio/AI requests.');
  }finally{await context.close();if(browser)await browser.close();}
 })().catch(e=>{console.error(e);process.exitCode=1;});

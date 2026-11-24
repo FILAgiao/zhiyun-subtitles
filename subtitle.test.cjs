@@ -245,12 +245,17 @@ test('video downloader aborts on cancellation and size overflow without saving l
 });
 
 
-test('user confirmed VOD host is authorized without broadening to other subdomains',async()=>{
- const {downloadVideo}=require('./zhiyun-subtitles.user.js');let called=false;
+test('video caching accepts CMC hosts and rejects unrelated and lookalike hosts',async()=>{
+ const {downloadVideo}=require('./zhiyun-subtitles.user.js');const requested=[];
  const blob=new Blob([new Uint8Array([0,0,0,16,102,116,121,112])]);
- await downloadVideo(o=>{called=true;queueMicrotask(()=>o.onload({status:200,response:blob}));return{abort(){}};},'https://vod.cmc.zju.edu.cn/lesson.mp4',{limit:100});
- assert.equal(called,true);
- await assert.rejects(downloadVideo(()=>{throw new Error('must not call');},'https://unknown.cmc.zju.edu.cn/lesson.mp4',{limit:100}),/尚未授权/);
+ const urls=['vod.cmc.zju.edu.cn','resource.cmc.zju.edu.cn','media.resource.cmc.zju.edu.cn','cmc.zju.edu.cn'].map(host=>`https://${host}/lesson.mp4?signature=fixture`);
+ const request=options=>{requested.push(options.url);queueMicrotask(()=>options.onload({status:200,response:blob}));return{abort(){}};};
+ for(const url of urls)assert.equal(await downloadVideo(request,url,{limit:100}),blob);
+ for(const host of ['resource.zju.edu.cn','resource.cmc.zju.edu','cmc.zju.edu.cn.example.test','notcmc.zju.edu.cn']){
+  await assert.rejects(downloadVideo(request,`https://${host}/lesson.mp4`,{limit:100}),/尚未授权/);
+ }
+ assert.deepEqual(requested,urls);
+ await assert.rejects(downloadVideo(options=>queueMicrotask(()=>options.onerror()),urls[1],{limit:100}),/视频下载请求失败（resource\.cmc\.zju\.edu\.cn）/);
 });
 
 

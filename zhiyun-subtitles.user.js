@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         浙大上课爽
 // @namespace    zhiyunzimu.local
-// @version      0.20.115
+// @version      0.20.117
 // @description  网课不硬扛，浙大上课爽！智云课堂同步字幕、PPT 讲解与本机缓存。
 // @match        https://*/*
 // @match        http://*/*
@@ -376,7 +376,7 @@ function mount({shadow,mascot,getValue=(_key,fallback)=>fallback,setValue=()=>{}
      <p>优先翻译当前字幕。设为 1 条时逐条发送。</p>
    </div>`);
  const syncBox=document.createElement('details');syncBox.id='study-sync';syncBox.innerHTML='<summary aria-label="打开手动时间微调"><span>手动时间微调</span><span class="sync-manual-access">免登录可以使用</span></summary>';syncBox.append(syncSection);shadow.append(syncBox);for(const details of syncSection.querySelectorAll('details'))details.open=true;
- $('settings-sync').insertAdjacentHTML('beforeend','<label>定时自动校准（每 20 分钟）<input id="auto-sync" type="checkbox"></label><p id="sync-status" role="status"></p><p>录播按播放进度累计计时。手动微调立即停用自动校准，重新勾选才恢复。优先流式识别，可靠匹配后立即结束；每次最多听取 20 秒课程音轨，按实际使用时长计费。</p>');
+ $('settings-sync').insertAdjacentHTML('beforeend','<label>定时自动校准（每 20 分钟）<input id="auto-sync" type="checkbox"></label><p id="sync-status" role="status"></p><p>录播按播放进度累计计时。开启时，手动微调或归零会从头计时，继续播放 20 分钟后再次校准。优先流式识别，可靠匹配后立即结束；每次最多听取 20 秒课程音轨，按实际使用时长计费。</p>');
  // Keep the existing controls and listeners; only their visual home changes.
  const layoutSettings=$('settings-layout-panel');
  for(const id of ['reset-ppt','slides-status','edit-layout','layout-editor'])layoutSettings.append($(id));
@@ -2940,7 +2940,7 @@ return {create,opaque,courseKey,MAX_EVENTS,MAX_BATCH};
 (function(root,factory){const api=factory();if(typeof module==='object'&&module.exports)module.exports=api;else root.ZYGateway=api;})(globalThis,function(){
 'use strict';
 const DEFAULT_ORIGIN="https://47.77.182.216.sslip.io/gateway";
-const CLIENT_VERSION='0.20.115';
+const CLIENT_VERSION='0.20.117';
 function clientHeaders(){return {'X-Client-Version':CLIENT_VERSION,'X-Client-Channel':'userscript'};}
 const KEY='gateway-account-v1',APP='zhiyun-subtitles',CLIENT=globalThis.ZY_CLIENT_TYPE||'userscript';
 function baseURL(value){const u=new URL(String(value).trim());if(u.username||u.password||u.search||u.hash||!['/','/gateway','/gateway/'].includes(u.pathname)||(u.protocol!=='https:'&&!(u.protocol==='http:'&&['localhost','127.0.0.1'].includes(u.hostname))))throw Error('请填写 HTTPS 服务地址；本机调试可使用 http://127.0.0.1:8080');return u.origin+(u.pathname==='/'?'':'/gateway');}
@@ -6991,9 +6991,10 @@ const ZY_ONBOARDING_ARTWORK="data:image/webp;base64,UklGRvzlBwBXRUJQVlA4WAoAAAAw
   const ARK_URL = 'https://ark.cn-beijing.volces.com/api/v3/responses';
   function downloadVideo(request,url,{signal,limit,range=null,validator=null,onProgress=()=>{}}) {
     return new Promise((resolve,reject)=>{
-      const parsed=new URL(url);
-      if(!['video.cmc.zju.edu.cn','vod.cmc.zju.edu.cn','interactivemeta.cmc.zju.edu.cn'].includes(parsed.hostname) || !['https:','http:'].includes(parsed.protocol)) {
-        reject(new Error('尚未授权此视频域名：'+parsed.hostname+'。请提供缓存诊断，以便添加精确域名权限。'));return;
+      const {hostname,protocol}=new URL(url);
+      const schoolHost=hostname==='cmc.zju.edu.cn'||hostname.endsWith('.cmc.zju.edu.cn');
+      if(!schoolHost || !['https:','http:'].includes(protocol)) {
+        reject(new Error('尚未授权此视频地址（'+hostname+'）。视频缓存仅支持智云课堂 CMC 域名。'));return;
       }
       let handle,settled=false;
       const finish=(error,blob)=>{if(settled)return;settled=true;signal?.removeEventListener('abort',abort);error?reject(error):resolve(blob);};
@@ -7035,11 +7036,11 @@ const ZY_ONBOARDING_ARTWORK="data:image/webp;base64,UklGRvzlBwBXRUJQVlA4WAoAAAAw
               } else finish(null,blob);
             }catch(error){finish(error);}
           },
-          onerror:()=>finish(new Error('油猴下载失败：请允许连接 '+parsed.hostname+'，并检查网络或登录状态')),
+          onerror:()=>finish(new Error('视频下载请求失败（'+hostname+'）。请刷新课程页，确认原视频能播放后重试。')),
           ontimeout:()=>finish(new Error('视频下载超时，可重试')),
           onabort:()=>finish(new Error('缓存已取消'))
         });
-      }catch(error){finish(new Error('无法启动油猴跨域下载：'+error.message));}
+      }catch(_){finish(new Error('无法启动视频下载（'+hostname+'）。请刷新课程页后重试。'));}
     });
   }
   async function downloadInChunks(request,url,{signal,write,checkSpace=async()=>{},onProgress=()=>{},chunkSize=8*1024*1024}) {
@@ -7751,7 +7752,9 @@ const ZY_ONBOARDING_ARTWORK="data:image/webp;base64,UklGRvzlBwBXRUJQVlA4WAoAAAAw
         if(!active()||applied||!response?.matched)return;
         const next=addSyncAnchor(syncAnchors,started,response.offset);
         if(!next)throw Object.assign(Error('匹配时间差无效或与已有同步点冲突'),{code:'alignment_conflict'});
-        syncAnchors=next;syncManual=false;$('offset').value=response.offset;updateOffset();saveSyncState();
+        syncAnchors=next;syncManual=false;
+        if(!periodic&&$('auto-sync').checked){syncAutoPaused=false;syncSchedule.enable();}
+        $('offset').value=response.offset;updateOffset();saveSyncState();
         applied={offset:response.offset};
         if(periodic)periodicAlignmentPending=false;
         tick();
@@ -7912,7 +7915,7 @@ const ZY_ONBOARDING_ARTWORK="data:image/webp;base64,UklGRvzlBwBXRUJQVlA4WAoAAAAw
       logAttempt(alignmentStage+'：'+(error.message||'校准失败'));
       $('align-status').textContent=(alignmentAttempt?'第 '+alignmentAttempt+' 次 · ':'')+alignmentStage+'：'+(error.message || '自动校准失败')+'；原偏移未改动。';
       $('align-label').textContent='识别中止 · 未修改偏移';
-      if (periodic) { syncSchedule.stop(); syncAutoPaused=true; setSyncStatus('定时校准遇到错误，已暂停；启用偏好保留，检查连接后重新勾选重试。'); }
+      if (periodic) { syncSchedule.stop(); syncAutoPaused=true; setSyncStatus(SYNC_ERROR_PAUSED); }
     } }
     finally {
       clearTimeout(timer); clearInterval(progressTimer); $('align-progress').value=20; streamSession?.cancel('cleanup');stream?.getTracks().forEach(track=>track.stop());
@@ -8539,7 +8542,7 @@ const ZY_ONBOARDING_ARTWORK="data:image/webp;base64,UklGRvzlBwBXRUJQVlA4WAoAAAAw
     if(streamSession){restoreOnline();await dropStream();}
     const controller=beginCacheTask(key,'停止缓存');
     try {
-      cacheProgress('index',0,0,'1 / 2 · 连接视频并检查磁盘空间');$('cache-status').textContent='正在连接视频服务器；如果油猴询问，请允许连接视频域名…';
+      cacheProgress('index',0,0,'1 / 2 · 连接视频并检查磁盘空间');$('cache-status').textContent='正在连接课程视频服务器…';
       await storeLargeVideo(key,write=>downloadInChunks(GM_xmlhttpRequest,src,{signal:controller.signal,write,checkSpace:checkCacheSpace,onProgress:(size,total)=>{
         if(cacheDeleting.has(key))return;cacheProgress('full',size,total,'2 / 2 · 保存完整课程');$('cache-status').textContent=`正在保存 ${(size/1048576).toFixed(1)} MB${total?' / '+(total/1048576).toFixed(1)+' MB':''}；完成后自动接续当前进度。`;
       }}),controller.signal);
@@ -9018,6 +9021,7 @@ const ZY_ONBOARDING_ARTWORK="data:image/webp;base64,UklGRvzlBwBXRUJQVlA4WAoAAAAw
   };
   let syncAnchors = [], syncManual = false;
   const syncSchedule = createSyncSchedule();
+  const SYNC_ERROR_PAUSED = '定时校准遇到错误，已暂停。检查连接后，点击「智能字幕同步」；匹配成功会恢复计时。';
   let syncAutoPaused = false, periodicAlignmentPending = false, syncSeekNoticeUntil = 0;
   function onSyncSeek() {
     if (route !== courseIdentity(location.hash)) return;
@@ -9042,8 +9046,9 @@ const ZY_ONBOARDING_ARTWORK="data:image/webp;base64,UklGRvzlBwBXRUJQVlA4WAoAAAAw
     const verified=!gateway.configured()||!!gateway.study?.identity?.(),permitted=gateway.canUse('speech');
     const playbackDetail=syncSchedule.retrying
       ? '进度已跳转，继续播放约 '+remaining+' 分钟后自动重试；暂停不计时'
+      : syncManual?'已保存手动微调，再播放约 '+remaining+' 分钟后自动校准；暂停不计时'
       : ready?'定时校准已开启，再播放约 '+remaining+' 分钟复查':'定时校准已记住，等待视频和字幕就绪；暂停不计时';
-    const detail=busy?$('align-status').textContent||'正在匹配课堂音轨与字幕':syncAutoPaused?$('sync-status').textContent:enabled?(live?'直播字幕跟随实时推送，无需回放校准':!signed?'定时校准已记住，登录后开始按播放时长计时':!verified?'等待确认账号语音权限；尚未开始计时':!permitted?'当前账号暂不能使用语音校准，请检查权限和有效期；启用偏好保留':playbackDetail):syncAnchors.length?'正在应用本课程已保存的同步点':'定时校准未开启';
+    const detail=busy?$('align-status').textContent||'正在匹配课堂音轨与字幕':syncAutoPaused?SYNC_ERROR_PAUSED:enabled?(live?'直播字幕跟随实时推送，无需回放校准':!signed?'定时校准已记住，登录后开始按播放时长计时':!verified?'等待确认账号语音权限；尚未开始计时':!permitted?'当前账号暂不能使用语音校准，请检查权限和有效期；启用偏好保留':playbackDetail):syncAnchors.length?'正在应用本课程已保存的同步点':'定时校准未开启';
     timer.hidden=!(busy||enabled||syncAutoPaused);
     timer.dataset.busy=String(busy);
     timer.dataset.state=busy?'working':syncAutoPaused?'paused':enabled?'waiting':'synced';
@@ -9069,24 +9074,27 @@ const ZY_ONBOARDING_ARTWORK="data:image/webp;base64,UklGRvzlBwBXRUJQVlA4WAoAAAAw
   function manualOffset(reset = false) {
     const requested = value('offset', 0, -3600, 3600);
     const previous = syncOffsetAt(mainVideo?.currentTime || 0, requested, syncAnchors);
-    syncSchedule.stop(); syncAutoPaused=false; syncManual = true; cancelAlignment?.();
-    if ($('auto-sync')) $('auto-sync').checked = false;
+    periodicAlignmentPending=false; syncSeekNoticeUntil=0;
+    if (syncSchedule.enabled) syncSchedule.enable();
+    syncManual = true; cancelAlignment?.();
     if (reset) syncAnchors = [];
     else syncAnchors = syncAnchors.map(point => ({...point, offset: Math.max(-3600, Math.min(3600, point.offset + requested - previous))}));
     updateOffset(); saveSyncState();
-    $('align-status').textContent=reset?'已手动归零，后续识别不会覆盖。':`已切换手动微调 · 当前时间差 ${requested>=0?'+':''}${requested} 秒，后续识别不会覆盖。`;
-    setSyncStatus(reset ? '已归零全部同步点 · 手动模式。重新勾选后才会定时校准。' : '手动模式 · 已停止定时校准，重新勾选后才会恢复。');
+    const action = reset ? '已手动归零' : `已手动微调，当前时间差 ${requested>=0?'+':''}${requested} 秒`;
+    const next = syncSchedule.enabled ? '继续播放 20 分钟后自动校准。' : syncAutoPaused ? SYNC_ERROR_PAUSED : '定时校准已关闭。';
+    $('align-status').textContent=action+' · '+next;
+    setSyncStatus(next);
     tick();
   }
   function loadOffset() {
     $('offset').value = GM_getValue(offsetKey(), GM_getValue('subtitle-offset:' + location.hash, 0));
     const saved = GM_getValue(syncKey(), {}); syncAnchors = syncAnchorsValid(saved?.anchors); syncManual = !!saved?.manual;
     syncSchedule.stop(); syncAutoPaused=false; periodicAlignmentPending=false; syncSeekNoticeUntil=0;
-    // Older builds also stored autoSync=false when no choice had been made.
-    const enabled=!syncManual&&saved?.autoSyncDisabled!==true;
+    // Older manual records without an explicit preference also kept the schedule off.
+    const enabled=(saved?.autoSyncDisabled ?? syncManual)!==true;
     $('auto-sync').checked=enabled;if(enabled)syncSchedule.enable();
     refreshSyncBadge();updateOffset(false);
-    setSyncStatus(enabled?'定时校准已开启 · 按播放进度累计计时，暂停不计时。':syncManual?'手动模式 · 定时校准保持关闭，需主动重新开启。':'定时校准已关闭，保留已有同步点。');
+    setSyncStatus(enabled?'定时校准已开启 · 按播放进度累计计时，暂停不计时。':'定时校准已关闭，保留已有同步点。');
   }
   loadOffset();
   $('offset').addEventListener('input', () => manualOffset());
@@ -9099,8 +9107,8 @@ const ZY_ONBOARDING_ARTWORK="data:image/webp;base64,UklGRvzlBwBXRUJQVlA4WAoAAAAw
   }
   $('auto-sync')?.addEventListener('change', () => {
     syncAutoPaused=false;
-    if (!$('auto-sync').checked) { syncSchedule.stop(); cancelAlignment?.(); saveSyncState(); setSyncStatus('定时校准已关闭，保留已有同步点。'); return; }
-    syncManual = false; syncSchedule.enable(); saveSyncState();
+    if (!$('auto-sync').checked) { syncSchedule.stop(); periodicAlignmentPending=false; syncSeekNoticeUntil=0; cancelAlignment?.(); saveSyncState(); setSyncStatus('定时校准已关闭，保留已有同步点。'); return; }
+    syncSchedule.enable(); saveSyncState();
     setSyncStatus('定时校准已开启 · 按实际播放时长计时，可能产生语音识别费用。');
   });
   function tickAutoSync() {
