@@ -31,7 +31,11 @@ with tempfile.TemporaryDirectory() as folder:
   for(const edge of await edges.all()){assert.equal(await edge.getAttribute('href'),settings.edgeStoreUrl);assert.equal(await edge.getAttribute('target'),'_blank');assert.match(await edge.getAttribute('rel'),/noopener/);}
   assert.equal(await page.getByRole('link',{name:'管理员登录',exact:true}).getAttribute('href'),'/gateway/admin');
   const admin=await context.request.get(base+'/gateway/admin');assert.equal(admin.status(),200);assert.match(await admin.text(),/登录账号管理后台/);
-  const adminEntry=page.getByRole('navigation',{name:'主导航'}).getByRole('link',{name:'管理后台',exact:true});
+  const header=page.getByRole('navigation',{name:'主导航'});
+  const signup=header.getByRole('link',{name:'免费注册',exact:true});
+  const entries=header.locator('.nav-actions').getByRole('link');
+  assert.deepEqual(await entries.allTextContents(),['我的问答','随意摘','登录账号','免费注册']);
+  const adminEntry=page.getByRole('navigation',{name:'页脚导航'}).getByRole('link',{name:'管理员登录',exact:true});
   await adminEntry.click();
   await page.waitForURL(base+'/gateway/admin');
   await page.getByRole('heading',{name:'登录账号管理后台'}).waitFor();
@@ -47,7 +51,7 @@ with tempfile.TemporaryDirectory() as folder:
   assert.equal(require('jsqr')(new Uint8ClampedArray(qr.data),qr.width,qr.height)?.data,'https://47.77.182.216.sslip.io/gateway/','home download QR is actually scannable');
   assert.equal(await page.getByText('找到你的浏览器插件').count(),0);
   const sync=page.locator('.sync-row .feature-art'),view=page.locator('.view-row .feature-art');const syncBox=await sync.boundingBox(),viewBox=await view.boundingBox();assert.ok(syncBox.width>=800,'second-screen image gets a broad dedicated canvas');assert.ok(viewBox.y>=syncBox.y+syncBox.height+70,'sync and PPT posters no longer squeezed side by side');
-  await page.getByRole('link',{name:'获取插件'}).click();await page.waitForURL(/#install$/);assert.ok(await edge.isVisible());
+  await page.locator('#install').scrollIntoViewIfNeeded();assert.ok(await edge.isVisible());
   const previews=path.resolve(process.env.ZY_STUDY_PREVIEW_DIR||'.');fs.mkdirSync(previews,{recursive:true});
   await page.evaluate(()=>{document.documentElement.style.scrollBehavior='auto';window.scrollTo(0,0);});await page.screenshot({path:path.join(previews,'download-page-desktop-preview.png'),fullPage:true});await page.screenshot({path:path.join(previews,'download-page-hero-preview.png')});await page.locator('#features').screenshot({path:path.join(previews,'download-page-classroom-preview.png')});
   for(const width of [390,320,768,1024]){await page.setViewportSize({width,height:844});assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),'no horizontal overflow at '+width);for(const badge of await page.locator('.hero-stores .store-button').all()){const r=await badge.boundingBox();assert.ok(r.x>=0&&r.x+r.width<=width,'hero store badges fit viewport');}await edge.scrollIntoViewIfNeeded();const box=await edge.boundingBox();assert.ok(box.x>=0&&box.x+box.width<=width);if(width===390){await page.evaluate(()=>window.scrollTo(0,0));await page.screenshot({path:path.join(previews,'download-page-mobile-preview.png'),fullPage:true});}else if(width===320)await page.screenshot({path:'.testdeps/public-page-320.png',fullPage:true});}
@@ -59,8 +63,11 @@ with tempfile.TemporaryDirectory() as folder:
   await home.goto(base+'/gateway/');
   for(const width of [320,390,541,768,1024,1440]){
    await page.setViewportSize({width,height:844});
-   const link=await adminEntry.boundingBox();
-   assert.ok(link&&link.x>=0&&link.x+link.width<=width,'admin entry fits viewport '+width);
+   const button=await signup.boundingBox();
+   const bar=await header.boundingBox();
+   assert.ok(button&&bar&&button.x>=0&&Math.abs(button.x+button.width-(bar.x+bar.width))<2,'registration is at the right edge of the header at '+width);
+   assert.equal(await signup.evaluate(link=>getComputedStyle(link).backgroundColor),'rgb(166, 71, 32)');
+   if(width===390||width===1440)await page.locator('.site-header').screenshot({path:path.join(previews,'site-header-'+width+'.png')});
    assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),'home fits viewport '+width);
   }
   await page.getByRole('link',{name:'登录账号',exact:true}).click();
@@ -71,7 +78,8 @@ with tempfile.TemporaryDirectory() as folder:
   await home.reload();
   await home.getByRole('link',{name:'我的账号与额度'}).waitFor();
   assert.equal(await home.getByRole('link',{name:'登录账号',exact:true}).isVisible(),false);
-  assert.equal(await home.getByRole('link',{name:'管理后台',exact:true}).isVisible(),true);
+  assert.equal(await home.getByRole('navigation',{name:'主导航'}).getByRole('link',{name:'免费注册',exact:true}).isVisible(),false);
+  assert.equal(await home.getByRole('navigation',{name:'页脚导航'}).getByRole('link',{name:'管理员登录',exact:true}).isVisible(),true);
   await page.locator('[data-logout]').click();
   await home.getByRole('link',{name:'登录账号',exact:true}).waitFor();
 

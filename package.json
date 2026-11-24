@@ -1,6 +1,6 @@
 {
   "name": "zhiyun-subtitles",
-  "version": "0.20.117",
+  "version": "0.20.121",
   "private": true,
   "description": "浙大上课爽：网课不硬扛，浙大上课爽！同步字幕、PPT 讲解与本机缓存。",
   "scripts": {
@@ -30,6 +30,7 @@
     "build:onboarding": "node build-onboarding-assets.cjs",
     "test:onboarding": "node onboarding-ui.test.cjs",
     "build:extension": "node build-extension.cjs",
+    "submit:stores": "node submit-stores.cjs",
     "build:site": "node build-public-page.cjs",
     "build:quotes": "node build-userscript.cjs && node build-extension.cjs",
     "build:capture:bridge": "node build-capture-bridge.cjs",

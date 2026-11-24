@@ -4,7 +4,7 @@ const profile=path.resolve('.test-media/extension-profile-'+Date.now());const co
 try{
  const worker=context.serviceWorkers()[0]||await context.waitForEvent('serviceworker',{timeout:20000});console.log('Extension loaded in Edge');
  await worker.evaluate(catalog=>{
-  globalThis.promptCatalog=catalog;globalThis.requests=[];globalThis.fetch=async(url,options)=>{requests.push({url,headers:options.headers});let body={};
+  globalThis.promptCatalog=catalog;globalThis.requests=[];globalThis.fetch=async(url,options)=>{requests.push({url,headers:options.headers,...(url.endsWith('/learning/jobs/create')?{input:JSON.parse(options.body).input}:{})});let body={};
    if(url.endsWith('/auth/login'))body={token:'fixture-extension-session'};
    else if(url.endsWith('/prompts'))body={prompts:promptCatalog.map(p=>({...p,scope:'official',revision:1}))};
    else if(url.endsWith('/me'))body={username:'学习测试账号',email:'fixture@example.test',membership:{plan:'trial',active:true,state:'trial',expires:Math.floor(Date.now()/1000)+86400},server_time:Math.floor(Date.now()/1000),usage:{month:'2026-10',requests:2,request_limit:20,total_tokens:300,audio_seconds:0,audio_limit:60},permissions:{learning:true,translation:true,speech:true},capabilities:{web_search:false}};
@@ -40,6 +40,12 @@ try{
  assert.equal(await worker.evaluate(()=>globalThis.requests.length),callsBeforeExport,'knowledge cards make no backend/model requests');
  await ui.locator('#ai-card-export-status [role="status"]').filter({hasText:'知识卡已下载'}).waitFor();
 
+ await ui.locator('#ai-mode').selectOption('gossip');
+ await ui.locator('#ai-question').fill('换成八卦讲法');await ui.locator('#ai-send').click();
+ await ui.locator('.ai-message[data-role=assistant]').nth(1).waitFor();
+ const followUp=await worker.evaluate(()=>requests.filter(r=>r.input).at(-1).input);
+ assert.match(followUp[0].content,/本次讲解方式：\n你是一位爱给闺蜜讲知识瓜/);
+ assert.equal((await worker.evaluate(()=>chrome.storage.local.get('ai-learning-settings-v1')))['ai-learning-settings-v1'].mode,'gossip');
  await page.reload();await ui.waitFor();await worker.evaluate(async()=>{const [tab]=await chrome.tabs.query({active:true,lastFocusedWindow:true});await chrome.tabs.sendMessage(tab.id,{type:'zy-open'});});assert.match(await ui.locator('#gateway-state').textContent(),/已登录/);assert.equal(await ui.locator('#gateway-status').textContent(),'额度已更新');
  const web=await context.newPage();await context.route('https://example.test/**',r=>r.fulfill({contentType:'text/html; charset=utf-8',body:'<h1>学习笔记</h1><p>选中文字后右键问上课爽，或中键截图提问。</p>'}));await web.goto('https://example.test/');const webUi=web.locator('#zy-subtitle-host');await webUi.waitFor();assert.deepEqual(await webUi.locator('#panel button').evaluateAll(buttons=>buttons.map(button=>button.id)),['web-page-ask','web-ask','transcript-open']);assert.equal(await webUi.locator('#account-entry').count(),0);await web.waitForFunction(()=>document.getElementById('zy-subtitle-host').shadowRoot.querySelector('#ai-mode option[value=gossip]'));assert.deepEqual(errors,[]);console.log('PASS: native MV3 service worker, isolated content UI, login/storage, AI poll proxy, paired sentence PNG export without network calls, selection and reload, ordinary webpage.');
 }finally{await context.close();}

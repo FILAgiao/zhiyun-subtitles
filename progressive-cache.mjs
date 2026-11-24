@@ -2,6 +2,7 @@ import {createFile} from 'mp4box';
 
 const MiB=1024*1024;
 const abortError=()=>new Error('分段下载已停止；已完成块保留');
+const fullCacheRequired=message=>Object.assign(new Error(message),{code:'CACHE_FULL_REQUIRED'});
 const concat=arrays=>{const out=new Uint8Array(arrays.reduce((n,a)=>n+a.byteLength,0));let at=0;for(const a of arrays){out.set(new Uint8Array(a),at);at+=a.byteLength;}return out.buffer;};
 function lower(samples,time){let a=0,b=samples.length;while(a<b){const m=(a+b)>>1;if(samples[m].dts/samples[m].timescale<time)a=m+1;else b=m;}return a;}
 
@@ -19,7 +20,7 @@ export async function openCache({source,load,save,directory,request,checkSpace=a
     onChange({bytes,total:record.total,duration,ranges:ranges(),complete:complete(),stopped,phase,progress:{bytes:saved,total,from:targetFrom,end:targetEnd}});
   };
   const complete=()=>record.total>0 && Object.keys(record.parts).length===Math.ceil(record.total/blockSize);
-  async function persist(){await save(record);notify();}
+  async function persist(){await save(record,!!parser && ranges().length>0);notify();}
   async function disk(n){const part=record.parts[n];if(!part)return null;try{const f=await(await dir.getFileHandle(part.name)).getFile();if(f.size===part.size)return f;}catch(error){if(error.name!=='NotFoundError')throw error;}delete record.parts[n];await persist();return null;}
   async function validate(){
     if(validated)return;
@@ -70,12 +71,12 @@ export async function openCache({source,load,save,directory,request,checkSpace=a
       if(type==='moov')moov=await read(at,size);
       if(ftyp&&moov)break;at+=size;
     }
-    if(!ftyp||!moov)throw new Error('未找到完整 MP4 索引；此来源暂不支持分段播放');
+    if(!ftyp||!moov)throw fullCacheRequired('未找到分段播放所需的 MP4 索引');
     const file=createFile(false);let info,error;
     file.onReady=value=>{info=value;};file.onError=()=>{error=new Error('MP4 索引解析失败');};
     const meta=concat([ftyp,moov]);meta.fileStart=0;file.appendBuffer(meta);
     if(error)throw error;
-    if(!info || info.isFragmented)throw new Error('当前仅支持普通 MP4；分片 MP4 请使用完整缓存');
+    if(!info || info.isFragmented)throw fullCacheRequired('此 MP4 不支持分段播放');
     const selected=[info.videoTracks?.[0],info.audioTracks?.[0]].filter(Boolean);
     if(!selected.some(t=>t.video))throw new Error('未找到可播放的视频轨');
     for(const t of selected){
@@ -85,11 +86,11 @@ export async function openCache({source,load,save,directory,request,checkSpace=a
       const samples=file.getTrackSamplesInfo(t.id);if(!samples?.length)throw new Error('音视频轨缺少时间索引');
       // Complex edit lists need a separate timeline adapter; never report false playable ranges.
       const edits=file.getTrackById(t.id).edts?.elst?.entries || [];
-      if(edits.length>1 || edits.some(e=>e.media_time<0))throw new Error('此 MP4 时间编辑列表暂不支持，请使用完整缓存');
+      if(edits.length>1 || edits.some(e=>e.media_time<0))throw fullCacheRequired('此 MP4 时间编辑列表暂不支持分段播放');
       tracks.push({id:t.id,mime,samples,video:!!t.video});file.setSegmentOptions(t.id,null,{nbSamples:1000});
     }
     duration=info.duration/info.timescale;
-    if(selected.some(t=>Math.abs(t.duration/t.timescale-duration)>1))throw new Error('音视频轨时长差异过大，请使用完整缓存');
+    if(selected.some(t=>Math.abs(t.duration/t.timescale-duration)>1))throw fullCacheRequired('音视频轨时长差异过大');
     const video=tracks.find(t=>t.video),sync=[];video.samples.forEach((s,i)=>{if(s.is_sync)sync.push(i);});
     if(!sync.length || sync[0]!==0)throw new Error('视频缺少起始关键帧');
     for(let g=0;g<sync.length;g++){
@@ -99,10 +100,10 @@ export async function openCache({source,load,save,directory,request,checkSpace=a
       if(g===sync.length-1)for(const span of spans)span.last=span.track.samples.length;
       const blocks=new Set();let bytes=0;
       for(const span of spans)for(let i=span.first;i<span.last;i++){const s=span.track.samples[i];bytes+=s.size;for(let n=Math.floor(s.offset/blockSize);n<=Math.floor((s.offset+s.size-1)/blockSize);n++)blocks.add(n);}
-      if(bytes>48*MiB || end-start>120)throw new Error('关键帧间隔或片段过大，请使用完整缓存');
+      if(bytes>48*MiB || end-start>120)throw fullCacheRequired('关键帧间隔或片段过大');
       segments.push({start,end,spans,blocks:[...blocks]});
     }
-    inits=file.initializeSegmentation('per-track');parser=file;notify();
+    inits=file.initializeSegmentation('per-track');parser=file;await persist();
   }
   function available(segment){return segment.blocks.every(n=>record.parts[n]);}
   function ranges(){const out=[];for(const s of segments){if(!available(s))continue;const last=out.at(-1);if(last && s.start<=last[1]+.1)last[1]=s.end;else out.push([s.start,s.end]);}return out;}

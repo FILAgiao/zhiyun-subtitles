@@ -625,7 +625,7 @@ def make_server(gateway,host='127.0.0.1',port=8080,allowed_web_origins=()):
                     if self.command=='HEAD' and public_file!='privacy.html':
                         self.send_error(501,'Unsupported method (HEAD)')
                         return
-                    if self.command in ('GET','HEAD') and (public_file is not None or self.path in ('/admin','/admin/','/admin.js','/admin.css','/install.user.js','/install.meta.js','/extension.zip','/download','/download/','/download.html','/download.css','/chrome.zip','/edge.zip')):
+                    if self.command in ('GET','HEAD') and (public_file is not None or self.path in ('/admin','/admin/','/admin.js','/admin.css','/extension.zip','/download','/download/','/download.html','/download.css','/chrome.zip','/edge.zip')):
                         if self.path=='/admin/':
                             status,more,result=302,{'Location':'../admin'},None
                         else:

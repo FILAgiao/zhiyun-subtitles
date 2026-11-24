@@ -16,11 +16,9 @@
 .site-shell .nav-actions>a:first-child{display:inline-flex}
 .site-shell .nav-actions a[aria-current]{color:#a64720;font-weight:750}
 .site-shell .nav-actions .nav-login{margin:0;padding:0;border:0;color:var(--ink)}
-.site-shell .nav-actions .nav-signup{color:#a64720;font-weight:750}
+.site-shell .nav-actions a.nav-signup{display:inline-flex;align-items:center;justify-content:center;min-height:42px;padding:7px 15px;border:1px solid #a64720;border-radius:9px;background:#a64720;color:#fff;font-size:13px;font-weight:750}
+.site-shell .nav-actions .nav-signup:hover{border-color:#8b3818;background:#8b3818;color:#fff}
 .site-shell .nav-actions .nav-pending{white-space:nowrap;color:#586669}
-.site-shell .nav-actions .nav-admin{margin:0;white-space:nowrap}
-.site-shell .nav-actions .nav-download{display:inline-flex;align-items:center;gap:7px;border:1px solid #d8d9d1;border-radius:7px;padding:8px 12px;margin:0;font-size:12px}
-.site-shell .nav-download span{margin:0}
 .site-shell .nav-member{margin:0;gap:9px}
 .site-shell .nav-member .nav-account{display:flex;gap:6px;align-items:baseline;max-width:none;overflow:visible}
 .site-shell .nav-account strong{font-weight:750}
@@ -62,7 +60,7 @@
   .site-shell .nav .brand{font-size:17px}
   .site-shell .nav .brand img{width:33px;height:33px}
   .site-shell .nav-actions{width:100%;min-height:0;flex-wrap:wrap;justify-content:flex-start;gap:6px 14px;border:0;font-size:11px}
-  .site-shell .nav-actions .nav-download{padding:5px 8px;font-size:11px}
+  .site-shell .nav-actions .nav-signup{margin-inline-start:auto;min-height:39px;padding:6px 12px;font-size:12px}
   .site-shell .nav-account span{max-width:9ch}
   .site-footer-inner{align-items:flex-start;flex-direction:column;gap:11px;padding-block:18px}
   .site-footer-brand{flex-wrap:wrap;gap:4px 12px}

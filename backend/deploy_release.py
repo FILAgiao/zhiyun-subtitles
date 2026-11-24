@@ -8,7 +8,7 @@ root=Path(__file__).resolve().parent.parent
 origin='https://47.77.182.216.sslip.io/gateway';remote='/opt/zhiyun-gateway/backend'
 version=json.loads((root/'package.json').read_text(encoding='utf-8'))['version']
 stamp=datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')
-files=['analytics_api.py','pricing.py','clips_api.py','clips.js','clips.css','speech_stream.py','study_api.py','operations_api.py','prompt_api.py','official-prompts.json','public_page.py','server.py','admin_api.py','admin.html','admin.css','admin.js','privacy.html','download.html','download.css','site.js','portal.css','portal.js','study.html','study.css','study.js','account.html','account.css','account.js','install.user.js','install.meta.js','extension.zip']
+files=['analytics_api.py','pricing.py','clips_api.py','clips.js','clips.css','speech_stream.py','study_api.py','operations_api.py','prompt_api.py','official-prompts.json','public_page.py','server.py','admin_api.py','admin.html','admin.css','admin.js','privacy.html','download.html','download.css','site.js','portal.css','portal.js','study.html','study.css','study.js','account.html','account.css','account.js','extension.zip']
 files += ['landing/'+name for name in ['brand-logo.png','plugin-qr.png','image-02.webp','image-01.webp','image-03.webp','image-04.webp','image-05.webp','image-06.webp']]
 content={name:(root/'backend'/name).read_bytes() if name!='extension.zip' else (root/'dist'/('zhiyun-subtitles-'+version+'.zip')).read_bytes() for name in files}
 client=paramiko.SSHClient();client.load_host_keys(str(root/'backend/.known_hosts'));client.set_missing_host_key_policy(paramiko.RejectPolicy())
@@ -68,13 +68,13 @@ try:
  for name in files:
   dest=remote+'/'+name
   assert command('sha256sum '+q(dest)).split()[0]==hashlib.sha256(content[name]).hexdigest()
- for name in ['clips.js','clips.css','install.user.js','install.meta.js','admin.html','admin.js','admin.css','privacy.html','download.html','download.css','site.js','portal.css','portal.js','study.html','study.css','study.js','account.html','account.css','account.js','extension.zip']+[name for name in files if name.startswith('landing/')]:
+ for name in ['clips.js','clips.css','admin.html','admin.js','admin.css','privacy.html','download.html','download.css','site.js','portal.css','portal.js','study.html','study.css','study.js','account.html','account.css','account.js','extension.zip']+[name for name in files if name.startswith('landing/')]:
   public='admin' if name=='admin.html' else 'privacy' if name=='privacy.html' else 'download' if name=='download.html' else name[:-5] if name in ('study.html','account.html') else name
   with urllib.request.urlopen(urllib.request.Request(origin+'/'+public,headers={'Cache-Control':'no-cache'}),timeout=30) as r:data=r.read()
   assert data==content[name],'Public file differs: '+name
   checks[name]={'bytes':len(data),'sha256':hashlib.sha256(data).hexdigest()}
  command('docker rm '+q(old))
- report={'version':version,'backup':backup,'database_backup':snapshot,'changed':changed,'public_files':checks,'health':'ok','url':origin+'/install.user.js'}
+ report={'version':version,'backup':backup,'database_backup':snapshot,'changed':changed,'public_files':checks,'health':'ok','url':origin+'/download'}
  (root/'backend'/('acceptance-'+version+'.json')).write_text(json.dumps(report,ensure_ascii=False,indent=2)+'\n',encoding='utf-8')
  print('PASS: deployed '+version+', backup of code/env/SQLite created; all public files match; gateway healthy.',flush=True)
 finally:sftp.close();client.close()

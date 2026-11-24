@@ -6,8 +6,9 @@ const fs=require('node:fs'),assert=require('node:assert/strict'),{chromium}=requ
   window.account='alice';window.db={alice:[...seeds.map(p=>({...p,scope:'official',revision:1}))],bob:seeds.map(p=>({...p,scope:'official',revision:1}))};
   window.saved={'ai-learning-settings-v1':{mode:'feynman',prompts:[{id:'user-legacy',label:'旧提示词',prompt:'OLD_LOCAL_SECRET'}]}};window.modelCalls=[];window.writes=[];window.listCount=0;window.offline=false;
   const shadow=document.querySelector('#host').attachShadow({mode:'open'});shadow.innerHTML='<style>[hidden]{display:none!important}#settings-ai{width:600px}</style><div id="settings-ai"></div>';
+  const slide={index:0,dataUrl:document.createElement('canvas').toDataURL()};
   const store={account:()=>account,list:async()=>{listCount++;if(offline)throw Error('网络中断');const result={prompts:structuredClone(db[account])};if(window.holdList){window.holdList=false;await new Promise(r=>window.releaseList=r);}return result;},save:async body=>{const a=account;writes.push({a,body});const id=body.id||'user-'+crypto.randomUUID(),old=db[a].find(p=>p.id===id);if((old?.revision||0)!==body.revision)throw Error('提示词已在其他设备修改，请刷新后重试');db[a]=[...db[a].filter(p=>p.id!==id),{...body,id,scope:'personal',revision:body.revision+1}];return {id};},remove:async body=>{db[account]=db[account].filter(p=>p.id!==body.id);return {};}};
-  window.assistant=ZhiyunLearning.mountLearningAssistant({shadow,promptStore:store,getValue:(k,d)=>saved[k]??d,setValue:(k,v)=>saved[k]=v,getApiKey:()=>account,canUse:()=>!!account,request:o=>{modelCalls.push(JSON.parse(o.data));setTimeout(()=>o.onload({status:200,responseText:JSON.stringify({output:[{type:'message',content:[{type:'output_text',text:'解释完成'}]}]})}),1);return {abort(){}};}});
+  window.assistant=ZhiyunLearning.mountLearningAssistant({shadow,promptStore:store,getValue:(k,d)=>saved[k]??d,setValue:(k,v)=>saved[k]=v,getApiKey:()=>account,canUse:()=>!!account,getSlide:()=>slide,request:o=>{modelCalls.push(JSON.parse(o.data));setTimeout(()=>o.onload({status:200,responseText:JSON.stringify({output:[{type:'message',content:[{type:'output_text',text:'解释完成'}]}]})}),1);return {abort(){}};}});
  },JSON.parse(fs.readFileSync('backend/official-prompts.json','utf8')));
  const host=page.locator('#host'),status=host.locator('#ai-prompt-sync-status');await page.waitForFunction(()=>document.querySelector('#host').shadowRoot.querySelector('#ai-prompt-sync-status').textContent.includes('已同步'));
  assert.equal(await page.evaluate(()=>writes.length),0,'legacy prompts must not upload automatically');
@@ -20,6 +21,23 @@ const fs=require('node:fs'),assert=require('node:assert/strict'),{chromium}=requ
  // A second device updates the official prompt. Refresh affects the next model request.
  await page.evaluate(()=>db.alice.find(p=>p.id==='feynman').prompt='REMOTE_NEW_OFFICIAL_RULE');await host.getByRole('button',{name:'刷新云端提示词'}).click();await page.waitForFunction(()=>assistant.getSettings().catalog.some(p=>p.prompt==='REMOTE_NEW_OFFICIAL_RULE'));
  await host.locator('#ai-mode').selectOption('feynman');await page.evaluate(()=>assistant.send('解释原理'));await page.waitForFunction(()=>modelCalls.length===2);assert.match(await page.evaluate(()=>modelCalls[1].input[0].content),/REMOTE_NEW_OFFICIAL_RULE/);
+ // A stale device preference must not replace the user's current selection.
+ const mode=host.locator('#ai-mode');await mode.selectOption('exam');
+ await page.evaluate(()=>assistant.send('先按考点解释'));await page.waitForFunction(()=>modelCalls.length===3);
+ const personalId=await row.getAttribute('data-prompt-id');await mode.selectOption(personalId);
+ await page.evaluate(()=>{saved['ai-learning-settings-v1'].mode='exam';});
+ await host.locator('#ai-question').fill('换一种讲法');await host.locator('#ai-send').click();await page.waitForFunction(()=>modelCalls.length===4);
+ const system=await page.evaluate(()=>modelCalls[3].input[0].content);
+ assert.match(system,/本次讲解方式：\nALICE_CLOUD_SECRET/);
+ assert.doesNotMatch(system,/可能的考点/);
+ assert.equal(await mode.inputValue(),personalId);
+ await page.evaluate(()=>{holdList=true;});await host.getByRole('button',{name:'刷新云端提示词'}).click();
+ await page.waitForFunction(()=>!!window.releaseList);
+ await host.locator('#ai-slide-action').click();await page.evaluate(()=>releaseList());await page.waitForFunction(()=>modelCalls.length===5);
+ const ppt=await page.evaluate(()=>modelCalls[4]);assert.match(ppt.input[0].content,/ALICE_CLOUD_SECRET/);
+ assert.match(ppt.input.at(-1).content[0].text,/请讲解当前这页 PPT。/);
+ assert.equal(ppt.input.at(-1).content[1].type,'input_image');
+ await page.evaluate(()=>{window.releaseList=null;});
  // An open editor keeps its original revision and cannot overwrite a newer edit.
  await row.getByRole('button',{name:/编辑/}).click();await page.evaluate(()=>{const p=db.alice.find(p=>p.label==='我的云端瓜');p.prompt='OTHER_DEVICE_EDIT';p.revision++;});await host.getByRole('button',{name:'刷新云端提示词'}).click();await page.waitForFunction(()=>assistant.getSettings().prompts.some(p=>p.prompt==='OTHER_DEVICE_EDIT'));
  await host.getByLabel('新提示词内容').fill('STALE_EDIT');await host.getByRole('button',{name:'保存提示词',exact:true}).click();await page.waitForFunction(()=>document.querySelector('#host').shadowRoot.querySelector('#ai-prompt-dialog [role=status]').textContent.includes('其他设备修改'));

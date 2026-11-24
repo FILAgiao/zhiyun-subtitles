@@ -36,6 +36,10 @@ with tempfile.TemporaryDirectory() as folder:
    const active=page.locator('[data-nav="'+current+'"][aria-current="page"]:visible');
    await active.waitFor();
    assert.deepEqual(await navLabels(),siteLinks,'same guest navigation on '+route);
+   if(current==='account'){
+    const colors=await active.evaluate(link=>{const style=getComputedStyle(link);return [style.color,style.backgroundColor];});
+    assert.deepEqual(colors,['rgb(255, 255, 255)','rgb(166, 71, 32)'],'active signup keeps white text on its filled background');
+   }
    assert.ok(await page.getByRole('navigation',{name:'页脚导航'}).getByRole('link',{name:'隐私与数据说明'}).isVisible());
    if(current==='clips'){
     await page.getByRole('button',{name:'登录查看收藏'}).waitFor();

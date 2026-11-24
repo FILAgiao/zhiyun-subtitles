@@ -52,6 +52,31 @@ function setupMediaAndClock(){
 
   // The active socket row changes in place and carries no timestamp.
   await appendRow('现在讲授直播课程第一句','The first live sentence');await textIs('original','现在讲授直播课程第一句');assert.match(await ui.locator('#classroom-caption-source').getAttribute('title'),/实时|直播/);
+  const captionBox=ui.locator('#caption'),captionHandle=ui.locator('#caption-edit-box'),resizeCaption=captionHandle.getByRole('button',{name:'缩放字幕'});
+  await captionHandle.waitFor();
+  assert.equal(await ui.locator('#layout-editor').isHidden(),true,'live captions can be dragged without opening the layout editor');
+  const initialCaption=await captionBox.boundingBox(),playerBox=await video.boundingBox();
+  assert.ok(initialCaption.width<playerBox.width&&Math.abs(initialCaption.x+initialCaption.width/2-playerBox.x-playerBox.width/2)<2,'live captions start centered in a compact band');
+  const drag=async(locator,dx,dy)=>{
+   const box=await locator.boundingBox(),x=box.x+box.width/2,y=box.y+box.height/2;
+   await page.mouse.move(x,y);await page.mouse.down();await page.mouse.move(x+dx,y+dy,{steps:8});await page.mouse.up();
+  };
+  await drag(captionHandle,-96,-100);
+  let movedCaption=await captionBox.boundingBox();
+  assert.ok(Math.abs(movedCaption.x-initialCaption.x+96)<2&&Math.abs(movedCaption.y-initialCaption.y+100)<2,'mouse drag moves the displayed caption');
+  const fontBefore=Number(await ui.locator('#size').inputValue());
+  await drag(resizeCaption,-90,16);
+  movedCaption=await captionBox.boundingBox();
+  assert.ok(Math.abs(movedCaption.width-initialCaption.width+90)<2,'dragging the corner adjusts width');
+  assert.equal(Number(await ui.locator('#size').inputValue()),fontBefore+4,'dragging the corner adjusts font size');
+  await page.setViewportSize({width:540,height:440});
+  await page.waitForFunction(()=>{
+   const rect=document.getElementById('zy-subtitle-host').shadowRoot.getElementById('caption').getBoundingClientRect();
+   return rect.left>=8&&rect.right<=innerWidth-8&&rect.top>=8&&rect.bottom<=innerHeight-8;
+  });
+  await page.setViewportSize({width:1600,height:1000});
+  await ui.locator('#caption-custom').evaluate(node=>{node.checked=false;});
+  await page.waitForFunction(width=>Math.abs(document.getElementById('zy-subtitle-host').shadowRoot.getElementById('caption').getBoundingClientRect().width-width)<2,initialCaption.width);
   await ui.locator('#direction').evaluate(node=>{node.value='zh-en';node.dispatchEvent(new Event('change'));});await ui.locator('#mode').evaluate(node=>{node.value='both';});await textIs('translation','The first live sentence');
   await page.evaluate(()=>{const lines=document.querySelector('.trans-item.active .trans-lan').children;lines[0].textContent='流式修订后的完整句子';lines[1].textContent='The revised complete sentence';});await textIs('original','流式修订后的完整句子');await textIs('translation','The revised complete sentence');
   await video.evaluate(node=>node.dataset.testTime='9800');await page.waitForTimeout(250);assert.equal(await caption.textContent(),'流式修订后的完整句子','join-relative media time cannot select untimed live text');
@@ -90,7 +115,7 @@ function setupMediaAndClock(){
   await page.evaluate(()=>location.hash='#/studentsrs?course_id=synthetic-course&sub_id=synthetic-lesson-b&tenant_code=synthetic-tenant');await checkEmpty();await page.waitForTimeout(650);await page.waitForTimeout(650);await checkEmpty();await ui.locator('#show-slides').click();assert.equal(await ui.locator('#slides').isVisible(),false);assert.match(await ui.locator('#slides-status').textContent(),/等待新课程 PPT/);
   await page.evaluate(()=>{document.querySelector('.trans-contain').replaceChildren();document.querySelector('.student-list .video-item img').removeAttribute('src');document.querySelector('.note-scroll_body').replaceChildren();});await appendRow('另一节课真实到达的字幕','A fresh subtitle from the next lesson');await textIs('original','另一节课真实到达的字幕');assert.doesNotMatch(await ui.locator('#classroom-caption-source').textContent(),/上一课/);
   await page.screenshot({path:'.test-media/studentsrs-'+(extension?'extension':'userscript')+'.png'});assert.deepEqual(errors,[]);
-  console.log('PASS: '+(extension?'Edge MV3 isolated world':'Chrome userscript')+' studentsrs empty/live/revised/repeated/paused/expired captions, media-clock isolation, DVR suppression, native controls, source retry, empty-tab sibling captions, PPT placeholder/17-page notes/full thumbnail, teacher/manual turns and SPA isolation; no cloud APIs.');
+  console.log('PASS: '+(extension?'Edge MV3 isolated world':'Chrome userscript')+' studentsrs live caption dragging/resizing/viewport bounds/reset, empty/live/revised/repeated/paused/expired captions, media-clock isolation, DVR suppression, native controls, source retry, empty-tab sibling captions, PPT placeholder/17-page notes/full thumbnail, teacher/manual turns and SPA isolation; no cloud APIs.');
  }finally{await context.close();await browser?.close();}
 })().catch(error=>{console.error(error);process.exitCode=1;});
 

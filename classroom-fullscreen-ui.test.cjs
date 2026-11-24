@@ -5,7 +5,7 @@ const {chromium}=require('playwright');
  try{
   const page=await browser.newPage({viewport:{width:1280,height:800}}),errors=[];page.on('pageerror',e=>errors.push(e.message));
   // CMC puts the video in .cmc-video and the controls in a sibling of .player-content.
-  await page.setContent('<style>body{margin:0;background:#202b38}.cmc-main{position:relative;width:960px;height:580px;margin:30px}.cmc-main:not(:fullscreen){transform:translateZ(0);overflow:hidden}.cmc-main:fullscreen{width:100vw;height:100vh;margin:0;background:#111}.cmc-base{position:absolute;inset:0}.player-content{position:relative;height:calc(100% - 40px)}video{width:100%;height:100%}.control-content{height:40px;width:100%;background:#ddd}.control-float{position:absolute;bottom:-100px}.cmc-control{height:100%;display:flex;align-items:center}input{width:85%;margin:auto}#host{position:fixed;inset:0;pointer-events:none;z-index:999}</style><div id="cmc_video" class="cmc-main"><div class="cmc-base cmc-player"><div class="player-content"><div class="cmc-base cmc-video"><video></video></div></div><div class="control-content"><div class="cmc-control"><input id="progress" type="range" min="0" max="100" value="10" aria-label="Playback position"><button title="全屏">Full screen</button></div></div></div></div><div id="host"></div><div id="host-after"></div>');
+  await page.setContent('<style>body{margin:0;background:#202b38}.cmc-main{position:relative;width:960px;height:580px;margin:30px}.cmc-main.transformed:not(:fullscreen){transform:translateZ(0);overflow:hidden}.cmc-main:fullscreen{width:100vw;height:100vh;margin:0;background:#111}.cmc-base{position:absolute;inset:0}.player-content{position:relative;height:calc(100% - 40px)}video{width:100%;height:100%}.control-content{height:40px;width:100%;background:#ddd}.control-float{position:absolute;bottom:-100px}.cmc-control{height:100%;display:flex;align-items:center}input{width:85%;margin:auto}#host{position:fixed;inset:0;pointer-events:none;z-index:999}</style><div id="cmc_video" class="cmc-main"><div class="cmc-base cmc-player"><div class="player-content"><div class="cmc-base cmc-video"><video></video></div></div><div class="control-content"><div class="cmc-control"><input id="progress" type="range" min="0" max="100" value="10" aria-label="Playback position"><button title="全屏">Full screen</button></div></div></div></div><div id="host"></div><div id="host-after"></div>');
   await page.addScriptTag({path:'classroom-media.js'});await page.addScriptTag({path:'player-interactions.js'});
   await page.evaluate(()=>{
    const host=document.getElementById('host'),shadow=host.attachShadow({mode:'open'});shadow.innerHTML='<style>button{pointer-events:auto;position:fixed;top:8px;right:8px}</style><button id="focus-fullscreen">课堂全屏</button><button id="fullscreen-recover" hidden></button><div id="fullscreen-notice" hidden></div><p id="slides-status"></p><div id="settings-dialog" hidden></div><div id="transcript" hidden></div><button id="transcript-close" hidden></button><button id="transcript-follow" hidden></button><div id="transcript-list"></div><div id="cache-transport"></div><div id="cache-status"></div>';
@@ -14,7 +14,7 @@ const {chromium}=require('playwright');
   });
   async function checkProgress(){
    await page.evaluate(()=>{time=10;controls.update();});
-   const slider=await page.evaluate(()=>!!local)?page.locator('#host').locator('#zy-play-seek'):page.locator('#progress');const p=await slider.boundingBox();assert.ok(p&&p.y>=0&&p.y+p.height<=800,'progress stays inside fullscreen viewport');
+   const slider=await page.evaluate(()=>!!local)?page.locator('#host').locator('#zy-play-seek'):page.locator('#progress');const p=await slider.boundingBox();assert.ok(p&&p.y>=0&&p.y+p.height<=page.viewportSize().height,'progress stays inside the visible player');
    const before=await page.evaluate(()=>seekEvents);await page.mouse.move(p.x+p.width*.2,p.y+p.height/2);await page.mouse.down();await page.mouse.move(p.x+p.width*.8,p.y+p.height/2,{steps:8});await page.mouse.up();assert.ok(Number(await slider.inputValue())>65);assert.ok(await page.evaluate(()=>seekEvents)>before,'real pointer drag reaches seek handler');
   }
   async function checkHostHome(){
@@ -22,13 +22,45 @@ const {chromium}=require('playwright');
    assert.equal(await page.evaluate(()=>document.getElementById('host').nextElementSibling?.id),'host-after','fullscreen restores the original sibling order');
    const box=await page.locator('#host').boundingBox();assert.deepEqual([box.x,box.y,box.width,box.height],[0,0,1280,800],'the assistant leaves the transformed and clipped player container');
   }
-  assert.equal(await page.locator('video').evaluate(v=>v.controls),false);assert.notEqual(await page.locator('.control-content').evaluate(e=>getComputedStyle(e).display),'none');assert.ok(await page.locator('#host').locator('#zy-playback').isHidden());await checkProgress();await page.locator('#host').locator('#focus-fullscreen').click();
+  async function checkDockedControls(){
+   const player=await page.locator('.cmc-main').boundingBox();
+   const bar=await page.locator('.control-content').boundingBox();
+   assert.ok(bar&&player);
+   assert.deepEqual([bar.x,bar.width,bar.y+bar.height],[player.x,player.width,player.y+player.height],'the control bar follows the player edges');
+   await checkProgress();
+  }
+  assert.equal(await page.locator('video').evaluate(v=>v.controls),false);assert.notEqual(await page.locator('.control-content').evaluate(e=>getComputedStyle(e).display),'none');assert.ok(await page.locator('#host').locator('#zy-playback').isHidden());await checkProgress();
+  await page.evaluate(()=>{
+   video.setAttribute('data-zy-moved-video','true');
+   video.style.cssText='position:fixed;left:55%;top:40%;width:35%;height:40%;z-index:20';
+   controls.update();
+  });
+  await checkDockedControls();
+  await page.locator('#host').locator('#focus-fullscreen').click();
   await page.waitForFunction(()=>document.fullscreenElement?.id==='cmc_video'&&document.fullscreenElement.contains(document.getElementById('host')));assert.equal(await page.evaluate(()=>document.fullscreenElement.contains(document.querySelector('.control-content'))),true);assert.equal(await page.evaluate(()=>document.fullscreenElement.contains(document.getElementById('host'))),true);await checkProgress();
   // Fullscreen PPT moves the video independently; the website controls must remain above it.
-  await page.evaluate(()=>{video.style.cssText='position:fixed;left:50%;top:0;width:50%;height:100%;z-index:20';document.querySelector('.control-content').classList.add('control-float');document.querySelector('.control-content').style.top='800px';});await checkProgress();
+  await page.evaluate(()=>{video.style.cssText='position:fixed;left:50%;top:0;width:50%;height:100%;z-index:20';document.querySelector('.control-content').classList.add('control-float');document.querySelector('.control-content').style.top='800px';});await checkDockedControls();
   await page.screenshot({path:'.test-media/classroom-fullscreen-controls.png'});
-  await page.evaluate(()=>document.exitFullscreen());await page.waitForFunction(()=>!document.querySelector('[data-zy-classroom-fullscreen]'));await checkHostHome();assert.equal(await page.locator('.control-content').evaluate(e=>getComputedStyle(e).position),'absolute');
-  await page.evaluate(()=>{video.style.cssText='';document.querySelector('.control-content').classList.remove('control-float');});
+  await page.evaluate(()=>document.exitFullscreen());await page.waitForFunction(()=>!document.querySelector('[data-zy-classroom-fullscreen]'));await checkHostHome();
+  assert.equal(await page.locator('video').getAttribute('data-zy-moved-video'),'true','PPT stays open when fullscreen exits');
+  await checkDockedControls();
+  await page.setViewportSize({width:1000,height:540});
+  await page.evaluate(()=>{document.body.style.minHeight='1200px';window.scrollTo(0,140);});
+  assert.equal(await page.evaluate(()=>window.scrollY),140);
+  await checkDockedControls();
+  await page.setViewportSize({width:1280,height:800});
+  await page.evaluate(()=>{
+   window.scrollTo(0,0);
+   video.removeAttribute('data-zy-moved-video');
+   video.style.cssText='';
+   const bar=document.querySelector('.control-content');
+   bar.classList.remove('control-float');
+   bar.style.removeProperty('top');
+   controls.update();
+  });
+  assert.equal(await page.locator('.cmc-main').getAttribute('data-zy-online-controls'),null);
+  await checkDockedControls();
+  await page.locator('.cmc-main').evaluate(player=>player.classList.add('transformed'));
   // A website fullscreen click and redirected video API use the same complete root.
   await page.locator('#host').locator('#focus-fullscreen').click();await page.waitForFunction(()=>document.fullscreenElement?.id==='cmc_video');await checkProgress();await page.evaluate(()=>document.exitFullscreen());await checkHostHome();await page.evaluate(()=>video.requestFullscreen());await page.waitForFunction(()=>document.fullscreenElement?.id==='cmc_video');await checkProgress();await page.evaluate(()=>document.exitFullscreen());await checkHostHome();
   await page.evaluate(()=>{local={video,controls:false};controls.update();});assert.equal(await page.locator('video').evaluate(v=>v.controls),false);assert.equal(await page.locator('.control-content').evaluate(e=>getComputedStyle(e).display),'none');
@@ -39,6 +71,6 @@ const {chromium}=require('playwright');
   await page.evaluate(()=>delete document.querySelector('.cmc-main').requestFullscreen);await page.evaluate(()=>controls.enterFullscreen());await page.waitForFunction(()=>document.fullscreenElement?.contains(document.getElementById('host')));
   const playback=await page.evaluate(()=>{time=57;video.playbackRate=1.5;video.style.cssText='width:50%;height:75%';return {time:video.currentTime,rate:video.playbackRate,style:video.style.cssText,paused:video.paused};});
   await page.evaluate(()=>controls.destroy());await checkHostHome();assert.equal(await page.evaluate(()=>document.fullscreenElement?.id),'cmc_video');assert.deepEqual(await page.evaluate(()=>({time:video.currentTime,rate:video.playbackRate,style:video.style.cssText,paused:video.paused})),playback);assert.equal(await page.locator('.cmc-main').getAttribute('data-zy-classroom-fullscreen'),null);await page.evaluate(()=>document.exitFullscreen());await checkHostHome();
-  assert.deepEqual(errors,[]);console.log('PASS: CMC classroom/website/video fullscreen includes draggable progress; PPT stacking, cache controls, transformed host parent and sibling restoration on exit, failure and destruction.');
+  assert.deepEqual(errors,[]);console.log('PASS: CMC progress drag, player alignment with PPT open, fullscreen exit, resizing and scrolling, cached playback and host restoration.');
  }finally{await browser.close();}
 })().catch(e=>{console.error(e);process.exitCode=1;});
