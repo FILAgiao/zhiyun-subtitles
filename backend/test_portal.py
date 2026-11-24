@@ -3,7 +3,7 @@ import json,os,tempfile,threading,unittest,urllib.error,urllib.request
 from pathlib import Path
 from unittest.mock import patch
 from backend.server import Gateway,Fault
-from backend.public_page import public_page_file
+from backend.public_page import account_page_for_request, public_page_file
 from backend.public_preview import make_preview_server,seed_preview,PreviewGateway
 
 class PortalTests(unittest.TestCase):
@@ -33,12 +33,25 @@ class PortalTests(unittest.TestCase):
         folder=Path(__file__).parent
         for path in ('/study','/study/','/study.html?login=1','/account?tab=register','/account/','/account.html?tab=recharge','/clips.css','/clips.js','/portal.css','/portal.js','/study.css','/study.js','/account.css','/account.js','/site.js'):
             status,headers,raw=self.request(path);self.assertEqual(status,200,path)
-            name=public_page_file(path);self.assertEqual(raw,(folder/name).read_bytes())
+            name=public_page_file(path);expected=(folder/name).read_bytes()
+            if name=='account.html':expected=account_page_for_request(expected,path,self.gateway.study_capabilities())
+            self.assertEqual(raw,expected)
+            self.assertEqual(headers['Cache-Control'],'no-store' if name.endswith('.html') else 'public, max-age=300')
             csp=headers['Content-Security-Policy'];self.assertIn("connect-src 'self'",csp);self.assertIn("script-src 'self'",csp);self.assertNotIn('unsafe-inline',csp)
             self.assertEqual("img-src 'self' data: https:" in csp,name=='account.html')
         for path in ('/server.py','/portal/../server.py','/landing/%2e%2e/server.py','/account.js/../server.py','/.env','/account/private'):
             self.assertIsNone(public_page_file(path))
             self.assertNotEqual(self.request(path)[0],200)
+    def test_registration_document_ships_only_public_readiness(self):
+        with patch.object(self.gateway,'study_capabilities',return_value={'registration':True,'mail_configured':True,'secret':'private-smtp-password'}):
+            status,headers,body=self.request('/account?tab=register')
+            self.assertEqual(status,200)
+            self.assertEqual(headers['Cache-Control'],'no-store')
+            self.assertIn(b'data-mail-registration="available"',body)
+            self.assertNotIn(b'private-smtp-password',body)
+            self.assertIn(b'data-mail-registration="check"',self.request('/account?tab=recharge')[2])
+        with patch.object(self.gateway,'study_capabilities',return_value={'registration':True,'mail_configured':False}):
+            self.assertIn(b'data-mail-registration="unavailable"',self.request('/account?tab=register')[2])
     def test_actual_prefixed_login_private_records_delete_logout_and_origin(self):
         token=self.login();status,_,raw=self.request('/v1/me',token=token);self.assertEqual(status,200)
         self.assertEqual(json.loads(raw)['membership']['plan'],'free')

@@ -199,7 +199,9 @@ class AdminMixin:
 
     def admin_request(self,method,path,user,body,period):
         if not user['is_admin']: raise Fault(403,'仅管理员可访问')
-        if method=='GET' and path=='/v1/admin/overview': return 200,{},self.admin_overview(period)
+        if method=='GET' and path=='/v1/admin/overview':
+            account={key:user[key] for key in ('id','username','email')}
+            return 200,{}, {**self.admin_overview(period),'account':account}
         if method=='POST' and path=='/v1/admin/plan-templates': return self.save_plan_template(user, body)
         if method=='POST' and path=='/v1/admin/registration-plan': return self.save_registration_plan(user, body)
         if method=='POST' and path=='/v1/admin/accounts': return self.manage_account(user,body)
@@ -326,6 +328,7 @@ class AdminMixin:
             else: db.execute('UPDATE users SET enabled=? WHERE id=?',(int(action=='enable'),target))
             if action!='enable':
                 db.execute('DELETE FROM sessions WHERE user=?',(target,))
+                db.execute('DELETE FROM admin_sessions WHERE user=?',(target,))
                 db.execute('UPDATE activity_sessions SET ended=? WHERE user=? AND ended IS NULL',(int(time.time()),target))
             db.execute('INSERT INTO admin_actions(actor,target,app,action,created) VALUES(?,?,?,?,?)',(actor['id'],target,'',action,int(time.time())))
         return 200,{}, {'ok':True}

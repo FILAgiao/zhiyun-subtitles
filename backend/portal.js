@@ -2,11 +2,30 @@
 'use strict';
 (() => {
   const KEY='gateway-web-session', LOGOUT='gateway-web-logged-out', MANUAL='gateway-web-manual-login', BRIDGE='gateway-web-bridge-session', API='/gateway', APP='zhiyun-subtitles';
+  const PROFILE='gateway-web-verified-profile', PROFILE_TTL=60000;
   const $=id=>document.getElementById(id), controllers=new Set();
   let token='', profile=null, generation=0, busy=false,sessionNotice='',checking=false;
   let retryTimer=null,retryDelay=1000;
   function stored(){try{if(localStorage.getItem(LOGOUT))return '';return localStorage.getItem(KEY)||sessionStorage.getItem(KEY)||'';}catch{try{return sessionStorage.getItem(KEY)||'';}catch{return '';}}}
+  function verifiedProfile(value){
+    if(!value)return null;
+    try{
+      if(sessionStorage.getItem(KEY)!==value)return null;
+      const cached=JSON.parse(sessionStorage.getItem(PROFILE)||'null');
+      const age=Date.now()-cached?.time;
+      return age>=0&&age<PROFILE_TTL&&cached.profile?.app===APP?cached.profile:null;
+    }catch{return null;}
+  }
+  function rememberProfile(value){
+    profile=value;
+    try{
+      if(token&&sessionStorage.getItem(KEY)===token&&value.app===APP)
+        sessionStorage.setItem(PROFILE,JSON.stringify({time:Date.now(),profile:value}));
+    }catch{}
+  }
+  function discardProfile(){try{sessionStorage.removeItem(PROFILE);}catch{}}
   token=stored();
+  profile=verifiedProfile(token);
   const pending=()=>!profile&&(checking||retryTimer!==null);
   const session=()=>({token,profile,generation,pending:pending(),notice:sessionNotice});
   function update(){
@@ -45,7 +64,7 @@
   }
   function resetPassword(){if(!$('login-password'))return;$('login-password').value='';$('login-password').type='password';$('password-toggle').textContent='显示';$('password-toggle').setAttribute('aria-pressed','false');}
   function resetRetry(){clearTimeout(retryTimer);retryTimer=null;retryDelay=1000;}
-  function clear(message='',loggedOut=false){generation++;resetRetry();sessionNotice=message;for(const controller of controllers)controller.abort();controllers.clear();token='';profile=null;checking=false;save('',loggedOut);resetPassword();update();}
+  function clear(message='',loggedOut=false){discardProfile();generation++;resetRetry();sessionNotice=message;for(const controller of controllers)controller.abort();controllers.clear();token='';profile=null;checking=false;save('',loggedOut);resetPassword();update();}
   async function api(path,{method='GET',body,auth=token,timeout=15000,responseType='json'}={}){
     if(!path.startsWith('/v1/'))throw Error('请求路径无效');
     const controller=new AbortController();if(auth||method!=='GET')controllers.add(controller);let timedOut=false;
@@ -61,7 +80,7 @@
           else if(['session_invalid','account_disabled'].includes(data?.error_code)||
                   ['请登录或重新登录','账号已停用，请联系管理员'].includes(data?.error)){
             message=data?.error_code==='account_disabled'||data?.error==='账号已停用，请联系管理员'?'账号已停用，请联系管理员。':'登录已失效，请重新登录。';
-            if(auth&&auth===token){
+            if(auth&&auth===token&&stored()===token){
               if(!isBridgeSession(auth))rememberManualLogin();
               clear(message);
               showSessionNotice();
@@ -106,28 +125,40 @@
       if(own!==generation)return;
       if(typeof data.token!=='string'||!data.token)throw Error('登录响应异常，请稍后再试。');
       const me=await api('/v1/me',{auth:data.token});if(own!==generation)return;
-      generation++;resetRetry();sessionNotice='';token=data.token;profile=me;checking=false;rememberManualLogin();save(token);showSessionNotice();resetPassword();notice('');$('login-dialog').close();update();
+      generation++;resetRetry();discardProfile();sessionNotice='';token=data.token;checking=false;rememberManualLogin();save(token);rememberProfile(me);showSessionNotice();resetPassword();notice('');$('login-dialog').close();update();
+      window.dispatchEvent(new Event('zy-portal-website-login'));
       const params=new URLSearchParams(location.search);if(params.has('login')){params.delete('login');history.replaceState(null,'',location.pathname+(params.size?'?'+params:'')+location.hash);}
     }catch(error){if(error.name!=='AbortError'&&own===generation)notice(error.message,true);}
     finally{busy=false;$('login-submit').disabled=false;}
   });
   document.querySelectorAll('[data-logout]').forEach(button=>button.addEventListener('click',async()=>{
-    const old=token;clear('',true);if(!old)return;
+    const old=token;clear('',true);window.dispatchEvent(new Event('zy-portal-website-logout'));if(!old)return;
     try{await api('/v1/auth/logout',{method:'POST',auth:old,body:{}});}catch(error){if(error.name!=='AbortError'){sessionNotice='本机已退出；服务器会话撤销未成功，请稍后再试。';showSessionNotice();}}
   }));
   function showSessionNotice(){
     const node=$('study-notice')||$('portal-session-notice');
     if(node){node.textContent=sessionNotice;node.classList.toggle('error',!!sessionNotice);}
   }
+  function extensionPending(){
+    try{
+      const state=JSON.parse(sessionStorage.getItem('gateway-extension-auth')||'null');
+      return state?.state==='pending'&&Date.now()-state.time<15000;
+    }catch{return false;}
+  }
   async function waitForExtension(initialGeneration){
-    let state;try{state=JSON.parse(sessionStorage.getItem('gateway-extension-auth')||'null');}catch{}
-    if(state?.state==='pending'&&Date.now()-state.time<15000)await new Promise(resolve=>{
+    if(extensionPending())await new Promise(resolve=>{
       const done=()=>{clearTimeout(timer);window.removeEventListener('zy-portal-session-ready',done);resolve();};
       const timer=setTimeout(done,10000);window.addEventListener('zy-portal-session-ready',done,{once:true});
       try{if(JSON.parse(sessionStorage.getItem('gateway-extension-auth')||'null')?.state!=='pending')done();}catch{done();}
     });
     if(initialGeneration!==generation)return;
-    try{token=stored();if(token)save(token);const latest=JSON.parse(sessionStorage.getItem('gateway-extension-auth')||'null');if(latest?.notice&&!token&&Date.now()-latest.time<15000){sessionNotice=latest.notice;showSessionNotice();}}catch{}
+    try{
+      const next=stored();
+      if(next!==token){discardProfile();token=next;profile=null;}
+      if(token&&!localStorage.getItem(KEY))save(token);
+      const latest=JSON.parse(sessionStorage.getItem('gateway-extension-auth')||'null');
+      if(latest?.notice&&!token&&Date.now()-latest.time<15000){sessionNotice=latest.notice;showSessionNotice();}
+    }catch{}
   }
   async function checkSession(allowHandoff=true){
     const own=generation, canRestore=allowHandoff&&isBridgeSession(token);
@@ -135,8 +166,10 @@
       if(token){
         checking=true;
         const me=await api('/v1/me');
-        if(own!==generation)return;
-        profile=me;
+        if(own!==generation||stored()!==token)return;
+        discardProfile();
+        try{sessionStorage.setItem(KEY,token);}catch{}
+        rememberProfile(me);
         resetRetry();
         sessionNotice='';
         showSessionNotice();
@@ -166,11 +199,13 @@
   }
   const ready=(async()=>{
     const initialGeneration=generation;
-    try{checking=!!token||JSON.parse(sessionStorage.getItem('gateway-extension-auth')||'null')?.state==='pending';}catch{checking=!!token;}
-    if(checking)update();
-    await waitForExtension(initialGeneration);
-    if(initialGeneration!==generation)return;
-    await checkSession();
+    checking=!profile&&(!!token||extensionPending());
+    if(profile||checking)update();
+    if(!profile){
+      await waitForExtension(initialGeneration);
+      if(initialGeneration!==generation)return;
+      await checkSession();
+    }
     if(new URLSearchParams(location.search).get('login')==='1'&&!profile&&!token&&!busy)openLogin();
   })();
   function retrySession(){
@@ -193,6 +228,7 @@
     resetRetry();
     for(const controller of controllers)controller.abort();
     controllers.clear();
+    discardProfile();
     token=next;
     profile=null;
     checking=!!next;

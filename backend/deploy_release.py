@@ -4,6 +4,7 @@ from pathlib import Path
 from datetime import datetime,timezone
 sys.path.insert(0,str(Path('.testdeps/ssh').resolve()))
 import paramiko
+from public_page import account_page_for_request
 root=Path(__file__).resolve().parent.parent
 origin='https://47.77.182.216.sslip.io/gateway';remote='/opt/zhiyun-gateway/backend'
 version=json.loads((root/'package.json').read_text(encoding='utf-8'))['version']
@@ -59,7 +60,8 @@ try:
  command(' '.join(q(a) for a in args));healthy=False
  for _ in range(20):
   try:
-   with urllib.request.urlopen(origin+'/health',timeout=5) as r:healthy=r.status==200 and json.load(r)['ok']
+   with urllib.request.urlopen(origin+'/health',timeout=5) as r:
+    health=json.load(r);healthy=r.status==200 and health['ok']
    if healthy:break
   except Exception:pass
   time.sleep(1)
@@ -71,7 +73,11 @@ try:
  for name in ['clips.js','clips.css','admin.html','admin.js','admin.css','privacy.html','download.html','download.css','site.js','portal.css','portal.js','study.html','study.css','study.js','account.html','account.css','account.js','extension.zip']+[name for name in files if name.startswith('landing/')]:
   public='admin' if name=='admin.html' else 'privacy' if name=='privacy.html' else 'download' if name=='download.html' else name[:-5] if name in ('study.html','account.html') else name
   with urllib.request.urlopen(urllib.request.Request(origin+'/'+public,headers={'Cache-Control':'no-cache'}),timeout=30) as r:data=r.read()
-  assert data==content[name],'Public file differs: '+name
+  expected=content[name]
+  if name=='account.html':
+   capabilities=health['capabilities']
+   expected=account_page_for_request(expected,'/'+public,{'registration':capabilities['email_registration'],'mail_configured':capabilities['mail_configured']})
+  assert data==expected,'Public file differs: '+name
   checks[name]={'bytes':len(data),'sha256':hashlib.sha256(data).hexdigest()}
  command('docker rm '+q(old))
  report={'version':version,'backup':backup,'database_backup':snapshot,'changed':changed,'public_files':checks,'health':'ok','url':origin+'/download'}

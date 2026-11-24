@@ -724,15 +724,23 @@
       }catch(e){if(!destroyed && serial===requestSerial){persist();status(e.name==='AbortError'?'已停止。':e.message||'讲解暂时失败，请重试。');if(e.name!=='AbortError'){if(!$('ai-question').value)$('ai-question').value=question;if(currentImage)attach(currentImage,attachedSlideLabel);}}}
       finally{clearInterval(feedbackTimer);clearTimeout(renderTimer);if(flushPendingReply===flushRender)flushPendingReply=null;if(controller===ownController){controller=null;setBusy(false);}}
     }
-    async function explainSlide(){const before=requestSerial;let slide=getSlide();if(!ensureAccess())return;if(!slide){await prepareSlide();slide=getSlide();}if(destroyed||before!==requestSerial)return;slideContextEnabled=settings.followSlides;if(!slide){open();status('请先打开本课程的 PPT，再点击讲解本页。');return;}await send('请讲解当前这页 PPT。',{slide});}
+    async function explainSlide(){
+      const before=requestSerial;
+      if(!ensureAccess())return;
+      const slide=getSlide() || await prepareSlide() || getSlide();
+      if(destroyed||before!==requestSerial)return;
+      slideContextEnabled=settings.followSlides;
+      if(!slide){open();status('请先打开本课程的 PPT，再点击讲解本页。');return;}
+      await send('请讲解当前这页 PPT。',{slide});
+    }
     async function addSlideToConversation(){
       if(destroyed||controller||sendPreparing||!ensureAccess())return;
       const reader=new AbortController();
       controller=reader;capturePending=true;
       open();setBusy(true);status('正在读取本页 PPT…');
       try{
-        let slide=getSlide();
-        if(!slide){await prepareSlide();if(reader.signal.aborted)return;slide=getSlide();}
+        const slide=getSlide() || await prepareSlide() || getSlide();
+        if(reader.signal.aborted)return;
         if(!slide)throw Error('请先打开本课程的 PPT，再添加到对话。');
         const data=await slideImage(slide,reader.signal);
         if(reader.signal.aborted||destroyed)return;

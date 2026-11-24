@@ -6,7 +6,7 @@ const {chromium}=require(process.env.PLAYWRIGHT_MODULE||'playwright');
  const page=await browser.newPage({viewport:{width:1440,height:900}}),bytes=fs.readFileSync('.test-media/long-lecture.mp4');
  let release;const tail=new Promise(r=>release=r);const requests=[];const errors=[];page.on('pageerror',e=>errors.push(e.message));
  await page.route('https://interactivemeta.cmc.zju.edu.cn/',r=>r.fulfill({contentType:'text/html',body:'<style>video{width:800px;height:450px}</style><video muted src="https://vod.cmc.zju.edu.cn/lecture.mp4"></video>'}));
- await page.route('https://vod.cmc.zju.edu.cn/**',r=>r.abort());
+ await page.route('https://vod.cmc.zju.edu.cn/**',r=>r.fulfill({contentType:'video/mp4',body:bytes}));
  await page.route('https://interactivemeta.cmc.zju.edu.cn/part',async r=>{const m=r.request().headers().range.match(/bytes=(\d+)-(\d+)/),start=+m[1],end=Math.min(+m[2],bytes.length-1);requests.push(start);if(start>=12*1024*1024)await tail;await r.fulfill({status:206,headers:{'content-range':`bytes ${start}-${end}/${bytes.length}`,etag:'"long-v1"'},body:bytes.subarray(start,end+1)}).catch(()=>{});});
  await page.goto('https://interactivemeta.cmc.zju.edu.cn/#/replay?course_id=stream&sub_id=1');
  const setup=async()=>{

@@ -40,7 +40,8 @@ class AnalyticsTests(unittest.TestCase):
     def owner(self):
         with self.gateway.db() as db:
             db.execute('UPDATE users SET is_admin=1 WHERE id=1')
-        return self.headers
+        login=self.call('/v1/admin/login',{'email':'a@example.test','password':'long-test-password'})[2]
+        return {**self.headers,'Authorization':'Bearer '+login['token']}
 
     def insert_call(self, **changes):
         values = {'id': uuid.uuid4().hex, 'user': 1, 'app': APP, 'month': '2000-01', 'kind': 'ark',
@@ -109,14 +110,14 @@ class AnalyticsTests(unittest.TestCase):
         date = day_of(time.time())
         url = '/v1/admin/analytics?start=' + date + '&end=' + date
         self.fails(401, lambda: self.call(url, headers={'X-App-Id': APP}, method='GET'))
-        self.fails(403, lambda: self.call(url, method='GET'))
+        self.fails(401, lambda: self.call(url, method='GET'))
         self.call('/v1/analytics/events', {'events': [self.event()]})
-        self.owner()
-        self.assertEqual(self.call(url, method='GET')[2]['summary']['active_users'], 1)
+        owner=self.owner()
+        self.assertEqual(self.call(url, headers=owner, method='GET')[2]['summary']['active_users'], 1)
         child = self.call('/v1/auth/web-session')[2]['token']
         headers = {**self.headers, 'Authorization': 'Bearer ' + child}
         self.fails(403, lambda: self.call('/v1/analytics/events', {'events': [self.event()]}, headers))
-        self.fails(403, lambda: self.call(url, headers=headers, method='GET'))
+        self.fails(401, lambda: self.call(url, headers=headers, method='GET'))
         self.assertIsNone(self.overview(app='other-app')['coverage']['started_at'])
         self.assertIsNone(self.overview(app='other-app')['summary']['active_users'])
         self.assertTrue(self.gateway.capabilities()['analytics'])
@@ -329,10 +330,10 @@ class AnalyticsTests(unittest.TestCase):
         for start, end in (('2026-13-01', today), ('2026-1-01', today), (today, shifted_day(today, -1)),
                            (shifted_day(today, -93), today), (shifted_day(today, 1), shifted_day(today, 1))):
             self.fails(400, lambda a=start,b=end: self.overview(a,b))
-        self.owner()
+        owner=self.owner()
         for query in ('', '?start='+today, '?start='+today+'&end='+today+'&end='+today,
                       '?start='+today+'&end='+today+'&user=2'):
-            self.fails(400, lambda q=query: self.call('/v1/admin/analytics'+q, method='GET'))
+            self.fails(400, lambda q=query: self.call('/v1/admin/analytics'+q, headers=owner, method='GET'))
         with self.gateway.db() as db:
             plan = db.execute('EXPLAIN QUERY PLAN SELECT user,day FROM analytics_days WHERE app=? AND day>=? AND day<=?', (APP,today,today)).fetchall()
             self.assertIn('analytics_day_range', str([tuple(r) for r in plan]))

@@ -1,6 +1,8 @@
 'use strict';
 const RELEASE_CHANNEL='unpacked';
 const GATEWAY='https://47.77.182.216.sslip.io/gateway';
+const ACCOUNT_KEY='gateway-account-v1';
+const isSessionToken=value=>typeof value==='string'&&/^[A-Za-z0-9._~-]{8,4096}$/.test(value);
 // Persistent host access is for static tab pixels; the public network bridge remains pinned.
 function allowedRequest(o,runtime=globalThis.chrome?.runtime){
  const u=new URL(o.url),method=(o.method||'GET').toUpperCase();
@@ -23,9 +25,9 @@ function portalLocation(raw){
 }
 async function createPortalSession(api,sender,request=globalThis.fetch){
  if(sender?.id!==api.runtime.id||sender.frameId!==0||!Number.isInteger(sender.tab?.id)||!portalLocation(sender.url))throw Error('网页登录请求无效');
- const key='gateway-account-v1',saved=await api.storage.local.get(key),account=saved?.[key]||{};
+ const key=ACCOUNT_KEY,saved=await api.storage.local.get(key),account=saved?.[key]||{};
  let base='';try{const u=new URL(account.url);if(u.origin===new URL(GATEWAY).origin&&!u.username&&!u.password&&!u.search&&!u.hash&&/^\/gateway\/?$/.test(u.pathname))base=u.origin+'/gateway';}catch{}
- if(!base||typeof account.token!=='string'||!/^[A-Za-z0-9._~-]{8,4096}$/.test(account.token))return {ok:true,token:''};
+ if(!base||!isSessionToken(account.token)||account.websiteLink)return {ok:true,token:''};
  const current=await api.tabs.get(sender.tab.id);if(portalLocation(current.url)!==portalLocation(sender.url))throw Error('页面已跳转，请刷新后重试');
  const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),8000);
  try{
@@ -37,6 +39,53 @@ async function createPortalSession(api,sender,request=globalThis.fetch){
   if(latest?.[key]?.token!==account.token||latest?.[key]?.url!==account.url||portalLocation(tab.url)!==portalLocation(sender.url))throw Error('账号或页面已切换，请刷新后重试');
   return {ok:true,token:data.token};
  }finally{clearTimeout(timer);}
+}
+async function requirePortalSender(api,sender){
+ if(sender?.id!==api.runtime.id||sender.frameId!==0||!Number.isInteger(sender.tab?.id)||!portalLocation(sender.url))throw Error('网页登录请求无效');
+ const current=await api.tabs.get(sender.tab.id);
+ if(portalLocation(current.url)!==portalLocation(sender.url))throw Error('页面已跳转，请重试');
+}
+async function websiteLink(token){
+ const bytes=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(token));
+ return Array.from(new Uint8Array(bytes),byte=>byte.toString(16).padStart(2,'0')).join('');
+}
+function canAdoptWebsiteAccount(account){
+ return !account.token&&!account.websiteSyncDisabled&&(!account.url||account.url.replace(/\/$/,'')===GATEWAY);
+}
+async function adoptWebsiteSession(api,sender,token,request=globalThis.fetch){
+ await requirePortalSender(api,sender);
+ if(!isSessionToken(token))throw Error('网站会话无效');
+ const readAccount=async()=> (await api.storage.local.get(ACCOUNT_KEY))[ACCOUNT_KEY]||{};
+ const account=await readAccount();
+ if(!canAdoptWebsiteAccount(account))return {ok:true};
+ const version=api.runtime.getManifest?.()?.version;
+ const response=await request(GATEWAY+'/v1/auth/extension-session',{
+  method:'POST',headers:{'Content-Type':'application/json','X-App-Id':'zhiyun-subtitles','X-Client-Type':'chrome-extension','X-Client-Channel':RELEASE_CHANNEL,...(version?{'X-Client-Version':version}:{}),Authorization:'Bearer '+token},
+  body:'{}',credentials:'omit',cache:'no-store',redirect:'error',signal:AbortSignal.timeout(8000)
+ });
+ if(!response.ok)return {ok:false};
+ const data=await response.json();
+ if(!isSessionToken(data.token)||data.token===token)throw Error('插件会话响应异常');
+ const link=await websiteLink(token);
+ await requirePortalSender(api,sender);
+ const latest=await readAccount();
+ if(!canAdoptWebsiteAccount(latest))return {ok:true};
+ await api.storage.local.set({[ACCOUNT_KEY]:{url:GATEWAY,token:data.token,websiteLink:link}});
+ return {ok:true};
+}
+async function disconnectWebsiteSession(api,sender,token){
+ await requirePortalSender(api,sender);
+ if(!isSessionToken(token))return {ok:false};
+ const link=await websiteLink(token);
+ const account=(await api.storage.local.get(ACCOUNT_KEY))[ACCOUNT_KEY];
+ if(account?.websiteLink===link)await api.storage.local.set({[ACCOUNT_KEY]:{url:account.url,token:''}});
+ return {ok:true};
+}
+let websiteSync=Promise.resolve();
+function queueWebsiteSync(task,respond){
+ websiteSync=websiteSync.then(task).catch(()=>({ok:false}));
+ void websiteSync.then(respond);
+ return true;
 }
 function toBase64(bytes){let raw='';for(let i=0;i<bytes.length;i+=8192)raw+=String.fromCharCode(...bytes.subarray(i,i+8192));return btoa(raw);}
 // Serialize captures per window to stay within Chromium's two-captures/second limit.
@@ -74,6 +123,16 @@ if(typeof chrome!=='undefined'){
    else return;
    return true;
   }
+  if(message?.type==='zy-portal-use-website-session')return queueWebsiteSync(()=>adoptWebsiteSession(chrome,sender,message.token),respond);
+  if(message?.type==='zy-portal-website-logout')return queueWebsiteSync(()=>disconnectWebsiteSession(chrome,sender,message.token),respond);
+  if(message?.type==='zy-open-website-login'&&sender?.id===chrome.runtime.id&&sender.frameId===0){
+   return queueWebsiteSync(async()=>{
+    const account=(await chrome.storage.local.get(ACCOUNT_KEY))[ACCOUNT_KEY]||{};
+    if(account.websiteSyncDisabled&&!account.token)await chrome.storage.local.set({[ACCOUNT_KEY]:{url:account.url,token:''}});
+    await chrome.tabs.create({url:GATEWAY+'/account?tab=register&login=1'});
+    return {ok:true};
+   },respond);
+  }
   if(message?.type==='zy-portal-session'){createPortalSession(chrome,sender).then(respond,()=>respond({ok:false,error:'插件登录衔接暂不可用，请刷新重试。'}));return true;}
   if(message?.type!=='zy-capture-visible')return;
   captureSenderTab(chrome,sender).then(data=>respond({ok:true,data}),error=>respond({ok:false,error:error.message||'浏览器原生截图暂不可用。'}));return true;
@@ -110,4 +169,4 @@ if(typeof chrome!=='undefined'){
  chrome.runtime.onInstalled.addListener(()=>chrome.contextMenus.create({id:'zy-ask',title:'问上课爽',contexts:['selection'],documentUrlPatterns:['http://*/*','https://*/*']}));
  chrome.contextMenus.onClicked.addListener(async(info,tab)=>{if(info.menuItemId==='zy-ask'&&tab?.id)try{await chrome.tabs.sendMessage(tab.id,{type:'zy-ask',text:String(info.selectionText||'').slice(0,4000)});}catch(_){}});
 }
-if(typeof module!=='undefined')module.exports={allowedRequest,captureSenderTab,portalLocation,createPortalSession};
+if(typeof module!=='undefined')module.exports={allowedRequest,captureSenderTab,portalLocation,createPortalSession,adoptWebsiteSession,disconnectWebsiteSession};

@@ -41,6 +41,13 @@ const owners={a:[record('a1','自己的问题 A','程序设计',hostile),record(
         if(loginMode==='wrong')return reply(401,{error:'邮箱或密码错误'});
         return reply(200,{token:body.email==='user-b'?'fixture-b':'fixture-a'});
       }
+      if(endpoint==='admin/login')return reply(200,{token:'fixture-admin'});
+      if(endpoint==='admin/overview'){
+        assert.equal(auth,'Bearer fixture-admin');
+        if(meMode==='502')return reply(502,{error:'upstream temporarily unavailable'});
+        return reply(200,{account:{username:'管理员'},month:'2026-10',totals:{requests:0,audio_seconds:0},users:[],calls:[],sessions:[],actions:[]});
+      }
+      if(endpoint==='admin/analytics')return reply(503,{error:'统计模拟服务未启用'});
       if(!owner||privateExpired)return reply(401,{error:'登录失效',error_code:'session_invalid'});
       if(endpoint==='me'&&meMode==='html401')return route.fulfill({status:401,contentType:'text/html',body:'<h1>Unauthorized</h1>'});
       if(endpoint==='me'&&meMode==='json401')return reply(401,{error:'Proxy authentication unavailable'});
@@ -115,9 +122,17 @@ const owners={a:[record('a1','自己的问题 A','程序设计',hostile),record(
       meMode='ok';
       await page.locator('#study-workspace').waitFor();
     }
-    meMode='502';
     await page.goto(origin+'/gateway/admin');
+    await page.locator('#login-panel').waitFor({state:'visible'});
+    assert.equal(await page.locator('#dashboard').isVisible(),false);
+    await page.locator('#login-name').fill('fixture-admin');
+    await page.locator('#login-password').fill('fixture-admin-password');
+    await page.locator('#login-button').click();
+    await page.locator('#dashboard').waitFor();
+    meMode='502';
+    await page.reload();
     await page.locator('#notice').filter({hasText:'正在自动重连'}).waitFor();
+    assert.equal(await page.evaluate(()=>sessionStorage.getItem('gateway-admin-session')),'fixture-admin');
     assert.equal(await page.locator('#login-panel').isVisible(),false);
     assert.equal(await page.evaluate(()=>localStorage.getItem('gateway-web-session')),'fixture-a');
     meMode='ok';

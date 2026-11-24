@@ -288,9 +288,9 @@ class Tests(unittest.TestCase):
         finally:server.shutdown();server.server_close();thread.join()
 
     def test_admin_role_creation_quota_and_private_history(self):
-        self.fails(403,lambda:self.call('/v1/admin/overview',method='GET'))
+        self.fails(401,lambda:self.call('/v1/admin/overview',method='GET'))
         self.gateway.add_user('owner@example.test','long-admin-password','zhiyun-subtitles',admin=True,username='owner')
-        token=self.call('/v1/auth/login',{'email':'owner','password':'long-admin-password'},headers={'X-App-Id':'zhiyun-subtitles','X-Client-Type':'admin-web'})[2]['token']
+        token=self.call('/v1/admin/login',{'email':'owner','password':'long-admin-password'},headers={'X-App-Id':'zhiyun-subtitles','X-Client-Type':'admin-web'})[2]['token']
         headers={**self.headers,'Authorization':'Bearer '+token}
         created=self.call('/v1/admin/users',{'email':'new@example.test','username':'新同学','password':'abc12345','plan':'pro','request_limit':1,'audio_limit':0,'translation_limit':5,'is_admin':True},headers)[2]
         new_token=self.call('/v1/auth/login',{'email':'新同学','password':'abc12345'})[2]['token']
@@ -307,7 +307,7 @@ class Tests(unittest.TestCase):
         self.assertNotIn('hash',json.dumps(data));self.assertNotIn(new_token,json.dumps(data))
         self.assertEqual(data['calls'][0]['feature'],'translation')
         self.assertIsNotNone(data['calls'][0]['finished'])
-        self.fails(403,lambda:self.call('/v1/admin/users',{},new_headers))
+        self.fails(401,lambda:self.call('/v1/admin/users',{},new_headers))
     def test_activity_and_migration_preserve_auth_and_usage(self):
         self.call('/v1/activity');self.assertEqual(self.gateway.usage(1,'zhiyun-subtitles')['requests'],0)
         reloaded=Gateway(self.gateway.path,self.upstream)

@@ -114,7 +114,22 @@ async function startExtension(run){
  const GM_setValue=(key,value)=>{saved[key]=value;persist(()=>chrome.storage.local.set({[key]:value}));};
  const GM_deleteValue=key=>{delete saved[key];persist(()=>chrome.storage.local.remove(key));};
  const GM_registerMenuCommand=()=>{};
- chrome.storage.onChanged.addListener((changes,area)=>{if(area==='local')for(const [key,value] of Object.entries(changes)){if(Object.hasOwn(value,'newValue'))saved[key]=value.newValue;else delete saved[key];}});
+ const accountListeners=new Set();
+ globalThis.ZYExtensionAccount={
+  onChange(listener){accountListeners.add(listener);return ()=>accountListeners.delete(listener);},
+  openWebsiteLogin(){return chrome.runtime.sendMessage({type:'zy-open-website-login'});}
+ };
+ chrome.storage.onChanged.addListener((changes,area)=>{
+  if(area!=='local')return;
+  const oldAccount=saved['gateway-account-v1'];
+  for(const [key,value] of Object.entries(changes)){
+   if(Object.hasOwn(value,'newValue'))saved[key]=value.newValue;else delete saved[key];
+  }
+  const next=saved['gateway-account-v1'];
+  if(oldAccount?.token!==next?.token||oldAccount?.url!==next?.url){
+   for(const listener of accountListeners)listener();
+  }
+ });
  chrome.runtime.onMessage.addListener((m,sender,respond)=>{
   if(sender.id!==chrome.runtime.id)return;const shadow=document.getElementById('zy-subtitle-host')?.shadowRoot;if(!shadow)return;
   if(m.type==='zy-capture-page'){const button=shadow.getElementById('web-page-ask')||shadow.getElementById('ai-screenshot');if(button){authorize(true);button.click();}}

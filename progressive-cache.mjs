@@ -7,7 +7,7 @@ const concat=arrays=>{const out=new Uint8Array(arrays.reduce((n,a)=>n+a.byteLeng
 function lower(samples,time){let a=0,b=samples.length;while(a<b){const m=(a+b)>>1;if(samples[m].dts/samples[m].timescale<time)a=m+1;else b=m;}return a;}
 
 // HTTP, storage permission and course identity remain in the userscript adapter.
-export async function openCache({source,load,save,directory,request,checkSpace=async()=>{},onChange=()=>{},blockSize=2*MiB}) {
+export async function openCache({source,load,save,directory,request,checkSpace=async()=>{},checkDuration=()=>{},onChange=()=>{},blockSize=2*MiB}) {
   let record=await load();
   if(!record)record={kind:'stream-v1',id:crypto.randomUUID(),blockSize,parts:{},total:0,validator:null};
   if(record.kind!=='stream-v1')throw new Error('分段缓存版本不兼容，请删除后重新缓存');
@@ -77,6 +77,8 @@ export async function openCache({source,load,save,directory,request,checkSpace=a
     const meta=concat([ftyp,moov]);meta.fileStart=0;file.appendBuffer(meta);
     if(error)throw error;
     if(!info || info.isFragmented)throw fullCacheRequired('此 MP4 不支持分段播放');
+    const mediaDuration=info.duration/info.timescale;
+    checkDuration(mediaDuration);
     const selected=[info.videoTracks?.[0],info.audioTracks?.[0]].filter(Boolean);
     if(!selected.some(t=>t.video))throw new Error('未找到可播放的视频轨');
     for(const t of selected){
@@ -89,7 +91,7 @@ export async function openCache({source,load,save,directory,request,checkSpace=a
       if(edits.length>1 || edits.some(e=>e.media_time<0))throw fullCacheRequired('此 MP4 时间编辑列表暂不支持分段播放');
       tracks.push({id:t.id,mime,samples,video:!!t.video});file.setSegmentOptions(t.id,null,{nbSamples:1000});
     }
-    duration=info.duration/info.timescale;
+    duration=mediaDuration;
     if(selected.some(t=>Math.abs(t.duration/t.timescale-duration)>1))throw fullCacheRequired('音视频轨时长差异过大');
     const video=tracks.find(t=>t.video),sync=[];video.samples.forEach((s,i)=>{if(s.is_sync)sync.push(i);});
     if(!sync.length || sync[0]!==0)throw new Error('视频缺少起始关键帧');

@@ -7,7 +7,7 @@ description: 用户明确要求为浙大上课爽创建普通账号或延长已�
 
 网关固定为 `https://47.77.182.216.sslip.io/gateway`。所有请求都带 `X-App-Id: zhiyun-subtitles`，POST 使用 `Content-Type: application/json`。仅向该 HTTPS 网关提交凭据，遇到重定向停止。管理员账号和密码由运行环境的密钥配置注入为 `ZHIYUN_ADMIN_LOGIN`、`ZHIYUN_ADMIN_PASSWORD`。运行时读取，避免在工具命令、日志和回复中展开密码或会话令牌。缺少配置时让操作者在运行环境中配置。
 
-用管理员凭据调用 `POST /v1/auth/login`，JSON 为 `{"email":"<管理员用户名或邮箱>","password":"<管理员密码>"}`。从响应读取 `token`，后续请求带 `Authorization: Bearer <token>`。调用 `GET /v1/me`，确认 `is_admin` 为 true 或 1，并读取 `server_time` 作为当前 Unix 秒。结束时调用 `POST /v1/auth/logout`，请求体为 `{}`，注销本次管理员会话。
+用管理员凭据调用 `POST /v1/admin/login`，JSON 为 `{"email":"<管理员用户名或邮箱>","password":"<管理员密码>"}`。从成功响应读取 `token` 和 `server_time`，前者用于后续的 `Authorization: Bearer <token>`，后者为当前 Unix 秒。结束时调用 `POST /v1/admin/logout`，请求体为 `{}`，注销本次管理员会话。
 
 ## 新账号开户
 

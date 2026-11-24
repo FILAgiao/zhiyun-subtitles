@@ -11,7 +11,7 @@ assert.equal(unsafeLegacyHandles('Windows Chrome/152.0.0.0'),false);
   const bytes=fs.readFileSync('.test-media/lecture.mp4'),errors=[],page=await browser.newPage();let ranges=0;
   page.on('pageerror',e=>errors.push(e.message));page.on('crash',()=>errors.push('RENDERER CRASHED'));
   await page.route('https://interactivemeta.cmc.zju.edu.cn/',r=>r.fulfill({contentType:'text/html',body:'<title>缓存兼容回归</title><video muted controls style="width:700px;height:400px" src="https://vod.cmc.zju.edu.cn/lecture.mp4"></video>'}));
-  await page.route('https://vod.cmc.zju.edu.cn/**',r=>r.abort());
+  await page.route('https://vod.cmc.zju.edu.cn/**',r=>r.fulfill({contentType:'video/mp4',body:bytes}));
   await page.route('https://interactivemeta.cmc.zju.edu.cn/media',r=>{const range=r.request().headers().range;if(!range)return r.fulfill({contentType:'video/mp4',body:bytes});ranges++;const m=range.match(/bytes=(\d+)-(\d+)/),start=+m[1],end=Math.min(+m[2],bytes.length-1);return r.fulfill({status:206,headers:{'content-range':`bytes ${start}-${end}/${bytes.length}`,etag:'"chrome-v1"'},body:bytes.subarray(start,end+1)});});
   await page.goto('https://interactivemeta.cmc.zju.edu.cn/#/replay?course_id=chrome&sub_id=1');
   const setup=async()=>{

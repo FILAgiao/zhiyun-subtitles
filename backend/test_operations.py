@@ -18,7 +18,7 @@ class OperationsTests(unittest.TestCase):
 
     def owner(self):
         self.gateway.add_user('owner@example.test', 'long-admin-password', 'zhiyun-subtitles', admin=True, username='owner')
-        token = self.call('/v1/auth/login', {'email': 'owner', 'password': 'long-admin-password'})[2]['token']
+        token = self.call('/v1/admin/login', {'email': 'owner', 'password': 'long-admin-password'})[2]['token']
         return {**self.headers, 'Authorization': 'Bearer ' + token}
 
     def overview(self, owner, period=None):
@@ -44,7 +44,7 @@ class OperationsTests(unittest.TestCase):
         self.assertFalse(public['registration']['enabled']); self.assertFalse(public['recharge']['enabled'])
         self.assertEqual(public['registration']['status'], '暂未开放')
         for path, method, body in [('/v1/admin/operations', 'GET', {}), ('/v1/admin/cost-rates', 'POST', {}), ('/v1/admin/credits', 'POST', {}), ('/v1/admin/access-settings', 'POST', {})]:
-            self.fails(403, lambda p=path, m=method, b=body: self.call(p, b, method=m))
+            self.fails(401, lambda p=path, m=method, b=body: self.call(p, b, method=m))
             self.fails(401, lambda p=path, m=method, b=body: self.call(p, b, {'X-App-Id': 'zhiyun-subtitles'}, method=m))
         self.credit(owner, kind='manual_payment', amount_cny='12.34')
         public = self.call('/v1/account/access', headers={'X-App-Id': 'zhiyun-subtitles'}, method='GET')[2]

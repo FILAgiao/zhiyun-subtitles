@@ -17,7 +17,7 @@ learning = globalThis.ZhiyunLearning.mountLearningAssistant({
   getValue: GM_getValue,
   setValue: GM_setValue,
   getApiKey: () => GM_getValue('ark-api-key', ''),
-  prepareSlide: async () => { /* 可选：点击讲解时展开并等待当前课件图片 */ },
+  prepareSlide: async () => { /* 可选：课件面板收起时返回当前页的课件描述 */ },
   getSlide: () => slideEntries[slideIndex] ? {
     ...slideEntries[slideIndex],
     index: slideIndex,

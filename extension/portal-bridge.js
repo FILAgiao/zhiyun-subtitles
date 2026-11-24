@@ -7,7 +7,27 @@
     try{if(localStorage.getItem(WEB_KEY)||localStorage.getItem('gateway-web-logged-out')||localStorage.getItem(manual))return true;}catch{}
     try{return !!sessionStorage.getItem(manual);}catch{return false;}
   }
-  let pending=false;
+  let pending=false, websiteToken='', attemptedToken='';
+  function syncWebsiteLogin(){
+    let token;
+    try{
+      token=localStorage.getItem(WEB_KEY)||sessionStorage.getItem(WEB_KEY)||'';
+      if(localStorage.getItem('gateway-web-logged-out')||token===localStorage.getItem(BRIDGE_KEY)||token===sessionStorage.getItem(BRIDGE_KEY))return;
+    }catch{return;}
+    if(!token||token===attemptedToken)return;
+    websiteToken=attemptedToken=token;
+    try{
+      chrome.runtime.sendMessage({type:'zy-portal-use-website-session',token},response=>{
+        if((chrome.runtime.lastError||!response?.ok)&&attemptedToken===token)attemptedToken='';
+      });
+    }catch{attemptedToken='';}
+  }
+  function syncWebsiteLogout(){
+    if(!websiteToken)return;
+    const token=websiteToken;
+    websiteToken=attemptedToken='';
+    try{chrome.runtime.sendMessage({type:'zy-portal-website-logout',token},()=>{void chrome.runtime.lastError;});}catch{}
+  }
   function requestSession(){
     if(pending||hasWebsiteChoice())return;
     pending=true;
@@ -33,5 +53,12 @@
     }catch{finish({ok:false});}
   }
   window.addEventListener('zy-portal-session-request',requestSession);
-  requestSession();
+  window.addEventListener('zy-portal-website-login',syncWebsiteLogin);
+  window.addEventListener('zy-portal-website-logout',syncWebsiteLogout);
+  window.addEventListener('storage',event=>{
+    if(event.key==='gateway-web-logged-out'&&event.newValue)syncWebsiteLogout();
+    else if(event.key===WEB_KEY&&event.newValue)syncWebsiteLogin();
+  });
+  if(hasWebsiteChoice())syncWebsiteLogin();
+  else requestSession();
 })();

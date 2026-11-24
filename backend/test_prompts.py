@@ -17,8 +17,11 @@ class PromptTests(unittest.TestCase):
             self.g.add_user(str(n)+'@test.example','test-long-password',APP,admin=n==0,plan='free')
             token=self.g.handle('POST','/v1/auth/login',{'X-App-Id':APP},{'email':str(n)+'@test.example','password':'test-long-password'},'test')[2]['token']
             self.headers.append({'X-App-Id':APP,'Authorization':'Bearer '+token})
+        admin=self.g.handle('POST','/v1/admin/login',{'X-App-Id':APP},{'email':'0@test.example','password':'test-long-password'},'test')[2]['token']
+        self.admin_headers={'X-App-Id':APP,'Authorization':'Bearer '+admin}
     def call(self,path,body=None,who=1):
-        return self.g.handle('GET' if body is None else 'POST',path,self.headers[who],body or {},'test')[2]
+        headers=self.admin_headers if who==0 and path.startswith('/v1/admin/') else self.headers[who]
+        return self.g.handle('GET' if body is None else 'POST',path,headers,body or {},'test')[2]
     def fail(self,status,fn):
         with self.assertRaises(Fault) as caught: fn()
         self.assertEqual(caught.exception.status,status)
@@ -45,7 +48,7 @@ class PromptTests(unittest.TestCase):
         self.assertEqual(result['prompts'],[])
         self.fail(403,lambda:self.g.handle('GET','/v1/prompts',{**self.headers[2],'X-App-Id':'other-app'},{},'test'))
     def test_official_admin_updates_disable_delete_and_seed_once(self):
-        self.fail(403,lambda:self.call('/v1/admin/prompts'))
+        self.fail(401,lambda:self.call('/v1/admin/prompts'))
         self.fail(400,lambda:self.call('/v1/prompts/save',{'id':'feynman','revision':0,'label':'伪装官方','prompt':'bad'}))
         item=next(p for p in self.call('/v1/admin/prompts',who=0)['prompts'] if p['id']=='gossip')
         self.call('/v1/admin/prompts/save',{**item,'prompt':'管理员新内容','enabled':False},who=0)

@@ -1,18 +1,56 @@
 const fs=require('node:fs'),path=require('node:path'),assert=require('node:assert/strict'),{chromium}=require('playwright');
 const native=process.argv.includes('--extension');
+const schoolSlide='https://ppt.cmc.zju.edu.cn/layout/2.png';
+const slidePng='iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jAWQAAAAASUVORK5CYII=';
+const courseOffsetKey='ppt-offset:'+JSON.stringify(['layout-update','1',null]);
 (async()=>{
  let browser;const viewport={width:1440,height:1000},executablePath=native?'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe':process.env.PLAYWRIGHT_EXECUTABLE_PATH||'C:/Program Files/Google/Chrome/Application/chrome.exe';
  const context=native?await chromium.launchPersistentContext(path.resolve('.test-media/classroom-layout-'+Date.now()),{headless:true,executablePath,viewport,args:['--disable-extensions-except='+path.resolve(process.env.ZY_TEST_EXTENSION_DIR||'dist/extension'),'--load-extension='+path.resolve(process.env.ZY_TEST_EXTENSION_DIR||'dist/extension')]}):await(browser=await chromium.launch({headless:true,executablePath})).newContext({viewport});
  try{
-  if(native){const worker=context.serviceWorkers()[0]||await context.waitForEvent('serviceworker');await worker.evaluate(async()=>{globalThis.fetch=async url=>new Response(JSON.stringify(url.endsWith('/me')?{id:87,username:'Layout fixture',membership:{active:true,plan:'pro',expires:Math.floor(Date.now()/1000)+86400},permissions:{learning:true,learning_records:true,translation:true,speech:false}}:url.endsWith('/prompts')?{prompts:[]}:{conversations:[]}),{headers:{'Content-Type':'application/json'}});await chrome.storage.local.set({'cache-auto':false,'gateway-guide-no-remind-v2':true,'gateway-account-v1':{url:'https://47.77.182.216.sslip.io/gateway',token:'layout-fixture'}});});}
+  const worker=native?(context.serviceWorkers()[0]||await context.waitForEvent('serviceworker')):null;
+  const account={id:87,username:'Layout fixture',membership:{active:true,plan:'pro',expires:Math.floor(Date.now()/1000)+86400},permissions:{learning:true,learning_records:true,translation:true,speech:false}};
+  const settings={'cache-auto':false,'gateway-guide-no-remind-v2':true,'gateway-account-v1':{url:'https://47.77.182.216.sslip.io/gateway',token:'layout-fixture'},[courseOffsetKey]:-60};
+  const aiAnswer={state:'complete',text:'当前课件讲解完成。',response:{output:[{type:'message',content:[{type:'output_text',text:'当前课件讲解完成。'}]}]}};
+  if(worker)await worker.evaluate(async({account,settings,schoolSlide,slidePng,aiAnswer})=>{
+   globalThis.explanationRequests=[];
+   globalThis.fetch=async(url,options)=>{
+    if(url===schoolSlide)return new Response(Uint8Array.from(atob(slidePng),c=>c.charCodeAt(0)),{headers:{'Content-Type':'image/png'}});
+    let body={conversations:[]};
+    if(url.endsWith('/me'))body=account;
+    if(url.endsWith('/prompts'))body={prompts:[]};
+    if(url.endsWith('/learning/jobs/create')){explanationRequests.push(JSON.parse(options.body));body={id:'layout-test-job'};}
+    if(url.endsWith('/learning/jobs/poll'))body=aiAnswer;
+    return new Response(JSON.stringify(body),{headers:{'Content-Type':'application/json'}});
+   };
+   await chrome.storage.local.set(settings);
+  },{account,settings,schoolSlide,slidePng,aiAnswer});
   const page=await context.newPage(),errors=[];page.on('pageerror',e=>errors.push(e.message));page.setDefaultTimeout(10000);
   const classroomHTML='<style>body{margin:0;background:#273441}.cmc-main{position:relative;left:100px;top:110px;width:1000px;height:620px}.cmc-main:not(:fullscreen){transform:translateZ(0)}.cmc-main:fullscreen{left:0;top:0;width:100vw;height:100vh;background:#111}.cmc-player{position:absolute;inset:0}.player-content{position:relative;height:calc(100% - 50px)}.cmc-video{position:absolute;inset:0}video{width:100%;height:100%;background:#19232e}.control-content{position:absolute;bottom:0;width:100%;height:50px;background:#dedede}#pane-voice,#pane-ppt{position:absolute;top:1800px}</style><div class="cmc-main" id="cmc_video"><div class="cmc-player"><div class="player-content"><div class="cmc-video"><video controls></video></div></div><div class="control-content">School controls</div></div></div><div id="pane-voice"><div class="trans-item"><div class="item-title">00:00:00</div><div class="trans-lan"><div>Layout lesson subtitle</div></div></div></div><div id="pane-ppt"><div class="tab-ppt"><span class="time">00:00:00</span><img src="https://slides.test/1.svg"></div></div>';
   await page.route('https://interactivemeta.cmc.zju.edu.cn/**',r=>r.fulfill({contentType:'text/html',body:classroomHTML}));
   await page.route('https://slides.test/**',r=>r.fulfill({contentType:'image/svg+xml',body:'<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900"><rect width="1600" height="900" fill="#fff9df"/><text x="80" y="120" font-size="50">Layout lesson</text></svg>'}));
+  await page.route(schoolSlide,r=>r.fulfill({contentType:'image/png',body:Buffer.from(slidePng,'base64')}));
 
   await page.goto('https://interactivemeta.cmc.zju.edu.cn/#/replay?course_id=layout-update&sub_id=1');
   if(native)await page.locator('#cmc_video video').evaluate(async(v,src)=>{v.src=src;v.muted=true;await v.play();v.pause();},'data:video/mp4;base64,'+fs.readFileSync('.test-media/lecture.mp4').toString('base64'));
-  if(!native)await page.evaluate(()=>{window.values={'ark-api-key':'mock-key','cache-auto':false,'gateway-guide-no-remind-v2':true};window.GM_getValue=(k,d)=>values[k]??d;window.GM_setValue=(k,v)=>values[k]=v;window.GM_deleteValue=k=>delete values[k];window.GM_registerMenuCommand=()=>{};window.GM_xmlhttpRequest=()=>({abort(){}});const v=document.querySelector('video');Object.defineProperties(v,{duration:{get:()=>3600},currentTime:{get:()=>10},paused:{get:()=>true},readyState:{get:()=>3},videoWidth:{get:()=>1920},videoHeight:{get:()=>1080}});});
+  if(!native)await page.evaluate(({account,settings,schoolSlide,slidePng,aiAnswer})=>{
+   window.values=settings;window.explanationRequests=[];
+   window.GM_getValue=(k,d)=>values[k]??d;window.GM_setValue=(k,v)=>values[k]=v;window.GM_deleteValue=k=>delete values[k];window.GM_registerMenuCommand=()=>{};
+   window.GM_xmlhttpRequest=o=>{
+    let aborted=false;
+    queueMicrotask(()=>{
+     if(aborted)return;
+     if(o.url===schoolSlide){o.onload({status:200,response:new Blob([Uint8Array.from(atob(slidePng),c=>c.charCodeAt(0))],{type:'image/png'})});return;}
+     let body={conversations:[]};
+     if(o.url.endsWith('/me'))body=account;
+     if(o.url.endsWith('/prompts'))body={prompts:[]};
+     if(o.url.endsWith('/learning/jobs/create')){explanationRequests.push(JSON.parse(o.data));body={id:'layout-test-job'};}
+     if(o.url.endsWith('/learning/jobs/poll'))body=aiAnswer;
+     o.onload?.({status:200,responseText:JSON.stringify(body)});
+    });
+    return {abort(){aborted=true;}};
+   };
+   const v=document.querySelector('video');Object.defineProperties(v,{duration:{get:()=>3600},currentTime:{get:()=>10},paused:{get:()=>true},readyState:{get:()=>3},videoWidth:{get:()=>1920},videoHeight:{get:()=>1080}});
+  },{account,settings,schoolSlide,slidePng,aiAnswer});
   if(!native)await page.addScriptTag({content:fs.readFileSync(process.env.CLASSROOM_SCRIPT||'zhiyun-subtitles.user.js','utf8').replace(/const DEFAULT_ORIGIN=[^;]+;/,'const DEFAULT_ORIGIN="";')});
   const ui=page.locator('#zy-subtitle-host');await ui.locator('#classroom-caption-source').waitFor();await page.waitForTimeout(650);if(!native)await ui.locator('[data-login-required]').evaluateAll(nodes=>nodes.forEach(n=>{n.dataset.loginRequired='false';n.setAttribute('aria-disabled','false');}));
   assert.equal(await ui.locator('#classroom-source-retry,#slide-explain').count(),0);assert.match(await ui.locator('#classroom-translation-source').textContent(),/译关/);assert.match(await ui.locator('#classroom-caption-source').textContent(),/字幕 1/);assert.match(await ui.locator('#classroom-ppt-source').textContent(),/PPT 1/);
@@ -83,7 +121,32 @@ const native=process.argv.includes('--extension');
   await ui.locator('#focus-fullscreen').click();await page.waitForFunction(()=>!document.fullscreenElement);await page.waitForTimeout(250);
   const restored=await ui.locator('#slides').boundingBox();assert.ok(Math.abs(restored.width-ordinary.width)<3,'exiting fullscreen drops oversized fullscreen geometry');assert.ok(restored.x>=0&&restored.y>=0&&restored.x+restored.width<=1440&&restored.y+restored.height<=1000,'restored PPT fits the page');assert.equal(await ui.locator('#focus-fullscreen').textContent(),'课堂全屏');await ui.locator('#collapse').click();await page.screenshot({path:'.test-media/classroom-layout-'+(native?'extension':'userscript')+'-exit.png'});await ui.locator('#compact').click();
   await ui.locator('#show-slides').click();assert.ok(await ui.locator('#slides').isHidden());assert.equal(await page.locator('#cmc_video video').getAttribute('data-zy-moved-video'),null,'closing restores website video positioning');
+  await page.locator('#pane-ppt').evaluate((pane,url)=>pane.insertAdjacentHTML('beforeend','<div class="tab-ppt"><span class="time">00:01:00</span><img src="'+url+'"></div>'),schoolSlide);
+  await ui.locator('#focus-fullscreen').click();
+  await page.waitForFunction(()=>document.fullscreenElement?.id==='cmc_video');
+  const videoLocator=page.locator('#cmc_video .cmc-video > video');
+  const fullscreenVideo=await videoLocator.boundingBox();
   await ui.locator('#collapse').click();
+  await explain.click();
+  await ui.locator('#ai-learning').waitFor({state:'visible'});
+  assert.ok(await ui.locator('#slides').isHidden(),'explaining a slide must not open the side-by-side layout');
+  await ui.locator('#ai-log').getByText(aiAnswer.text).waitFor();
+  assert.equal(await page.evaluate(()=>document.fullscreenElement?.id),'cmc_video');
+  assert.deepEqual(await videoLocator.boundingBox(),fullscreenVideo,'explaining a slide keeps the video maximized');
+  const requests=()=>worker?worker.evaluate(()=>explanationRequests):page.evaluate(()=>explanationRequests);
+  const [request]=await requests();
+  const content=request.input.at(-1).content;
+  assert.match(content.filter(item=>item.type==='input_text').map(item=>item.text).join('\n'),/PPT 第 2 页/);
+  assert.match(content.find(item=>item.type==='input_image').image_url,/^data:image\/jpeg;base64,/);
+  await page.evaluate(()=>document.exitFullscreen());
+  await page.waitForFunction(()=>!document.fullscreenElement);
+  const windowedVideo=await videoLocator.boundingBox();
+  await ui.getByRole('button',{name:'添加 PPT 到对话'}).click();
+  await ui.locator('#ai-attachment').getByText('PPT 第 2 页已添加').waitFor();
+  assert.ok(await ui.locator('#slides').isHidden(),'attaching a slide also leaves the PPT pane hidden');
+  assert.deepEqual(await videoLocator.boundingBox(),windowedVideo,'attaching a slide keeps the windowed video geometry');
+  assert.equal((await requests()).length,1,'attaching does not send a new model request');
+  await ui.locator('#ai-close').click();
   if(native){
    await page.reload();
    await launcher.waitFor({state:'visible'});
@@ -92,6 +155,6 @@ const native=process.argv.includes('--extension');
   }
   await compact.press('Enter');
   assert.ok(await ui.locator('#panel').isVisible(),'keyboard activation still opens the panel');
-  assert.deepEqual(errors,[]);console.log('PASS: '+(native?'Edge MV3':'Chrome userscript')+' classroom launcher drag, stored position, click and keyboard shortcuts, compact sources and split/fullscreen layout.');
+  assert.deepEqual(errors,[]);console.log('PASS: '+(native?'Edge MV3':'Chrome userscript')+' classroom launcher, split/fullscreen layout, and background PPT explanation and attachment with video geometry preserved.');
  }finally{await context.close();if(browser)await browser.close();}
 })().catch(e=>{console.error(e);process.exitCode=1;});

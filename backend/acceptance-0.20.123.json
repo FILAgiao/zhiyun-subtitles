@@ -1,0 +1,152 @@
+{
+  "version": "0.20.123",
+  "backup": "/opt/zhiyun-gateway/backend/.rollback-release-0.20.123-20261124T140217Z",
+  "database_backup": "/data/gateway-before-0.20.123-20261124T140217Z.sqlite3",
+  "changed": [
+    "analytics_api.py",
+    "pricing.py",
+    "clips_api.py",
+    "clips.js",
+    "clips.css",
+    "speech_stream.py",
+    "study_api.py",
+    "operations_api.py",
+    "prompt_api.py",
+    "official-prompts.json",
+    "public_page.py",
+    "server.py",
+    "admin_api.py",
+    "admin.html",
+    "admin.css",
+    "admin.js",
+    "privacy.html",
+    "download.html",
+    "download.css",
+    "site.js",
+    "portal.css",
+    "portal.js",
+    "study.html",
+    "study.css",
+    "study.js",
+    "account.html",
+    "account.css",
+    "account.js",
+    "extension.zip",
+    "landing/brand-logo.png",
+    "landing/plugin-qr.png",
+    "landing/image-02.webp",
+    "landing/image-01.webp",
+    "landing/image-03.webp",
+    "landing/image-04.webp",
+    "landing/image-05.webp",
+    "landing/image-06.webp"
+  ],
+  "public_files": {
+    "clips.js": {
+      "bytes": 30090,
+      "sha256": "8ca4cb1d6768a66643939d047494b7c8cba297e0d181b09a9d1f71fa6dc454e1"
+    },
+    "clips.css": {
+      "bytes": 11393,
+      "sha256": "20112ff8d68157097efc1c74bfcbd0a5a5218f66cf12343ce73ddf87d3059217"
+    },
+    "admin.html": {
+      "bytes": 39828,
+      "sha256": "a33179dd33c18c0e33d5d4ae39017df824b09efa77c01be4495f055a40bcb712"
+    },
+    "admin.js": {
+      "bytes": 67078,
+      "sha256": "165006d07f154280083ff9c8fa6c108b9d931e10581cc67cc6870b2e57659e90"
+    },
+    "admin.css": {
+      "bytes": 33518,
+      "sha256": "91481956731e9b89c17f7b576fbc06e35ac1d66fa98df5610172aae2604786ab"
+    },
+    "privacy.html": {
+      "bytes": 9234,
+      "sha256": "a02a58069be77335112201c28e044d0c985f0c5f86c2cba82e6b9973366456c2"
+    },
+    "download.html": {
+      "bytes": 14786,
+      "sha256": "f08bb23a1780924e6410625ac94600bb270062d05d8f7dd60c65b5bccd823e24"
+    },
+    "download.css": {
+      "bytes": 18786,
+      "sha256": "ee764b7c0632659dc037a0248ed7f73b14917df0e5158d0759a7bdab1c36815a"
+    },
+    "site.js": {
+      "bytes": 1352,
+      "sha256": "e5c18347c04e3fd0f2a6ff7c1ef2462c7ea67ecd4cf9ae3eeada8028b92a027c"
+    },
+    "portal.css": {
+      "bytes": 11158,
+      "sha256": "de7c32c1f86487009055e88c9b1bdfe32b24868bf13ce9fc6bb4e62a4fc502d3"
+    },
+    "portal.js": {
+      "bytes": 13879,
+      "sha256": "28130e0168eba2202e65ce9117ad398b0fa301cc51e0daf9c98a4c1b5f58292f"
+    },
+    "study.html": {
+      "bytes": 7201,
+      "sha256": "8ebe964ac8a919dfabf152f32f1e4ee6d4bcd160e7447306ea9e0619b992492b"
+    },
+    "study.css": {
+      "bytes": 10790,
+      "sha256": "dae52111b164544c99824abbae2540e84c235d17e79151e6846eeda9b0bd2dd6"
+    },
+    "study.js": {
+      "bytes": 11379,
+      "sha256": "ac1d3564e76138bc015cdd7ea235405119f6250b99bc09c650687bb5a6f0c760"
+    },
+    "account.html": {
+      "bytes": 10087,
+      "sha256": "1bd316ac5011e1c91f75a7817064b8f5fce196d6c6a9f9db30e556443faa0720"
+    },
+    "account.css": {
+      "bytes": 10726,
+      "sha256": "779a0e451f280c4dd0fd648f58dd3953323217edb5b0a8df9cd16dd9b5cf1350"
+    },
+    "account.js": {
+      "bytes": 14397,
+      "sha256": "b771036fb2ce8a0c465cbd3f9ea8535380712a1b35bac4ba4132f3a63c94acd8"
+    },
+    "extension.zip": {
+      "bytes": 2108647,
+      "sha256": "931803feb51a69069087e655a62119d37afe0122fb3e1dda25933c9ecca1f034"
+    },
+    "landing/brand-logo.png": {
+      "bytes": 16647,
+      "sha256": "d032bffde2189fdb2ef7a89001b4b08d77b9598a8209bfeb7f70bdabcf778d45"
+    },
+    "landing/plugin-qr.png": {
+      "bytes": 3201,
+      "sha256": "b1356d7b420108efb3bd2ddfd388fb794e42719777a57249701045976a0afd49"
+    },
+    "landing/image-02.webp": {
+      "bytes": 93362,
+      "sha256": "c388a454b1ee80469940adf0e0601fd91d3190696fcc126ecd2a282eceade995"
+    },
+    "landing/image-01.webp": {
+      "bytes": 80220,
+      "sha256": "118129817c6bc3eebec6fbf285fe4cff766b896870f760be3c943d75cb941027"
+    },
+    "landing/image-03.webp": {
+      "bytes": 110046,
+      "sha256": "489f400e9367dc74a209917e462bfb03e1af3265c92b12f1920239f99aa120a8"
+    },
+    "landing/image-04.webp": {
+      "bytes": 101578,
+      "sha256": "491b18d1d15ff3ca864e19f95b635876cb9be136eea04b8e7300e53a4b4197cb"
+    },
+    "landing/image-05.webp": {
+      "bytes": 126906,
+      "sha256": "4178877027782200c8af3031a4984d322ff939b49e4203dfaca145bc1dcb44a9"
+    },
+    "landing/image-06.webp": {
+      "bytes": 111354,
+      "sha256": "c3d55abed0b877a07ea89fc2e3fb158b0dfe0b77f3170f291ca8c64a0e3916a7"
+    }
+  },
+  "health": "ok",
+  "url": "https://47.77.182.216.sslip.io/gateway/download"
+}

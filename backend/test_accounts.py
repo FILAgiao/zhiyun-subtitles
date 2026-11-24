@@ -13,7 +13,7 @@ class AccountTests(unittest.TestCase):
     # Reuse the same fixture without collecting inherited regressions twice.
     def owner(self):
         self.gateway.add_user('owner@example.test','long-admin-password','zhiyun-subtitles',admin=True,username='owner')
-        token=self.call('/v1/auth/login',{'email':'owner','password':'long-admin-password'})[2]['token']
+        token=self.call('/v1/admin/login',{'email':'owner','password':'long-admin-password'})[2]['token']
         return {**self.headers,'Authorization':'Bearer '+token}
     def grant(self,headers,**changes):
         return self.call('/v1/admin/grants',{'user_id':1,'request_limit':10,'audio_limit':20,**changes},headers)
@@ -78,7 +78,7 @@ class AccountTests(unittest.TestCase):
         self.assertEqual(me['usage']['request_limit'],limit)
     def test_admin_protection_and_validation(self):
         owner=self.owner()
-        self.fails(403,lambda:self.call('/v1/admin/accounts',{'user_id':1,'action':'disable'}))
+        self.fails(401,lambda:self.call('/v1/admin/accounts',{'user_id':1,'action':'disable'}))
         self.fails(400,lambda:self.call('/v1/admin/accounts',{'user_id':2,'action':'disable'},owner))
         self.fails(400,lambda:self.grant(owner,learning='false'))
         self.fails(400,lambda:self.call('/v1/admin/grants',{'user_id':2,'enabled':False},owner))
@@ -126,7 +126,7 @@ class AccountTests(unittest.TestCase):
         route = '/v1/admin/plan-templates'
         template = {'plan': 'free', 'request_limit': 25, 'audio_limit': 60,
                     'learning': True, 'translation': False, 'speech': False}
-        self.fails(403, lambda: self.call(route, template))
+        self.fails(401, lambda: self.call(route, template))
         self.call(route, template, owner)
         self.assertTrue(self.call('/v1/me', method='GET')[2]['permissions']['translation'])
 

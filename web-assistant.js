@@ -29,7 +29,7 @@ function mount({request,getValue,setValue}){
  const originalDestroy=assistant.destroy;assistant.destroy=()=>{document.removeEventListener('pointerup',endDrag);window.removeEventListener('resize',clampLauncher);launcherObserver.disconnect();originalDestroy();gateway.destroy();host.remove();};
  function closeSettings(){settingsShell.close();}
  $('web-page-ask').onclick=()=>assistant.startCapture();
- $('web-ask').onclick=()=>assistant.open();$('web-settings-open').onclick=()=>settings();$('settings-close').onclick=closeSettings;
+ $('web-ask').onclick=()=>assistant.open();$('web-settings-open').onclick=()=>gateway.openAccount();$('settings-close').onclick=closeSettings;
  for(const id of ['connection','ai','appearance','about'])$('settings-tab-'+id).onclick=()=>settings(id);
  $('settings-dialog').addEventListener('keydown',e=>{if(e.key==='Escape')closeSettings();});
  return assistant;

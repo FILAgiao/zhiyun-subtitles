@@ -8,7 +8,7 @@ const {chromium}=require(process.env.PLAYWRIGHT_MODULE||'playwright');
   let releasePrefix,holdPrefix=true;const prefixGate=()=>new Promise(resolve=>{releasePrefix=resolve;});let prefix=prefixGate();
   let releaseTail;const tail=new Promise(resolve=>{releaseTail=resolve;});
   await page.route('https://interactivemeta.cmc.zju.edu.cn/',route=>route.fulfill({contentType:'text/html',body:'<title>缓存回归课堂</title><video muted controls src="https://vod.cmc.zju.edu.cn/lecture.mp4"></video>'}));
-  await page.route('https://vod.cmc.zju.edu.cn/**',route=>route.abort());
+  await page.route('https://vod.cmc.zju.edu.cn/**',route=>route.fulfill({contentType:'video/mp4',body:bytes}));
   await page.route('https://interactivemeta.cmc.zju.edu.cn/part',async route=>{
    const m=route.request().headers().range.match(/bytes=(\d+)-(\d+)/),start=+m[1],end=Math.min(+m[2],bytes.length-1);
    if(start>=12*1024*1024)await tail;else if(start>=2*1024*1024&&holdPrefix)await prefix;

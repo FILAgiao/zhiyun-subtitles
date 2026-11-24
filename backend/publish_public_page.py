@@ -8,9 +8,9 @@ import argparse,getpass,hashlib,io,json,posixpath,re,shlex,stat,sys,time,urllib.
 from pathlib import Path
 from datetime import datetime,timezone
 try:
-    from .public_page import PUBLIC_PAGE_FILES
+    from .public_page import PUBLIC_PAGE_FILES, account_page_for_request
 except ImportError:
-    from public_page import PUBLIC_PAGE_FILES
+    from public_page import PUBLIC_PAGE_FILES, account_page_for_request
 
 ROOT=Path(__file__).resolve().parent.parent
 ORIGIN='https://47.77.182.216.sslip.io/gateway'
@@ -117,7 +117,8 @@ def publish(include_client=False):
             healthy=False
             for _ in range(12):
                 try:
-                    with urllib.request.urlopen(ORIGIN+'/health',timeout=5) as r:healthy=r.status==200 and json.load(r)['ok']
+                    with urllib.request.urlopen(ORIGIN+'/health',timeout=5) as r:
+                        health=json.load(r);healthy=r.status==200 and health['ok']
                     if healthy:break
                 except Exception:pass
                 time.sleep(1)
@@ -127,7 +128,12 @@ def publish(include_client=False):
             endpoints.update({'/?from=qr':'download.html','/download?from=mobile':'download.html'})
             if include_client:endpoints.update({'/install.user.js':'install.user.js','/install.meta.js':'install.meta.js','/extension.zip':'extension.zip'})
             for endpoint,name in endpoints.items():
-                data=public(endpoint);assert data==content[name],'Anonymous public content mismatch: '+endpoint
+                data=public(endpoint);expected=content[name]
+                expected_variants=[expected]
+                if name=='account.html':
+                    capabilities=health.get('capabilities',{})
+                    expected_variants.append(account_page_for_request(expected,endpoint,{'registration':capabilities.get('email_registration'),'mail_configured':capabilities.get('mail_configured')}))
+                assert data in expected_variants,'Anonymous public content mismatch: '+endpoint
                 checks[endpoint]={'sha256':hashlib.sha256(data).hexdigest(),'bytes':len(data)}
             report={'page_version':version,'backup':backup,'public_files':checks,'health':'ok','home_url':ORIGIN+'/','qr_url':ORIGIN+'/download','included_client':include_client,'backend_scope':'public static router patch only; no pending API/plan migration'}
             report_name=('acceptance-' if include_client else 'public-page-acceptance-')+version+'.json'

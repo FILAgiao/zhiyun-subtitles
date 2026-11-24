@@ -46,7 +46,7 @@
     $('channel-retry').hidden = false;
   }
 
-  async function channels() {
+  async function channels(initialRegistrationState) {
     const own = ++channelGeneration;
     const image = $('channel-qr');
     mailReady = false;
@@ -60,14 +60,13 @@
 
     try {
       if (!recharge) {
-        const capabilities = await portal.api('/v1/study/capabilities', {auth: ''}).catch(error => {
+        const embedded = ['available', 'unavailable'].includes(initialRegistrationState);
+        const capabilities = embedded ? null : await portal.api('/v1/study/capabilities', {auth: ''}).catch(error => {
           if (error.status === 404) return null;
           throw error;
         });
         if (own !== channelGeneration) return;
-        if (capabilities?.registration === true && capabilities.mail_configured === true) {
-          await portal.ready;
-          if (own !== channelGeneration) return;
+        if (initialRegistrationState === 'available' || capabilities?.registration === true && capabilities.mail_configured === true) {
           mailReady = true;
           channelNotice();
           renderSession();
@@ -297,7 +296,7 @@
   $('channel-retry').addEventListener('click', channels);
   window.addEventListener('portal-session-change', renderSession);
   portal.ready.then(renderSession);
-  channels();
+  channels(document.body.dataset.mailRegistration);
   if (recharge) return;
 
   $('register-success').addEventListener('click', portal.openLogin);

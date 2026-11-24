@@ -30,6 +30,8 @@ Python 3.11+ 标准库 + SQLite，无额外 pip 依赖。服务器统一保存�
 
 GET /health 检查存活。POST /v1/auth/login 接受 email/password；POST /v1/auth/logout 撤销当前会话；GET /v1/me 返回账号及该 APP 本月用量。认证接口要求 X-App-Id（本项目为 zhiyun-subtitles），登录后要求 Authorization: Bearer 用户会话。X-App-Id 是应用标识，不是密钥；服务器检查账号是否有此 APP 的授权。
 
+管理后台使用 `POST /v1/admin/login` 签发独立的 12 小时会话，接受管理员账号的 `email` 和 `password`。所有管理接口需要该会话的 Bearer 凭据。`GET /v1/admin/overview` 同时返回当前管理员 `account`，`POST /v1/admin/logout` 撤销本次管理会话。官网和扩展仍通过普通登录及会话接口工作。部署新版后，后台需重新登录一次，已有普通会话可继续使用。
+
 ## 本地启动
 
 从项目根目录运行：
